@@ -271,6 +271,20 @@
       color: var(--muted);
       font-size: 12px;
     }
+    .sidebar-footer summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      color: #535860;
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+    }
+    .sidebar-footer summary::-webkit-details-marker { display: none; }
+    .sidebar-footer summary::after { content: "+"; color: var(--muted); font-size: 15px; }
+    .sidebar-footer[open] summary::after { content: "−"; }
+    .sidebar-footer > div { padding-top: 9px; line-height: 1.55; }
 
     main {
       width: calc(100% - var(--sidebar-width));
@@ -378,7 +392,31 @@
 
     .split-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 28px; }
     .panel { padding: 18px; border: 1px solid var(--line); border-radius: 6px; }
-    .panel h2 { margin: 0 0 13px; font-size: 16px; }
+    details.panel { padding: 0; }
+    details.panel summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px;
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+    }
+    details.panel summary::-webkit-details-marker { display: none; }
+    details.panel summary::after {
+      content: "+";
+      color: var(--muted);
+      font-size: 18px;
+      font-weight: 400;
+      line-height: 1;
+    }
+    details.panel[open] summary { padding-bottom: 13px; }
+    details.panel[open] summary::after { content: "−"; }
+    details.panel .panel-list { padding: 0 18px 18px; }
     .panel-list { display: grid; gap: 12px; }
     .panel-row { display: flex; justify-content: space-between; gap: 15px; color: #51555c; }
     .panel-row span:last-child { color: var(--muted); white-space: nowrap; }
@@ -487,16 +525,19 @@
       <nav>
         <ul class="nav-list">
           <li><button class="nav-button active" data-page="Dashboard" style="--item-color:#3273dc"><span class="nav-icon"></span><span>Dashboard</span></button></li>
-          <li><button class="nav-button" data-page="Market Regime" style="--item-color:#c92f34"><span class="nav-icon"></span><span>Market Regime</span></button></li>
+          <li><button class="nav-button" data-page="Market Sentiment" style="--item-color:#c92f34"><span class="nav-icon"></span><span>Market Sentiment</span></button></li>
           <li><button class="nav-button" data-page="Screener" style="--item-color:#24934d"><span class="nav-icon"></span><span>Screener</span></button></li>
-          <li><button class="nav-button" data-page="Seasonality" style="--item-color:#60a625"><span class="nav-icon"></span><span>Seasonality</span></button></li>
-          <li><button class="nav-button" data-page="Earnings Sentiment" style="--item-color:#c52d78"><span class="nav-icon"></span><span>Earnings Sentiment</span></button></li>
+          <li><button class="nav-button" data-page="Seasonality Analysis" style="--item-color:#60a625"><span class="nav-icon"></span><span>Seasonality Analysis</span></button></li>
+          <li><button class="nav-button" data-page="Earnings Analysis" style="--item-color:#c52d78"><span class="nav-icon"></span><span>Earnings Analysis</span></button></li>
           <li><button class="nav-button" data-page="Portfolio Analysis" style="--item-color:#8f3bd1"><span class="nav-icon"></span><span>Portfolio Analysis</span></button></li>
           <li><button class="nav-button" data-page="News & Events" style="--item-color:#e6980b"><span class="nav-icon"></span><span>News & Events</span></button></li>
           <li><button class="nav-button" data-page="Stock Data YTD" style="--item-color:#0c94b7"><span class="nav-icon"></span><span>Stock Data YTD</span></button></li>
         </ul>
       </nav>
-      <div class="sidebar-footer" id="sidebarConnectionStatus">Interface frame · no live data connected</div>
+      <details class="sidebar-footer">
+        <summary>Connection status</summary>
+        <div id="sidebarConnectionStatus">Interface frame · no live data connected</div>
+      </details>
     </aside>
 
     <div class="scrim" id="scrim" aria-hidden="true"></div>
@@ -529,11 +570,7 @@
             <div class="summary-value" id="sectorCoverageValue">— / 34</div>
             <div class="summary-meta" id="sectorCoverageMeta">Official NSE sector list</div>
           </article>
-          <article class="summary-card">
-            <div class="summary-label">Data status</div>
-            <div class="summary-value" id="dashboardDataValue">Offline</div>
-            <div class="summary-meta" id="dashboardDataMeta">Kite not connected</div>
-          </article>
+          <article class="summary-card" aria-label="Reserved dashboard summary"></article>
         </section>
 
         <section aria-labelledby="marketSnapshotTitle">
@@ -555,22 +592,22 @@
         </section>
 
           <div class="split-panels">
-            <section class="panel">
-              <h2>Data readiness</h2>
+            <details class="panel" open>
+              <summary>Data readiness</summary>
               <div class="panel-list">
                 <div class="panel-row"><span>Kite session</span><span id="kiteSessionStatus">Not connected</span></div>
                 <div class="panel-row"><span>Current quotes</span><span id="currentQuotesStatus">Unavailable</span></div>
                 <div class="panel-row"><span>EOD dataset</span><span>Not updated</span></div>
               </div>
-            </section>
-            <section class="panel">
-              <h2>Workspace status</h2>
+            </details>
+            <details class="panel" open>
+              <summary>Workspace status</summary>
               <div class="panel-list">
                 <div class="panel-row"><span>Interface</span><span>Frame ready</span></div>
                 <div class="panel-row"><span>Navigation</span><span>8 sections</span></div>
                 <div class="panel-row"><span>External actions</span><span>Disabled</span></div>
               </div>
-            </section>
+            </details>
           </div>
         </div>
 
@@ -610,8 +647,6 @@
     const niftyBankMeta = document.getElementById('niftyBankMeta');
     const sectorCoverageValue = document.getElementById('sectorCoverageValue');
     const sectorCoverageMeta = document.getElementById('sectorCoverageMeta');
-    const dashboardDataValue = document.getElementById('dashboardDataValue');
-    const dashboardDataMeta = document.getElementById('dashboardDataMeta');
     const notice = document.getElementById('notice');
     let noticeTimer;
 
@@ -642,7 +677,7 @@
       sidebarConnectionStatus.textContent = authenticated ? 'Kite connected · manual snapshots' : 'Interface frame · no live data connected';
       kiteDisconnectButton.hidden = !authenticated;
       refreshIndexButton.disabled = !authenticated;
-      if (!authenticated) resetDashboardSnapshot('Kite not connected');
+      if (!authenticated) resetDashboardSnapshot();
     }
 
     function formatPrice(value) {
@@ -671,13 +706,11 @@
       if (change.className) metaElement.classList.add(change.className);
     }
 
-    function resetDashboardSnapshot(message) {
+    function resetDashboardSnapshot() {
       updateIndexCard(nifty50Value, nifty50Meta, null);
       updateIndexCard(niftyBankValue, niftyBankMeta, null);
       sectorCoverageValue.textContent = '— / 34';
       sectorCoverageMeta.textContent = 'Official NSE sector list';
-      dashboardDataValue.textContent = 'Offline';
-      dashboardDataMeta.textContent = message;
       dashboardAsOf.textContent = 'Connect Kite for current index data';
     }
 
@@ -685,7 +718,7 @@
       indexSnapshotBody.innerHTML = '<tr><td colspan="7">Index data is unavailable.</td></tr>';
       indexSnapshotNote.textContent = message;
       currentQuotesStatus.textContent = 'Unavailable';
-      resetDashboardSnapshot('Snapshot unavailable');
+      resetDashboardSnapshot();
     }
 
     function renderIndexSnapshot(result) {
@@ -712,8 +745,6 @@
       updateIndexCard(niftyBankValue, niftyBankMeta, rowsByName.get('Nifty Bank'));
       sectorCoverageValue.textContent = `${result.available_sector_count} / ${result.official_sector_count}`;
       sectorCoverageMeta.textContent = result.missing.length === 0 ? 'All sectoral indices available' : `${result.missing.length} unavailable in Kite`;
-      dashboardDataValue.textContent = 'Live';
-      dashboardDataMeta.textContent = `${result.rows.length} index snapshots`;
       dashboardAsOf.textContent = `Kite snapshot · ${retrievalText}`;
     }
 
