@@ -101,6 +101,8 @@
       margin-left: auto;
     }
 
+    .kite-login-wrap { position: relative; }
+
     .action-button {
       min-height: 34px;
       padding: 7px 13px;
@@ -114,12 +116,103 @@
 
     .action-button:hover { background: var(--brand-deep); border-color: var(--brand-deep); }
 
+    .action-button.kite-authenticated {
+      border-color: var(--success);
+      background: var(--success);
+    }
+
+    .action-button.kite-authenticated:hover {
+      border-color: #188545;
+      background: #188545;
+    }
+
     .action-button.secondary {
       color: var(--brand-deep);
       background: #fff;
     }
 
     .action-button.secondary:hover { background: #edfaff; }
+
+    .credential-panel {
+      position: absolute;
+      top: calc(100% + 10px);
+      right: 0;
+      width: min(360px, calc(100vw - 24px));
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      box-shadow: 0 14px 34px rgba(35, 42, 48, .15);
+    }
+
+    .credential-panel[hidden] { display: none; }
+
+    .credential-panel h2 { margin-bottom: 4px; }
+
+    .credential-help {
+      margin: 0 0 15px;
+      color: #666;
+      font-size: 13px;
+    }
+
+    .credential-form { display: grid; gap: 12px; }
+
+    .field { display: grid; gap: 5px; }
+
+    .field label { color: #44484f; font-size: 13px; font-weight: 600; }
+
+    .field input {
+      width: 100%;
+      min-height: 38px;
+      padding: 8px 10px;
+      border: 1px solid #d7dadd;
+      border-radius: 4px;
+      color: var(--ink);
+      background: #fff;
+      outline: none;
+    }
+
+    .field input:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 2px rgba(13, 174, 224, .13);
+    }
+
+    .credential-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 3px;
+    }
+
+    .kite-login-step {
+      display: grid;
+      gap: 7px;
+      padding: 12px 0;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .kite-login-step .panel-button { width: 100%; }
+
+    .kite-login-note {
+      margin: 0;
+      color: #666;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .panel-button {
+      min-height: 34px;
+      padding: 7px 12px;
+      border: 1px solid #d7dadd;
+      border-radius: 4px;
+      color: #41454b;
+      background: #fff;
+      cursor: pointer;
+    }
+
+    .panel-button.primary { border-color: var(--brand); color: #fff; background: var(--brand); }
+    .panel-button.primary:hover { border-color: var(--brand-deep); background: var(--brand-deep); }
 
     .shell { display: flex; min-height: 100vh; padding-top: var(--topbar-height); }
 
@@ -251,6 +344,16 @@
       font-weight: 700;
     }
 
+    .section-heading-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 4px;
+    }
+
+    .section-heading-row .section-title { margin: 0; }
+
     .section-note { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
 
     .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
@@ -330,6 +433,7 @@
       .summary-grid { grid-template-columns: 1fr; }
       .action-button { min-height: 32px; padding-inline: 7px; }
       .top-actions { gap: 5px; }
+      .credential-panel { position: fixed; top: 62px; right: 12px; }
     }
   </style>
   <link rel="stylesheet" href="styles.css">
@@ -343,7 +447,36 @@
       <div class="brand-note">private market workspace</div>
     </div>
     <div class="top-actions">
-      <button class="action-button secondary" data-notice="Kite login will be connected in a later milestone.">Kite login</button>
+      <div class="kite-login-wrap">
+        <button class="action-button" id="kiteLoginButton" type="button" aria-expanded="false" aria-controls="kiteCredentialPanel">Kite login</button>
+        <div class="credential-panel" id="kiteCredentialPanel" role="dialog" aria-labelledby="kiteCredentialTitle" hidden>
+          <h2 id="kiteCredentialTitle">Kite login</h2>
+          <p class="credential-help">The API secret is used only to exchange the request token. The resulting access token stays in local server memory and is never written to disk.</p>
+          <form class="credential-form" id="kiteCredentialForm">
+            <div class="field">
+              <label for="kiteApiKey">API key</label>
+              <input id="kiteApiKey" name="apiKey" type="text" autocomplete="off" spellcheck="false" required>
+            </div>
+            <div class="field">
+              <label for="kiteApiSecret">API secret</label>
+              <input id="kiteApiSecret" name="apiSecret" type="password" autocomplete="new-password" spellcheck="false" required>
+            </div>
+            <div class="kite-login-step">
+              <button class="panel-button primary" id="openKiteLoginButton" type="button">Open Kite API login</button>
+              <p class="kite-login-note">After login, copy the request token—or the complete redirect URL—from your registered redirect page and paste it below.</p>
+            </div>
+            <div class="field">
+              <label for="kiteRequestToken">Request token</label>
+              <input id="kiteRequestToken" name="requestToken" type="password" autocomplete="new-password" spellcheck="false" required>
+            </div>
+            <div class="credential-actions">
+              <button class="panel-button" id="kiteCancelButton" type="button">Cancel</button>
+              <button class="panel-button" id="kiteDisconnectButton" type="button" hidden>Disconnect</button>
+              <button class="panel-button primary" id="kiteValidateButton" type="submit">Connect to Kite</button>
+            </div>
+          </form>
+        </div>
+      </div>
       <button class="action-button" data-notice="EOD update will be connected after the data source is defined.">EOD update</button>
     </div>
   </header>
@@ -363,7 +496,7 @@
           <li><button class="nav-button" data-page="Stock Data YTD" style="--item-color:#0c94b7"><span class="nav-icon"></span><span>Stock Data YTD</span></button></li>
         </ul>
       </nav>
-      <div class="sidebar-footer">Interface frame · no live data connected</div>
+      <div class="sidebar-footer" id="sidebarConnectionStatus">Interface frame · no live data connected</div>
     </aside>
 
     <div class="scrim" id="scrim" aria-hidden="true"></div>
@@ -377,45 +510,45 @@
 
           <div class="heading-row">
             <h1>Dashboard</h1>
-            <div class="as-of">Frame preview · sample values only</div>
+            <div class="as-of" id="dashboardAsOf">Connect Kite for current index data</div>
           </div>
 
         <section class="summary-grid" aria-label="Market summary">
           <article class="summary-card">
             <div class="summary-label">NIFTY 50</div>
-            <div class="summary-value">24,850.25</div>
-            <div class="summary-meta positive">+0.42% · sample</div>
+            <div class="summary-value" id="nifty50Value">—</div>
+            <div class="summary-meta" id="nifty50Meta">Not loaded</div>
           </article>
           <article class="summary-card">
             <div class="summary-label">NIFTY BANK</div>
-            <div class="summary-value">53,120.50</div>
-            <div class="summary-meta negative">−0.18% · sample</div>
+            <div class="summary-value" id="niftyBankValue">—</div>
+            <div class="summary-meta" id="niftyBankMeta">Not loaded</div>
           </article>
           <article class="summary-card">
-            <div class="summary-label">Market breadth</div>
-            <div class="summary-value">31 / 19</div>
-            <div class="summary-meta">Advances / declines</div>
+            <div class="summary-label">Sector coverage</div>
+            <div class="summary-value" id="sectorCoverageValue">— / 34</div>
+            <div class="summary-meta" id="sectorCoverageMeta">Official NSE sector list</div>
           </article>
           <article class="summary-card">
             <div class="summary-label">Data status</div>
-            <div class="summary-value">Frame</div>
-            <div class="summary-meta">No source connected</div>
+            <div class="summary-value" id="dashboardDataValue">Offline</div>
+            <div class="summary-meta" id="dashboardDataMeta">Kite not connected</div>
           </article>
         </section>
 
         <section aria-labelledby="marketSnapshotTitle">
-          <h2 class="section-title" id="marketSnapshotTitle">Market snapshot</h2>
-          <p class="section-note">Representative layout only. Values below are static interface samples.</p>
+          <div class="section-heading-row">
+            <h2 class="section-title" id="marketSnapshotTitle">Market snapshot</h2>
+            <button class="panel-button" id="refreshIndexButton" type="button" disabled>Refresh indices</button>
+          </div>
+          <p class="section-note" id="indexSnapshotNote">Connect Kite to load NIFTY 50 and every current official NSE sectoral index available in Kite.</p>
           <div class="table-wrap">
             <table>
               <thead>
-                <tr><th>Instrument</th><th>Last price</th><th>Change</th><th>Volume</th><th>Status</th></tr>
+                <tr><th>Instrument</th><th>Open</th><th>High</th><th>Low</th><th>Previous close</th><th>Last price</th><th>Status</th></tr>
               </thead>
-              <tbody>
-                <tr><td>NIFTY 50</td><td>24,850.25</td><td class="positive">+0.42%</td><td>—</td><td><span class="status"><span class="status-dot muted"></span>Sample</span></td></tr>
-                <tr><td>NIFTY BANK</td><td>53,120.50</td><td class="negative">−0.18%</td><td>—</td><td><span class="status"><span class="status-dot muted"></span>Sample</span></td></tr>
-                <tr><td>DEMO EQUITY A</td><td>1,245.80</td><td class="positive">+1.06%</td><td>1.8M</td><td><span class="status"><span class="status-dot warn"></span>Illustrative</span></td></tr>
-                <tr><td>DEMO EQUITY B</td><td>684.30</td><td class="negative">−0.54%</td><td>920K</td><td><span class="status"><span class="status-dot warn"></span>Illustrative</span></td></tr>
+              <tbody id="indexSnapshotBody">
+                <tr><td colspan="7">Connect Kite to load the index snapshot.</td></tr>
               </tbody>
             </table>
           </div>
@@ -425,8 +558,8 @@
             <section class="panel">
               <h2>Data readiness</h2>
               <div class="panel-list">
-                <div class="panel-row"><span>Kite session</span><span>Not connected</span></div>
-                <div class="panel-row"><span>Current quotes</span><span>Unavailable</span></div>
+                <div class="panel-row"><span>Kite session</span><span id="kiteSessionStatus">Not connected</span></div>
+                <div class="panel-row"><span>Current quotes</span><span id="currentQuotesStatus">Unavailable</span></div>
                 <div class="panel-row"><span>EOD dataset</span><span>Not updated</span></div>
               </div>
             </section>
@@ -457,6 +590,28 @@
     const dashboardView = document.getElementById('dashboardView');
     const emptyView = document.getElementById('emptyView');
     const emptyPageTitle = document.getElementById('emptyPageTitle');
+    const kiteLoginButton = document.getElementById('kiteLoginButton');
+    const kiteCredentialPanel = document.getElementById('kiteCredentialPanel');
+    const kiteCredentialForm = document.getElementById('kiteCredentialForm');
+    const kiteCancelButton = document.getElementById('kiteCancelButton');
+    const kiteDisconnectButton = document.getElementById('kiteDisconnectButton');
+    const kiteValidateButton = document.getElementById('kiteValidateButton');
+    const openKiteLoginButton = document.getElementById('openKiteLoginButton');
+    const kiteSessionStatus = document.getElementById('kiteSessionStatus');
+    const currentQuotesStatus = document.getElementById('currentQuotesStatus');
+    const sidebarConnectionStatus = document.getElementById('sidebarConnectionStatus');
+    const refreshIndexButton = document.getElementById('refreshIndexButton');
+    const indexSnapshotBody = document.getElementById('indexSnapshotBody');
+    const indexSnapshotNote = document.getElementById('indexSnapshotNote');
+    const dashboardAsOf = document.getElementById('dashboardAsOf');
+    const nifty50Value = document.getElementById('nifty50Value');
+    const nifty50Meta = document.getElementById('nifty50Meta');
+    const niftyBankValue = document.getElementById('niftyBankValue');
+    const niftyBankMeta = document.getElementById('niftyBankMeta');
+    const sectorCoverageValue = document.getElementById('sectorCoverageValue');
+    const sectorCoverageMeta = document.getElementById('sectorCoverageMeta');
+    const dashboardDataValue = document.getElementById('dashboardDataValue');
+    const dashboardDataMeta = document.getElementById('dashboardDataMeta');
     const notice = document.getElementById('notice');
     let noticeTimer;
 
@@ -473,8 +628,234 @@
       noticeTimer = window.setTimeout(() => notice.classList.remove('show'), 2800);
     }
 
+    function setKitePanel(open, clear = false) {
+      kiteCredentialPanel.hidden = !open;
+      kiteLoginButton.setAttribute('aria-expanded', String(open));
+      if (clear) kiteCredentialForm.reset();
+      if (open) document.getElementById('kiteApiKey').focus();
+    }
+
+    function setKiteAccess(authenticated) {
+      kiteLoginButton.classList.toggle('kite-authenticated', authenticated);
+      kiteLoginButton.textContent = authenticated ? 'Kite connected' : 'Kite login';
+      kiteSessionStatus.textContent = authenticated ? 'Connected' : 'Not connected';
+      sidebarConnectionStatus.textContent = authenticated ? 'Kite connected · manual snapshots' : 'Interface frame · no live data connected';
+      kiteDisconnectButton.hidden = !authenticated;
+      refreshIndexButton.disabled = !authenticated;
+      if (!authenticated) resetDashboardSnapshot('Kite not connected');
+    }
+
+    function formatPrice(value) {
+      return Number(value).toLocaleString('en-IN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+
+    function formatChange(row) {
+      const change = ((Number(row.last_price) - Number(row.previous_close)) / Number(row.previous_close)) * 100;
+      const sign = change > 0 ? '+' : change < 0 ? '−' : '';
+      return { text: `${sign}${Math.abs(change).toFixed(2)}% · Kite`, className: change > 0 ? 'positive' : change < 0 ? 'negative' : '' };
+    }
+
+    function updateIndexCard(valueElement, metaElement, row) {
+      metaElement.classList.remove('positive', 'negative');
+      if (!row) {
+        valueElement.textContent = '—';
+        metaElement.textContent = 'Unavailable';
+        return;
+      }
+      const change = formatChange(row);
+      valueElement.textContent = formatPrice(row.last_price);
+      metaElement.textContent = change.text;
+      if (change.className) metaElement.classList.add(change.className);
+    }
+
+    function resetDashboardSnapshot(message) {
+      updateIndexCard(nifty50Value, nifty50Meta, null);
+      updateIndexCard(niftyBankValue, niftyBankMeta, null);
+      sectorCoverageValue.textContent = '— / 34';
+      sectorCoverageMeta.textContent = 'Official NSE sector list';
+      dashboardDataValue.textContent = 'Offline';
+      dashboardDataMeta.textContent = message;
+      dashboardAsOf.textContent = 'Connect Kite for current index data';
+    }
+
+    function renderIndexUnavailable(message) {
+      indexSnapshotBody.innerHTML = '<tr><td colspan="7">Index data is unavailable.</td></tr>';
+      indexSnapshotNote.textContent = message;
+      currentQuotesStatus.textContent = 'Unavailable';
+      resetDashboardSnapshot('Snapshot unavailable');
+    }
+
+    function renderIndexSnapshot(result) {
+      const rowsByName = new Map(result.rows.map((row) => [row.display_name, row]));
+      const availableRows = result.rows.map((row) => `<tr>
+          <td>${row.display_name}</td>
+          <td>${formatPrice(row.open)}</td>
+          <td>${formatPrice(row.high)}</td>
+          <td>${formatPrice(row.low)}</td>
+          <td>${formatPrice(row.previous_close)}</td>
+          <td>${formatPrice(row.last_price)}</td>
+          <td><span class="status"><span class="status-dot"></span>Live snapshot</span></td>
+        </tr>`);
+      const missingRows = result.missing.map((name) => `<tr>
+          <td>${name}</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
+          <td><span class="status"><span class="status-dot muted"></span>Unavailable in Kite</span></td>
+        </tr>`);
+      indexSnapshotBody.innerHTML = [...availableRows, ...missingRows].join('');
+      const retrieved = new Date(result.retrieved_at);
+      const retrievalText = retrieved.toLocaleString('en-IN');
+      indexSnapshotNote.textContent = `Kite OHLC snapshot retrieved ${retrievalText}. Sector classification follows the current official NSE Indices list; previous close is the last trading day’s close.`;
+      currentQuotesStatus.textContent = `${result.rows.length} indices loaded`;
+      updateIndexCard(nifty50Value, nifty50Meta, rowsByName.get('Nifty 50'));
+      updateIndexCard(niftyBankValue, niftyBankMeta, rowsByName.get('Nifty Bank'));
+      sectorCoverageValue.textContent = `${result.available_sector_count} / ${result.official_sector_count}`;
+      sectorCoverageMeta.textContent = result.missing.length === 0 ? 'All sectoral indices available' : `${result.missing.length} unavailable in Kite`;
+      dashboardDataValue.textContent = 'Live';
+      dashboardDataMeta.textContent = `${result.rows.length} index snapshots`;
+      dashboardAsOf.textContent = `Kite snapshot · ${retrievalText}`;
+    }
+
+    async function loadIndexSnapshot() {
+      refreshIndexButton.disabled = true;
+      refreshIndexButton.textContent = 'Refreshing…';
+      try {
+        const response = await fetch('/api/kite/indices/ohlc', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          if (result.reason === 'kite_not_connected' || result.reason === 'access_token_invalid_or_expired') {
+            setKiteAccess(false);
+          }
+          renderIndexUnavailable('The latest Kite index snapshot is unavailable.');
+          showNotice(kiteFailureMessage(result.reason));
+          return;
+        }
+        renderIndexSnapshot(result);
+      } catch (_error) {
+        renderIndexUnavailable('The local index snapshot service is unavailable.');
+      } finally {
+        refreshIndexButton.textContent = 'Refresh indices';
+        refreshIndexButton.disabled = !kiteLoginButton.classList.contains('kite-authenticated');
+      }
+    }
+
+    function kiteFailureMessage(reason) {
+      const messages = {
+        request_token_not_found: 'No request token was found. Paste the token or the complete redirect URL.',
+        request_token_invalid_expired_or_used: 'The request token is invalid, expired, or already used. Open Kite login again for a fresh token.',
+        token_exchange_input_rejected: 'Kite rejected the API key, API secret, or request token combination.',
+        access_token_missing_from_provider: 'Kite did not return an access token.',
+        access_token_invalid_or_expired: 'The generated access token could not be verified.',
+        provider_unavailable: 'Kite is temporarily unavailable. Try again shortly.'
+      };
+      return messages[reason] || 'Kite connection could not be completed. Check the entered details and try again.';
+    }
+
+    async function restoreKiteStatus() {
+      try {
+        const response = await fetch('/api/kite/status', { cache: 'no-store' });
+        const result = await response.json();
+        const connected = response.ok && result.connected === true;
+        setKiteAccess(connected);
+        if (connected) await loadIndexSnapshot();
+      } catch (_error) {
+        setKiteAccess(false);
+      }
+    }
+
     menuButton.addEventListener('click', () => setNavigation(!body.classList.contains('nav-open')));
     scrim.addEventListener('click', () => setNavigation(false));
+    kiteLoginButton.addEventListener('click', () => setKitePanel(kiteCredentialPanel.hidden));
+    kiteCancelButton.addEventListener('click', () => setKitePanel(false, true));
+    kiteDisconnectButton.addEventListener('click', async () => {
+      try {
+        await fetch('/api/kite/disconnect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
+          body: '{}'
+        });
+      } finally {
+        setKiteAccess(false);
+        renderIndexUnavailable('Connect Kite to load NIFTY 50 and every current official NSE sectoral index available in Kite.');
+        setKitePanel(false, true);
+        showNotice('Kite session removed from local memory.');
+      }
+    });
+    openKiteLoginButton.addEventListener('click', () => {
+      const apiKeyInput = document.getElementById('kiteApiKey');
+      const apiSecretInput = document.getElementById('kiteApiSecret');
+      const apiKey = apiKeyInput.value.trim();
+
+      if (!apiKey) {
+        showNotice('Enter the Kite API key before opening the login page.');
+        apiKeyInput.focus();
+        return;
+      }
+
+      if (!apiSecretInput.value) {
+        showNotice('Enter the API secret before continuing. It is not sent to the login page.');
+        apiSecretInput.focus();
+        return;
+      }
+
+      const loginUrl = new URL('https://kite.zerodha.com/connect/login');
+      loginUrl.searchParams.set('v', '3');
+      loginUrl.searchParams.set('api_key', apiKey);
+      window.open(loginUrl.toString(), '_blank', 'noopener,noreferrer');
+      showNotice('Official Kite login opened in a new tab.');
+    });
+
+    kiteCredentialForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const formData = new FormData(kiteCredentialForm);
+      const apiKey = String(formData.get('apiKey') || '');
+      const apiSecret = String(formData.get('apiSecret') || '');
+      const requestToken = String(formData.get('requestToken') || '');
+
+      kiteValidateButton.disabled = true;
+      kiteValidateButton.textContent = 'Connecting…';
+
+      try {
+        const response = await fetch('/api/kite/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
+          body: JSON.stringify({
+            api_key: apiKey,
+            api_secret: apiSecret,
+            request_token: requestToken
+          })
+        });
+        const result = await response.json();
+
+        if (!response.ok || result.ok !== true) {
+          setKiteAccess(false);
+          showNotice(kiteFailureMessage(result.reason));
+          return;
+        }
+
+        kiteCredentialForm.reset();
+        setKiteAccess(true);
+        await loadIndexSnapshot();
+        setKitePanel(false);
+        showNotice('Kite connected. The daily access token is held in local memory.');
+      } catch (_error) {
+        setKiteAccess(false);
+        showNotice('The local Kite connection service is unavailable.');
+      } finally {
+        kiteValidateButton.disabled = false;
+        kiteValidateButton.textContent = 'Connect to Kite';
+      }
+    });
+    refreshIndexButton.addEventListener('click', loadIndexSnapshot);
+
+    document.addEventListener('click', (event) => {
+      if (!kiteCredentialPanel.hidden && !event.target.closest('.kite-login-wrap')) {
+        setKitePanel(false, true);
+      }
+    });
 
     document.querySelectorAll('.nav-button').forEach((button) => {
       button.addEventListener('click', () => {
@@ -493,8 +874,13 @@
     });
 
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') setNavigation(false);
+      if (event.key === 'Escape') {
+        setNavigation(false);
+        setKitePanel(false, true);
+      }
     });
+
+    restoreKiteStatus();
   </script>
 </body>
 </html>
