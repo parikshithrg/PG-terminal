@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="PG-terminal private market workspace">
+  <title>PG-terminal</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230bb4e5'/%3E%3Cpath d='M17 45V19h17c9 0 14 4 14 12s-5 12-14 12h-7v-8h7c3 0 5-1 5-4s-2-4-5-4h-8v18z' fill='white'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --brand: #0daee0;
+      --brand-deep: #078fb9;
+      --ink: #303239;
+      --muted: #8a8f98;
+      --line: #e4e6e8;
+      --panel: #ffffff;
+      --sidebar: #fbfbfb;
+      --selected: #f0f0f0;
+      --success: #25a95b;
+      --warning: #f0a417;
+      --danger: #dc4c4c;
+      --topbar-height: 58px;
+      --sidebar-width: 230px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { min-height: 100%; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #fff;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    button { font: inherit; }
+
+    .topbar {
+      position: fixed;
+      inset: 0 0 auto 0;
+      z-index: 30;
+      height: var(--topbar-height);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 18px;
+      background: rgba(255, 255, 255, 0.97);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .menu-button {
+      width: 24px;
+      height: 32px;
+      padding: 0;
+      border: 0;
+      color: #6f747c;
+      background: transparent;
+      cursor: pointer;
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 6px;
+      color: #fff;
+      background: var(--brand);
+      font-weight: 750;
+      letter-spacing: -0.04em;
+    }
+
+    .brand-name {
+      font-size: 18px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .brand-note {
+      color: #9b9fa6;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+
+    .action-button {
+      min-height: 34px;
+      padding: 7px 13px;
+      border: 1px solid var(--brand);
+      border-radius: 4px;
+      color: #fff;
+      background: var(--brand);
+      cursor: pointer;
+      transition: background 120ms ease, border-color 120ms ease;
+    }
+
+    .action-button:hover { background: var(--brand-deep); border-color: var(--brand-deep); }
+
+    .action-button.secondary {
+      color: var(--brand-deep);
+      background: #fff;
+    }
+
+    .action-button.secondary:hover { background: #edfaff; }
+
+    .shell { display: flex; min-height: 100vh; padding-top: var(--topbar-height); }
+
+    .sidebar {
+      position: fixed;
+      inset: var(--topbar-height) auto 0 0;
+      z-index: 20;
+      width: var(--sidebar-width);
+      padding: 16px 10px;
+      overflow-y: auto;
+      background: var(--sidebar);
+      border-right: 1px solid var(--line);
+      transition: transform 180ms ease;
+    }
+
+    .sidebar-label {
+      margin: 10px 12px 8px;
+      color: #858a92;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.045em;
+      text-transform: uppercase;
+    }
+
+    .nav-list { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
+
+    .nav-button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border: 0;
+      border-radius: 5px;
+      color: #30343a;
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .nav-button:hover { background: #f4f4f4; }
+    .nav-button.active { background: var(--selected); font-weight: 650; }
+
+    .nav-icon {
+      width: 11px;
+      height: 11px;
+      flex: 0 0 11px;
+      border-radius: 2px;
+      background: var(--item-color, var(--brand));
+    }
+
+    .sidebar-footer {
+      margin: 22px 12px 0;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    main {
+      width: calc(100% - var(--sidebar-width));
+      margin-left: var(--sidebar-width);
+      padding: 30px 34px 60px;
+    }
+
+    .content { max-width: 1120px; margin: 0 auto; }
+
+    .page-tabs {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      min-height: 40px;
+      margin-bottom: 28px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .page-tab {
+      position: relative;
+      padding: 0 0 13px;
+      color: #4b4e54;
+      font-size: 14px;
+    }
+
+    .page-tab.active { color: var(--ink); font-weight: 650; }
+    .page-tab.active::after {
+      content: "";
+      position: absolute;
+      inset: auto 0 -1px 0;
+      height: 2px;
+      background: var(--brand);
+    }
+
+    .heading-row {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 18px;
+    }
+
+    h1 { margin: 0; color: #25282d; font-size: 24px; line-height: 1.2; }
+    .as-of { color: var(--muted); font-size: 13px; }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+
+    .summary-card {
+      min-height: 112px;
+      padding: 17px 18px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+    }
+
+    .summary-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+    .summary-value { margin-top: 10px; color: #21242a; font-size: 24px; font-weight: 730; }
+    .summary-meta { margin-top: 5px; color: var(--muted); font-size: 13px; }
+    .positive { color: var(--success); }
+    .negative { color: var(--danger); }
+
+    .section-title {
+      margin: 0 0 4px;
+      color: #2b2e33;
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .section-note { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
+    table { width: 100%; border-collapse: collapse; min-width: 720px; }
+    th, td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: left; }
+    th { color: #686d75; background: #fcfcfc; font-size: 12px; font-weight: 600; }
+    td { font-size: 14px; }
+    th:not(:first-child), td:not(:first-child) { text-align: right; }
+    tr:last-child td { border-bottom: 0; }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: #666b73;
+      font-size: 13px;
+    }
+
+    .status-dot { width: 8px; height: 8px; border-radius: 2px; background: var(--success); }
+    .status-dot.warn { background: var(--warning); }
+    .status-dot.muted { background: #aeb3b9; }
+
+    .split-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 28px; }
+    .panel { padding: 18px; border: 1px solid var(--line); border-radius: 6px; }
+    .panel h2 { margin: 0 0 13px; font-size: 16px; }
+    .panel-list { display: grid; gap: 12px; }
+    .panel-row { display: flex; justify-content: space-between; gap: 15px; color: #51555c; }
+    .panel-row span:last-child { color: var(--muted); white-space: nowrap; }
+
+    .notice {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 50;
+      max-width: 340px;
+      padding: 13px 16px;
+      border: 1px solid #bde9f5;
+      border-radius: 6px;
+      color: #266275;
+      background: #effbfe;
+      box-shadow: 0 8px 28px rgba(44, 71, 80, .12);
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: opacity 150ms ease, transform 150ms ease;
+    }
+
+    .notice.show { opacity: 1; transform: translateY(0); }
+    .scrim { display: none; }
+
+    @media (max-width: 900px) {
+      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .brand-note { display: none; }
+      main { padding-inline: 22px; }
+    }
+
+    @media (max-width: 700px) {
+      :root { --topbar-height: 54px; }
+      .topbar { padding-inline: 12px; gap: 9px; }
+      .brand-name { font-size: 16px; }
+      .brand-mark { width: 31px; height: 31px; }
+      .action-button { padding: 7px 9px; font-size: 13px; }
+      .sidebar { transform: translateX(-101%); box-shadow: 8px 0 24px rgba(25, 29, 35, .1); }
+      body.nav-open .sidebar { transform: translateX(0); }
+      .scrim { position: fixed; inset: var(--topbar-height) 0 0 0; z-index: 15; background: rgba(22, 25, 29, .22); }
+      body.nav-open .scrim { display: block; }
+      main { width: 100%; margin-left: 0; padding: 22px 15px 44px; }
+      .page-tabs { gap: 20px; overflow-x: auto; }
+      .heading-row { align-items: start; flex-direction: column; gap: 5px; }
+      .summary-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+      .summary-card { min-height: 102px; padding: 14px; }
+      .summary-value { font-size: 20px; }
+      .split-panels { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 430px) {
+      .summary-grid { grid-template-columns: 1fr; }
+      .action-button { min-height: 32px; padding-inline: 7px; }
+      .top-actions { gap: 5px; }
+    }
+  </style>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="menu-button" id="menuButton" aria-label="Open navigation" aria-expanded="false">☰</button>
+    <div class="brand" aria-label="PG-terminal">
+      <div class="brand-mark">PG</div>
+      <div class="brand-name">PG-terminal</div>
+      <div class="brand-note">private market workspace</div>
+    </div>
+    <div class="top-actions">
+      <button class="action-button secondary" data-notice="Kite login will be connected in a later milestone.">Kite login</button>
+      <button class="action-button" data-notice="EOD update will be connected after the data source is defined.">EOD update</button>
+    </div>
+  </header>
+
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="Primary navigation">
+      <div class="sidebar-label">Workspace</div>
+      <nav>
+        <ul class="nav-list">
+          <li><button class="nav-button active" data-page="Dashboard" style="--item-color:#3273dc"><span class="nav-icon"></span><span>Dashboard</span></button></li>
+          <li><button class="nav-button" data-page="Market Regime" style="--item-color:#c92f34"><span class="nav-icon"></span><span>Market Regime</span></button></li>
+          <li><button class="nav-button" data-page="Screener" style="--item-color:#24934d"><span class="nav-icon"></span><span>Screener</span></button></li>
+          <li><button class="nav-button" data-page="Seasonality" style="--item-color:#60a625"><span class="nav-icon"></span><span>Seasonality</span></button></li>
+          <li><button class="nav-button" data-page="Earnings Sentiment" style="--item-color:#c52d78"><span class="nav-icon"></span><span>Earnings Sentiment</span></button></li>
+          <li><button class="nav-button" data-page="Portfolio Analysis" style="--item-color:#8f3bd1"><span class="nav-icon"></span><span>Portfolio Analysis</span></button></li>
+          <li><button class="nav-button" data-page="News & Events" style="--item-color:#e6980b"><span class="nav-icon"></span><span>News & Events</span></button></li>
+          <li><button class="nav-button" data-page="Stock Data YTD" style="--item-color:#0c94b7"><span class="nav-icon"></span><span>Stock Data YTD</span></button></li>
+        </ul>
+      </nav>
+      <div class="sidebar-footer">Interface frame · no live data connected</div>
+    </aside>
+
+    <div class="scrim" id="scrim" aria-hidden="true"></div>
+
+    <main>
+      <div class="content">
+        <div id="dashboardView">
+          <div class="page-tabs" aria-label="Dashboard views">
+          <div class="page-tab active">Overview</div>
+          </div>
+
+          <div class="heading-row">
+            <h1>Dashboard</h1>
+            <div class="as-of">Frame preview · sample values only</div>
+          </div>
+
+        <section class="summary-grid" aria-label="Market summary">
+          <article class="summary-card">
+            <div class="summary-label">NIFTY 50</div>
+            <div class="summary-value">24,850.25</div>
+            <div class="summary-meta positive">+0.42% · sample</div>
+          </article>
+          <article class="summary-card">
+            <div class="summary-label">NIFTY BANK</div>
+            <div class="summary-value">53,120.50</div>
+            <div class="summary-meta negative">−0.18% · sample</div>
+          </article>
+          <article class="summary-card">
+            <div class="summary-label">Market breadth</div>
+            <div class="summary-value">31 / 19</div>
+            <div class="summary-meta">Advances / declines</div>
+          </article>
+          <article class="summary-card">
+            <div class="summary-label">Data status</div>
+            <div class="summary-value">Frame</div>
+            <div class="summary-meta">No source connected</div>
+          </article>
+        </section>
+
+        <section aria-labelledby="marketSnapshotTitle">
+          <h2 class="section-title" id="marketSnapshotTitle">Market snapshot</h2>
+          <p class="section-note">Representative layout only. Values below are static interface samples.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Instrument</th><th>Last price</th><th>Change</th><th>Volume</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>NIFTY 50</td><td>24,850.25</td><td class="positive">+0.42%</td><td>—</td><td><span class="status"><span class="status-dot muted"></span>Sample</span></td></tr>
+                <tr><td>NIFTY BANK</td><td>53,120.50</td><td class="negative">−0.18%</td><td>—</td><td><span class="status"><span class="status-dot muted"></span>Sample</span></td></tr>
+                <tr><td>DEMO EQUITY A</td><td>1,245.80</td><td class="positive">+1.06%</td><td>1.8M</td><td><span class="status"><span class="status-dot warn"></span>Illustrative</span></td></tr>
+                <tr><td>DEMO EQUITY B</td><td>684.30</td><td class="negative">−0.54%</td><td>920K</td><td><span class="status"><span class="status-dot warn"></span>Illustrative</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+          <div class="split-panels">
+            <section class="panel">
+              <h2>Data readiness</h2>
+              <div class="panel-list">
+                <div class="panel-row"><span>Kite session</span><span>Not connected</span></div>
+                <div class="panel-row"><span>Current quotes</span><span>Unavailable</span></div>
+                <div class="panel-row"><span>EOD dataset</span><span>Not updated</span></div>
+              </div>
+            </section>
+            <section class="panel">
+              <h2>Workspace status</h2>
+              <div class="panel-list">
+                <div class="panel-row"><span>Interface</span><span>Frame ready</span></div>
+                <div class="panel-row"><span>Navigation</span><span>8 sections</span></div>
+                <div class="panel-row"><span>External actions</span><span>Disabled</span></div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <section id="emptyView" hidden aria-live="polite">
+          <h1 id="emptyPageTitle"></h1>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="notice" id="notice" role="status" aria-live="polite"></div>
+
+  <script>
+    const body = document.body;
+    const menuButton = document.getElementById('menuButton');
+    const scrim = document.getElementById('scrim');
+    const dashboardView = document.getElementById('dashboardView');
+    const emptyView = document.getElementById('emptyView');
+    const emptyPageTitle = document.getElementById('emptyPageTitle');
+    const notice = document.getElementById('notice');
+    let noticeTimer;
+
+    function setNavigation(open) {
+      body.classList.toggle('nav-open', open);
+      menuButton.setAttribute('aria-expanded', String(open));
+      menuButton.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+    }
+
+    function showNotice(message) {
+      window.clearTimeout(noticeTimer);
+      notice.textContent = message;
+      notice.classList.add('show');
+      noticeTimer = window.setTimeout(() => notice.classList.remove('show'), 2800);
+    }
+
+    menuButton.addEventListener('click', () => setNavigation(!body.classList.contains('nav-open')));
+    scrim.addEventListener('click', () => setNavigation(false));
+
+    document.querySelectorAll('.nav-button').forEach((button) => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('.nav-button').forEach((item) => item.classList.remove('active'));
+        button.classList.add('active');
+        const isDashboard = button.dataset.page === 'Dashboard';
+        dashboardView.hidden = !isDashboard;
+        emptyView.hidden = isDashboard;
+        emptyPageTitle.textContent = isDashboard ? '' : button.dataset.page;
+        if (window.innerWidth <= 700) setNavigation(false);
+      });
+    });
+
+    document.querySelectorAll('[data-notice]').forEach((button) => {
+      button.addEventListener('click', () => showNotice(button.dataset.notice));
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') setNavigation(false);
+    });
+  </script>
+</body>
+</html>
