@@ -365,6 +365,7 @@
       gap: 14px;
       margin-bottom: 4px;
     }
+    .dashboard-section { margin-top: 28px; }
 
     .section-heading-row .section-title { margin: 0; }
 
@@ -377,6 +378,25 @@
     td { font-size: 14px; }
     th:not(:first-child), td:not(:first-child) { text-align: right; }
     tr:last-child td { border-bottom: 0; }
+
+    .sortable-heading { padding: 0; }
+    .sort-button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 6px;
+      padding: 12px 14px;
+      border: 0;
+      color: inherit;
+      background: transparent;
+      font: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .sortable-heading:not(:first-child) .sort-button { justify-content: flex-end; }
+    .sort-button:hover, .sort-button:focus-visible { color: #25292f; background: #f3f5f7; }
+    .sort-indicator { width: 10px; color: var(--brand); text-align: center; }
 
     .status {
       display: inline-flex;
@@ -515,7 +535,7 @@
           </form>
         </div>
       </div>
-      <button class="action-button" data-notice="EOD update will be connected after the data source is defined.">EOD update</button>
+      <button class="action-button" id="eodUpdateButton" type="button" disabled>EOD update</button>
     </div>
   </header>
 
@@ -566,11 +586,15 @@
             <div class="summary-meta" id="niftyBankMeta">Not loaded</div>
           </article>
           <article class="summary-card">
-            <div class="summary-label">Sector coverage</div>
-            <div class="summary-value" id="sectorCoverageValue">— / 34</div>
-            <div class="summary-meta" id="sectorCoverageMeta">Official NSE sector list</div>
+            <div class="summary-label">NIFTY IT</div>
+            <div class="summary-value" id="niftyItValue">—</div>
+            <div class="summary-meta" id="niftyItMeta">Not loaded</div>
           </article>
-          <article class="summary-card" aria-label="Reserved dashboard summary"></article>
+          <article class="summary-card">
+            <div class="summary-label">NIFTY ENERGY</div>
+            <div class="summary-value" id="niftyEnergyValue">—</div>
+            <div class="summary-meta" id="niftyEnergyMeta">Not loaded</div>
+          </article>
         </section>
 
         <section aria-labelledby="marketSnapshotTitle">
@@ -591,13 +615,38 @@
           </div>
         </section>
 
+        <section class="dashboard-section" aria-labelledby="marketBreadthTitle">
+          <div class="section-heading-row">
+            <h2 class="section-title" id="marketBreadthTitle">Market breadth by sector</h2>
+            <button class="panel-button" id="loadBreadthButton" type="button" disabled>Load breadth</button>
+          </div>
+          <p class="section-note" id="marketBreadthNote">Connect Kite, then load NIFTY 500 breadth from completed daily candles. Universe and industry mapping come from the official NIFTY 500 constituent file.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th class="sortable-heading" data-sort-key="sector" aria-sort="ascending"><button class="sort-button" type="button">Sector <span class="sort-indicator" aria-hidden="true">▲</span></button></th>
+                  <th class="sortable-heading" data-sort-key="stocks" aria-sort="none"><button class="sort-button" type="button">Stocks <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th class="sortable-heading" data-sort-key="above_20dma_pct" aria-sort="none"><button class="sort-button" type="button">%&gt;20DMA <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th class="sortable-heading" data-sort-key="above_50dma_pct" aria-sort="none"><button class="sort-button" type="button">%&gt;50DMA <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th class="sortable-heading" data-sort-key="above_200dma_pct" aria-sort="none"><button class="sort-button" type="button">%&gt;200DMA <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th class="sortable-heading" data-sort-key="one_day_change_pt" aria-sort="none"><button class="sort-button" type="button">1d chg <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                </tr>
+              </thead>
+              <tbody id="marketBreadthBody">
+                <tr><td colspan="6">Breadth has not been loaded.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
           <div class="split-panels">
             <details class="panel" open>
               <summary>Data readiness</summary>
               <div class="panel-list">
                 <div class="panel-row"><span>Kite session</span><span id="kiteSessionStatus">Not connected</span></div>
                 <div class="panel-row"><span>Current quotes</span><span id="currentQuotesStatus">Unavailable</span></div>
-                <div class="panel-row"><span>EOD dataset</span><span>Not updated</span></div>
+                <div class="panel-row"><span>EOD dataset</span><span id="eodDatasetStatus">Not updated</span></div>
               </div>
             </details>
             <details class="panel" open>
@@ -636,19 +685,28 @@
     const openKiteLoginButton = document.getElementById('openKiteLoginButton');
     const kiteSessionStatus = document.getElementById('kiteSessionStatus');
     const currentQuotesStatus = document.getElementById('currentQuotesStatus');
+    const eodDatasetStatus = document.getElementById('eodDatasetStatus');
     const sidebarConnectionStatus = document.getElementById('sidebarConnectionStatus');
     const refreshIndexButton = document.getElementById('refreshIndexButton');
+    const eodUpdateButton = document.getElementById('eodUpdateButton');
     const indexSnapshotBody = document.getElementById('indexSnapshotBody');
     const indexSnapshotNote = document.getElementById('indexSnapshotNote');
+    const loadBreadthButton = document.getElementById('loadBreadthButton');
+    const marketBreadthBody = document.getElementById('marketBreadthBody');
+    const marketBreadthNote = document.getElementById('marketBreadthNote');
     const dashboardAsOf = document.getElementById('dashboardAsOf');
     const nifty50Value = document.getElementById('nifty50Value');
     const nifty50Meta = document.getElementById('nifty50Meta');
     const niftyBankValue = document.getElementById('niftyBankValue');
     const niftyBankMeta = document.getElementById('niftyBankMeta');
-    const sectorCoverageValue = document.getElementById('sectorCoverageValue');
-    const sectorCoverageMeta = document.getElementById('sectorCoverageMeta');
+    const niftyItValue = document.getElementById('niftyItValue');
+    const niftyItMeta = document.getElementById('niftyItMeta');
+    const niftyEnergyValue = document.getElementById('niftyEnergyValue');
+    const niftyEnergyMeta = document.getElementById('niftyEnergyMeta');
     const notice = document.getElementById('notice');
     let noticeTimer;
+    let marketBreadthRows = [];
+    let marketBreadthSort = { key: 'sector', direction: 'asc' };
 
     function setNavigation(open) {
       body.classList.toggle('nav-open', open);
@@ -676,8 +734,16 @@
       kiteSessionStatus.textContent = authenticated ? 'Connected' : 'Not connected';
       sidebarConnectionStatus.textContent = authenticated ? 'Kite connected · manual snapshots' : 'Interface frame · no live data connected';
       kiteDisconnectButton.hidden = !authenticated;
+      eodUpdateButton.disabled = !authenticated;
       refreshIndexButton.disabled = !authenticated;
-      if (!authenticated) resetDashboardSnapshot();
+      loadBreadthButton.disabled = !authenticated;
+      if (authenticated && dashboardAsOf.textContent === 'Connect Kite for current index data') {
+        dashboardAsOf.textContent = 'Run EOD update for completed closes';
+      }
+      if (!authenticated) {
+        resetDashboardSnapshot();
+        resetMarketBreadth();
+      }
     }
 
     function formatPrice(value) {
@@ -687,42 +753,52 @@
       });
     }
 
-    function formatChange(row) {
-      const change = ((Number(row.last_price) - Number(row.previous_close)) / Number(row.previous_close)) * 100;
-      const sign = change > 0 ? '+' : change < 0 ? '−' : '';
-      return { text: `${sign}${Math.abs(change).toFixed(2)}% · Kite`, className: change > 0 ? 'positive' : change < 0 ? 'negative' : '' };
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
     }
 
-    function updateIndexCard(valueElement, metaElement, row) {
+    function updateEodIndexCard(valueElement, metaElement, row) {
       metaElement.classList.remove('positive', 'negative');
       if (!row) {
         valueElement.textContent = '—';
-        metaElement.textContent = 'Unavailable';
+        metaElement.textContent = 'Not loaded';
         return;
       }
-      const change = formatChange(row);
-      valueElement.textContent = formatPrice(row.last_price);
-      metaElement.textContent = change.text;
-      if (change.className) metaElement.classList.add(change.className);
+      const ytd = Number(row.ytd_pct);
+      const sign = ytd > 0 ? '+' : ytd < 0 ? '−' : '';
+      valueElement.textContent = formatPrice(row.close);
+      metaElement.textContent = `${sign}${Math.abs(ytd).toFixed(2)}% YTD`;
+      if (ytd > 0) metaElement.classList.add('positive');
+      if (ytd < 0) metaElement.classList.add('negative');
     }
 
     function resetDashboardSnapshot() {
-      updateIndexCard(nifty50Value, nifty50Meta, null);
-      updateIndexCard(niftyBankValue, niftyBankMeta, null);
-      sectorCoverageValue.textContent = '— / 34';
-      sectorCoverageMeta.textContent = 'Official NSE sector list';
+      updateEodIndexCard(nifty50Value, nifty50Meta, null);
+      updateEodIndexCard(niftyBankValue, niftyBankMeta, null);
+      updateEodIndexCard(niftyItValue, niftyItMeta, null);
+      updateEodIndexCard(niftyEnergyValue, niftyEnergyMeta, null);
       dashboardAsOf.textContent = 'Connect Kite for current index data';
+    }
+
+    function resetMarketBreadth() {
+      marketBreadthRows = [];
+      eodDatasetStatus.textContent = 'Not updated';
+      marketBreadthBody.innerHTML = '<tr><td colspan="6">Connect Kite to load market breadth.</td></tr>';
+      marketBreadthNote.textContent = 'Connect Kite, then load NIFTY 500 breadth from completed daily candles. Universe and industry mapping come from the official NIFTY 500 constituent file.';
     }
 
     function renderIndexUnavailable(message) {
       indexSnapshotBody.innerHTML = '<tr><td colspan="7">Index data is unavailable.</td></tr>';
       indexSnapshotNote.textContent = message;
       currentQuotesStatus.textContent = 'Unavailable';
-      resetDashboardSnapshot();
     }
 
     function renderIndexSnapshot(result) {
-      const rowsByName = new Map(result.rows.map((row) => [row.display_name, row]));
       const availableRows = result.rows.map((row) => `<tr>
           <td>${row.display_name}</td>
           <td>${formatPrice(row.open)}</td>
@@ -741,11 +817,35 @@
       const retrievalText = retrieved.toLocaleString('en-IN');
       indexSnapshotNote.textContent = `Kite OHLC snapshot retrieved ${retrievalText}. Sector classification follows the current official NSE Indices list; previous close is the last trading day’s close.`;
       currentQuotesStatus.textContent = `${result.rows.length} indices loaded`;
-      updateIndexCard(nifty50Value, nifty50Meta, rowsByName.get('Nifty 50'));
-      updateIndexCard(niftyBankValue, niftyBankMeta, rowsByName.get('Nifty Bank'));
-      sectorCoverageValue.textContent = `${result.available_sector_count} / ${result.official_sector_count}`;
-      sectorCoverageMeta.textContent = result.missing.length === 0 ? 'All sectoral indices available' : `${result.missing.length} unavailable in Kite`;
-      dashboardAsOf.textContent = `Kite snapshot · ${retrievalText}`;
+    }
+
+    function renderEodIndexSummary(result) {
+      const rowsByName = new Map(result.rows.map((row) => [row.display_name, row]));
+      updateEodIndexCard(nifty50Value, nifty50Meta, rowsByName.get('Nifty 50'));
+      updateEodIndexCard(niftyBankValue, niftyBankMeta, rowsByName.get('Nifty Bank'));
+      updateEodIndexCard(niftyItValue, niftyItMeta, rowsByName.get('Nifty IT'));
+      updateEodIndexCard(niftyEnergyValue, niftyEnergyMeta, rowsByName.get('Nifty Energy'));
+      const dates = result.rows.map((row) => row.as_of_date).sort();
+      dashboardAsOf.textContent = `Completed close · ${dates[dates.length - 1]}`;
+    }
+
+    async function loadEodIndexSummary() {
+      try {
+        const response = await fetch('/api/kite/indices/eod-summary', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          if (result.reason === 'kite_not_connected' || result.reason === 'access_token_invalid_or_expired') {
+            setKiteAccess(false);
+          }
+          showNotice(kiteFailureMessage(result.reason));
+          return false;
+        }
+        renderEodIndexSummary(result);
+        return true;
+      } catch (_error) {
+        showNotice('The local EOD index-summary service is unavailable.');
+        return false;
+      }
     }
 
     async function loadIndexSnapshot() {
@@ -760,27 +860,147 @@
           }
           renderIndexUnavailable('The latest Kite index snapshot is unavailable.');
           showNotice(kiteFailureMessage(result.reason));
-          return;
+          return false;
         }
         renderIndexSnapshot(result);
+        return true;
       } catch (_error) {
         renderIndexUnavailable('The local index snapshot service is unavailable.');
+        return false;
       } finally {
         refreshIndexButton.textContent = 'Refresh indices';
         refreshIndexButton.disabled = !kiteLoginButton.classList.contains('kite-authenticated');
       }
     }
 
+    function sortedMarketBreadthRows() {
+      const { key, direction } = marketBreadthSort;
+      const multiplier = direction === 'asc' ? 1 : -1;
+      return [...marketBreadthRows].sort((left, right) => {
+        const leftValue = left[key];
+        const rightValue = right[key];
+        const leftMissing = leftValue === null || leftValue === undefined;
+        const rightMissing = rightValue === null || rightValue === undefined;
+        if (leftMissing || rightMissing) {
+          if (leftMissing && rightMissing) return left.sector.localeCompare(right.sector);
+          return leftMissing ? 1 : -1;
+        }
+        const comparison = typeof leftValue === 'string'
+          ? leftValue.localeCompare(rightValue, 'en-IN', { sensitivity: 'base' })
+          : Number(leftValue) - Number(rightValue);
+        return comparison === 0 ? left.sector.localeCompare(right.sector) : comparison * multiplier;
+      });
+    }
+
+    function updateMarketBreadthSortHeaders() {
+      document.querySelectorAll('.sortable-heading').forEach((heading) => {
+        const active = heading.dataset.sortKey === marketBreadthSort.key;
+        heading.setAttribute('aria-sort', active ? (marketBreadthSort.direction === 'asc' ? 'ascending' : 'descending') : 'none');
+        heading.querySelector('.sort-indicator').textContent = active ? (marketBreadthSort.direction === 'asc' ? '▲' : '▼') : '';
+      });
+    }
+
+    function renderMarketBreadthRows() {
+      marketBreadthBody.innerHTML = sortedMarketBreadthRows().map((row) => {
+        const display = (value) => value === null ? '—' : String(value);
+        const change = row.one_day_change_pt;
+        const changeText = change === null ? '—' : `${change > 0 ? '+' : ''}${change}`;
+        const changeClass = change > 0 ? 'positive' : change < 0 ? 'negative' : '';
+        return `<tr>
+          <td>${escapeHtml(row.sector)}</td>
+          <td>${row.stocks}</td>
+          <td>${display(row.above_20dma_pct)}</td>
+          <td>${display(row.above_50dma_pct)}</td>
+          <td>${display(row.above_200dma_pct)}</td>
+          <td class="${changeClass}">${changeText}</td>
+        </tr>`;
+      }).join('');
+      updateMarketBreadthSortHeaders();
+    }
+
+    function renderMarketBreadth(result) {
+      marketBreadthRows = [...result.rows];
+      renderMarketBreadthRows();
+      const cacheText = result.cache_hit ? ' · cached locally' : '';
+      marketBreadthNote.textContent = `NIFTY 500 breadth as of ${result.as_of_date}: ${result.evaluated_count}/${result.universe_count} securities evaluated${cacheText}. 1d chg is the percentage-point change in %>20DMA. Prices: Kite daily candles; classification: official NIFTY 500 constituent file.`;
+      eodDatasetStatus.textContent = `Updated through ${result.as_of_date}`;
+    }
+
+    async function loadMarketBreadth() {
+      loadBreadthButton.disabled = true;
+      loadBreadthButton.textContent = 'Loading NIFTY 500…';
+      marketBreadthNote.textContent = 'Loading completed daily candles from Kite. The first uncached run can take about three minutes; keep this page open.';
+      try {
+        const response = await fetch('/api/kite/market-breadth', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          if (result.reason === 'kite_not_connected' || result.reason === 'access_token_invalid_or_expired') {
+            setKiteAccess(false);
+          }
+          marketBreadthNote.textContent = 'Market breadth is unavailable.';
+          showNotice(kiteFailureMessage(result.reason));
+          return false;
+        }
+        renderMarketBreadth(result);
+        return true;
+      } catch (_error) {
+        marketBreadthNote.textContent = 'The local market-breadth service is unavailable.';
+        return false;
+      } finally {
+        loadBreadthButton.textContent = 'Load breadth';
+        loadBreadthButton.disabled = !kiteLoginButton.classList.contains('kite-authenticated');
+      }
+    }
+
+    async function runEodUpdate() {
+      if (!kiteLoginButton.classList.contains('kite-authenticated')) {
+        showNotice('Connect Kite before running the EOD update.');
+        return;
+      }
+      eodUpdateButton.disabled = true;
+      eodUpdateButton.textContent = 'Updating EOD…';
+      showNotice('EOD update started. NIFTY 500 breadth may take about three minutes.');
+      try {
+        const indexUpdated = await loadIndexSnapshot();
+        const eodIndicesUpdated = await loadEodIndexSummary();
+        const breadthUpdated = await loadMarketBreadth();
+        if (indexUpdated && eodIndicesUpdated && breadthUpdated) {
+          showNotice('EOD update completed. Index closes, YTD returns, and daily breadth are ready.');
+        } else {
+          showNotice('EOD update finished with unavailable data. Review the dashboard status.');
+        }
+      } finally {
+        eodUpdateButton.textContent = 'EOD update';
+        eodUpdateButton.disabled = !kiteLoginButton.classList.contains('kite-authenticated');
+      }
+    }
+
     function kiteFailureMessage(reason) {
       const messages = {
+        missing_or_invalid_credentials: 'One or more entered values are missing, contain surrounding spaces, or are malformed.',
         request_token_not_found: 'No request token was found. Paste the token or the complete redirect URL.',
         request_token_invalid_expired_or_used: 'The request token is invalid, expired, or already used. Open Kite login again for a fresh token.',
         token_exchange_input_rejected: 'Kite rejected the API key, API secret, or request token combination.',
         access_token_missing_from_provider: 'Kite did not return an access token.',
         access_token_invalid_or_expired: 'The generated access token could not be verified.',
-        provider_unavailable: 'Kite is temporarily unavailable. Try again shortly.'
+        authentication_failed: 'Kite rejected authentication for the supplied application credentials.',
+        profile_access_denied: 'Kite created a session but denied profile verification.',
+        provider_input_rejected: 'Kite rejected the supplied session verification input.',
+        provider_rejected_request: 'Kite rejected the session request without a recognized error type.',
+        invalid_provider_response: 'Kite returned an unexpected response that PG-terminal refused to accept.',
+        provider_timeout: 'The local server timed out while contacting Kite.',
+        provider_tls_failure: 'The local server could not establish a secure TLS connection to Kite.',
+        provider_dns_failure: 'The local server could not resolve Kite’s API address.',
+        provider_network_blocked: 'Windows blocked the local server from reaching Kite’s API.',
+        provider_connection_failed: 'The local server could not connect to Kite’s API.',
+        breadth_refresh_in_progress: 'A market-breadth refresh is already running.',
+        invalid_constituent_file: 'The official NIFTY 500 constituent file was not accepted.',
+        unexpected_constituent_count: 'The official NIFTY 500 file did not contain the expected 500-company security universe.',
+        no_completed_historical_data: 'Kite returned no completed daily history for the breadth calculation.',
+        prior_year_close_unavailable: 'Kite did not return the prior year-end close required for YTD.',
+        dashboard_index_not_available: 'One or more dashboard indices were not available in Kite’s current instrument list.'
       };
-      return messages[reason] || 'Kite connection could not be completed. Check the entered details and try again.';
+      return messages[reason] || `Kite connection failed with local reason: ${reason || 'unknown_error'}.`;
     }
 
     async function restoreKiteStatus() {
@@ -881,6 +1101,20 @@
       }
     });
     refreshIndexButton.addEventListener('click', loadIndexSnapshot);
+    loadBreadthButton.addEventListener('click', loadMarketBreadth);
+    eodUpdateButton.addEventListener('click', runEodUpdate);
+    document.querySelectorAll('.sortable-heading').forEach((heading) => {
+      heading.querySelector('.sort-button').addEventListener('click', () => {
+        const key = heading.dataset.sortKey;
+        if (marketBreadthSort.key === key) {
+          marketBreadthSort.direction = marketBreadthSort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+          marketBreadthSort = { key, direction: key === 'sector' ? 'asc' : 'desc' };
+        }
+        if (marketBreadthRows.length) renderMarketBreadthRows();
+        else updateMarketBreadthSortHeaders();
+      });
+    });
 
     document.addEventListener('click', (event) => {
       if (!kiteCredentialPanel.hidden && !event.target.closest('.kite-login-wrap')) {
