@@ -22,21 +22,34 @@ from pathlib import Path
 from datetime import date, datetime, time as datetime_time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from eod_store import CandleConflictError, EODStore
+from eod_store import (
+    CandleConflictError,
+    EODStore,
+    FuturesSnapshotConflictError,
+    InstitutionalFlowConflictError,
+    MacroSnapshotConflictError,
+)
 
 
 TOKEN_URL = "https://api.kite.trade/session/token"
 PROFILE_URL = "https://api.kite.trade/user/profile"
 OHLC_URL = "https://api.kite.trade/quote/ohlc"
 NSE_INSTRUMENTS_URL = "https://api.kite.trade/instruments/NSE"
+NFO_INSTRUMENTS_URL = "https://api.kite.trade/instruments/NFO"
+FULL_QUOTE_URL = "https://api.kite.trade/quote"
 NIFTY500_CONSTITUENTS_URL = "https://www.niftyindices.com/IndexConstituent/ind_nifty500list.csv"
+NSE_FII_DII_URL = "https://www.nseindia.com/api/fiidiiTradeReact"
+NSE_FII_DII_SOURCE = "NSE FII/FPI & DII combined-exchange cash-market report"
+RBI_HOME_URL = "https://www.rbi.org.in/"
+RBI_MACRO_SOURCE = "Reserve Bank of India current rates; FX source FBIL"
+KITE_FUTURES_SOURCE = "Kite Connect NFO near-month full quote after market close"
 NIFTY_INDICES_PUBLIC_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
 )
 HISTORICAL_URL_TEMPLATE = "https://api.kite.trade/instruments/historical/{instrument_token}/day"
 BASE_INDEX = ("Nifty 50", "NSE:NIFTY 50")
-DASHBOARD_EOD_INDICES = ("Nifty 50", "Nifty Bank", "Nifty IT", "Nifty Energy")
+DASHBOARD_EOD_INDICES = ("Nifty 50", "Nifty Bank", "Nifty IT", "Nifty Energy", "India VIX")
 OFFICIAL_SECTORAL_INDICES = (
     "Nifty Auto",
     "Nifty Bank",
@@ -85,8 +98,11 @@ INDEX_NAME_ALIASES = {
 }
 MAX_REQUEST_BYTES = 16 * 1024
 MAX_RESPONSE_BYTES = 64 * 1024
+RBI_MAX_RESPONSE_BYTES = 1024 * 1024
 MAX_HISTORICAL_RESPONSE_BYTES = 512 * 1024
 MAX_INSTRUMENT_BYTES = 8 * 1024 * 1024
+MAX_NFO_INSTRUMENT_BYTES = 32 * 1024 * 1024
+MAX_QUOTE_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_CONSTITUENT_BYTES = 128 * 1024
 REQUEST_TIMEOUT_SECONDS = 10
 BREADTH_CACHE_SECONDS = 15 * 60
@@ -224,6 +240,174 @@ def parse_equity_tokens(csv_payload: str) -> dict[str, str]:
     if not tokens:
         raise ValueError("invalid_instrument_master")
     return tokens
+
+
+def parse_near_month_stock_futures(
+    csv_payload: str,
+    symbols: tuple[str, ...],
+    *,
+    as_of: date,
+) -> tuple[list[dict[str, object]], list[str]]:
+    reader = csv.DictReader(io.StringIO(csv_payload))
+    required = {
+        "instrument_token", "tradingsymbol", "name", "expiry", "lot_size",
+        "instrument_type", "segment", "exchange",
+    }
+    if reader.fieldnames is None or not required.issubset(reader.fieldnames):
+        raise ValueError("invalid_nfo_instrument_master")
+    requested = set(symbols)
+    candidates: dict[str, list[dict[str, object]]] = {symbol: [] for symbol in symbols}
+    for row in reader:
+        if (
+            row.get("exchange") != "NFO"
+            or row.get("segment") != "NFO-FUT"
+            or row.get("instrument_type") != "FUT"
+        ):
+            continue
+        underlying = (row.get("name") or "").strip().upper()
+        if underlying not in requested:
+            continue
+        token = (row.get("instrument_token") or "").strip()
+        tradingsymbol = (row.get("tradingsymbol") or "").strip().upper()
+        try:
+            expiry = date.fromisoformat((row.get("expiry") or "").strip())
+            lot_size = int((row.get("lot_size") or "").strip())
+        except ValueError:
+            continue
+        if not token.isdigit() or not tradingsymbol or expiry < as_of or lot_size <= 0:
+            continue
+        candidates[underlying].append(
+            {
+                "underlying": underlying,
+                "tradingsymbol": tradingsymbol,
+                "exchange": "NFO",
+                "instrument_token": token,
+                "expiry": expiry,
+                "lot_size": lot_size,
+            }
+        )
+    selected = [
+        min(candidates[symbol], key=lambda item: (item["expiry"], item["tradingsymbol"]))
+        for symbol in symbols
+        if candidates[symbol]
+    ]
+    selected.sort(key=lambda item: item["underlying"])
+    missing = [symbol for symbol in symbols if not candidates[symbol]]
+    return selected, missing
+
+
+def normalize_futures_eod_quotes(
+    provider_payload: dict[str, object],
+    contracts: list[dict[str, object]],
+    *,
+    now: datetime,
+) -> tuple[list[dict[str, object]], list[str]]:
+    local_now = now.astimezone(INDIA_TIMEZONE)
+    if local_now.time().replace(tzinfo=None) < datetime_time(15, 40):
+        raise ValueError("futures_eod_not_due")
+    data = provider_payload.get("data")
+    if provider_payload.get("status") != "success" or not isinstance(data, dict):
+        raise ValueError("invalid_futures_quote_response")
+    snapshots: list[dict[str, object]] = []
+    missing: list[str] = []
+    for contract in contracts:
+        key = f"NFO:{contract['tradingsymbol']}"
+        quote = data.get(key)
+        if not isinstance(quote, dict):
+            missing.append(str(contract["underlying"]))
+            continue
+        ohlc = quote.get("ohlc")
+        timestamp = quote.get("timestamp") or quote.get("last_trade_time")
+        raw_values = (
+            ohlc.get("open") if isinstance(ohlc, dict) else None,
+            ohlc.get("high") if isinstance(ohlc, dict) else None,
+            ohlc.get("low") if isinstance(ohlc, dict) else None,
+            quote.get("last_price"),
+        )
+        volume = quote.get("volume")
+        open_interest = quote.get("oi")
+        try:
+            session_date = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00")).date()
+        except ValueError:
+            missing.append(str(contract["underlying"]))
+            continue
+        if (
+            not all(
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and math.isfinite(float(value))
+                and float(value) > 0
+                for value in raw_values
+            )
+            or not isinstance(volume, (int, float))
+            or isinstance(volume, bool)
+            or int(volume) < 0
+            or float(volume) != int(volume)
+            or not isinstance(open_interest, (int, float))
+            or isinstance(open_interest, bool)
+            or int(open_interest) < 0
+            or float(open_interest) != int(open_interest)
+            or session_date != local_now.date()
+        ):
+            missing.append(str(contract["underlying"]))
+            continue
+        open_price, high, low, close = (float(value) for value in raw_values)
+        if high < max(open_price, low, close) or low > min(open_price, high, close):
+            missing.append(str(contract["underlying"]))
+            continue
+        snapshots.append(
+            {
+                "contract_key": key,
+                "date": session_date,
+                "open": open_price,
+                "high": high,
+                "low": low,
+                "close": close,
+                "volume": int(volume),
+                "open_interest": int(open_interest),
+            }
+        )
+    return snapshots, missing
+
+
+def calculate_futures_oi_summary(rows: list[dict[str, object]]) -> dict[str, object]:
+    if not rows:
+        return {
+            "available": False,
+            "reason": "Run EOD update after market close to establish the near-month futures baseline.",
+        }
+    grouped: dict[str, list[dict[str, object]]] = {}
+    for row in rows:
+        grouped.setdefault(str(row["underlying"]), []).append(row)
+    latest_date = max(row["date"] for row in rows)
+    comparable = 0
+    baseline_only = 0
+    rollover_baseline = 0
+    latest_rows = 0
+    for underlying_rows in grouped.values():
+        ordered = sorted(underlying_rows, key=lambda item: (item["date"], item["expiry"]))
+        latest = ordered[-1]
+        if latest["date"] != latest_date:
+            continue
+        latest_rows += 1
+        prior = next((item for item in reversed(ordered[:-1]) if item["date"] < latest_date), None)
+        if prior is None:
+            baseline_only += 1
+        elif prior["contract_key"] != latest["contract_key"]:
+            rollover_baseline += 1
+        else:
+            comparable += 1
+    return {
+        "available": True,
+        "as_of_date": latest_date.isoformat(),
+        "stored_underlyings": len(grouped),
+        "latest_coverage": latest_rows,
+        "comparable_count": comparable,
+        "baseline_only_count": baseline_only,
+        "rollover_baseline_count": rollover_baseline,
+        "classification_status": "withheld",
+        "reason": "Contract-specific price and OI are stored; build-up labels remain withheld pending continuity validation.",
+    }
 
 
 def parse_dashboard_index_tokens(csv_payload: str) -> dict[str, str]:
@@ -918,11 +1102,308 @@ def calculate_market_breadth(
     return rows, as_of, evaluated
 
 
+def parse_institutional_flows(payload: object, *, today: date) -> list[dict[str, object]]:
+    """Validate NSE's combined-exchange provisional FII/FPI and DII cash rows."""
+    if not isinstance(payload, list) or len(payload) != 2:
+        raise ValueError("invalid_institutional_flow_response")
+
+    def number(value: object) -> float:
+        if isinstance(value, bool):
+            raise ValueError("invalid_institutional_flow_response")
+        try:
+            parsed = float(str(value).replace(",", "").strip())
+        except (TypeError, ValueError) as error:
+            raise ValueError("invalid_institutional_flow_response") from error
+        if not math.isfinite(parsed):
+            raise ValueError("invalid_institutional_flow_response")
+        return parsed
+
+    rows: list[dict[str, object]] = []
+    for raw in payload:
+        if not isinstance(raw, dict):
+            raise ValueError("invalid_institutional_flow_response")
+        category = str(raw.get("category", "")).strip()
+        try:
+            session_date = datetime.strptime(str(raw.get("date", "")).strip(), "%d-%b-%Y").date()
+        except ValueError as error:
+            raise ValueError("invalid_institutional_flow_response") from error
+        buy = number(raw.get("buyValue"))
+        sell = number(raw.get("sellValue"))
+        net = number(raw.get("netValue"))
+        if (
+            category not in {"FII/FPI", "DII"}
+            or session_date > today
+            or buy < 0
+            or sell < 0
+            or abs((buy - sell) - net) > 0.11
+        ):
+            raise ValueError("invalid_institutional_flow_response")
+        rows.append(
+            {
+                "date": session_date,
+                "category": category,
+                "buy_crore": buy,
+                "sell_crore": sell,
+                "net_crore": net,
+            }
+        )
+    if {row["category"] for row in rows} != {"FII/FPI", "DII"} or len({row["date"] for row in rows}) != 1:
+        raise ValueError("invalid_institutional_flow_response")
+    return sorted(rows, key=lambda row: str(row["category"]))
+
+
+def calculate_institutional_flow_summary(
+    rows: list[dict[str, object]],
+) -> dict[str, object]:
+    """Summarise append-only provisional cash flows without inventing a signal threshold."""
+    sessions: dict[date, dict[str, dict[str, object]]] = {}
+    for row in rows:
+        session_date = row.get("date")
+        category = row.get("category")
+        if isinstance(session_date, date) and category in {"FII/FPI", "DII"}:
+            sessions.setdefault(session_date, {})[str(category)] = row
+    complete_dates = sorted(
+        session_date
+        for session_date, categories in sessions.items()
+        if set(categories) == {"FII/FPI", "DII"}
+    )
+    if not complete_dates:
+        return {
+            "available": False,
+            "publication_status": "provisional",
+            "reason": "Run EOD update to retrieve the official NSE institutional-flow report.",
+        }
+
+    latest_date = complete_dates[-1]
+    latest = sessions[latest_date]
+
+    def category_values(category: str) -> dict[str, float]:
+        row = latest[category]
+        return {
+            "buy_crore": round(float(row["buy_crore"]), 2),
+            "sell_crore": round(float(row["sell_crore"]), 2),
+            "net_crore": round(float(row["net_crore"]), 2),
+        }
+
+    def cumulative(window: int) -> dict[str, float] | None:
+        if len(complete_dates) < window:
+            return None
+        selected = complete_dates[-window:]
+        fii = sum(float(sessions[item]["FII/FPI"]["net_crore"]) for item in selected)
+        dii = sum(float(sessions[item]["DII"]["net_crore"]) for item in selected)
+        return {
+            "fii_fpi_net_crore": round(fii, 2),
+            "dii_net_crore": round(dii, 2),
+            "combined_net_crore": round(fii + dii, 2),
+        }
+
+    latest_fii = category_values("FII/FPI")
+    latest_dii = category_values("DII")
+    series = [
+        {
+            "date": session_date.isoformat(),
+            "fii_fpi_net_crore": round(float(sessions[session_date]["FII/FPI"]["net_crore"]), 2),
+            "dii_net_crore": round(float(sessions[session_date]["DII"]["net_crore"]), 2),
+            "combined_net_crore": round(
+                float(sessions[session_date]["FII/FPI"]["net_crore"])
+                + float(sessions[session_date]["DII"]["net_crore"]),
+                2,
+            ),
+        }
+        for session_date in complete_dates
+    ]
+    return {
+        "available": True,
+        "as_of_date": latest_date.isoformat(),
+        "publication_status": "provisional",
+        "market_scope": "NSE, BSE and MSEI combined cash market",
+        "source": NSE_FII_DII_SOURCE,
+        "session_count": len(complete_dates),
+        "latest": {
+            "fii_fpi": latest_fii,
+            "dii": latest_dii,
+            "combined_net_crore": round(latest_fii["net_crore"] + latest_dii["net_crore"], 2),
+        },
+        "five_session": cumulative(5),
+        "twenty_session": cumulative(20),
+        "series": series,
+        "band": "unranked",
+        "reason": "Official provisional cash flows are visible; directional thresholds are not yet validated.",
+        "confirmed_reconciliation": "not_loaded",
+    }
+
+
+def parse_rbi_macro_snapshot(html_payload: str) -> list[dict[str, object]]:
+    """Extract the current official FBIL FX references and approximate 10-year G-Sec."""
+    if not isinstance(html_payload, str) or not html_payload.strip():
+        raise ValueError("invalid_rbi_macro_response")
+    text = re.sub(r"<script\b[^>]*>.*?</script>", " ", html_payload, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r"<style\b[^>]*>.*?</style>", " ", text, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r"<[^>]+>", " ", text)
+    import html as html_module
+
+    text = html_module.unescape(text).replace("\xa0", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+
+    fx_date_match = re.search(
+        r"As\s+at\s+1\.00\s*pm\s+of\s+([A-Za-z]+\s+\d{1,2},\s+\d{4})",
+        text,
+        flags=re.IGNORECASE,
+    )
+    gsec_heading = re.search(r"Government\s+Securities\s+Market", text, flags=re.IGNORECASE)
+    preceding_dates = (
+        re.findall(
+            r"as\s+on\s+([A-Za-z]+\s+\d{1,2},\s+\d{4})",
+            text[: gsec_heading.start()] if gsec_heading else "",
+            flags=re.IGNORECASE,
+        )
+        if gsec_heading
+        else []
+    )
+    following_dates = (
+        re.findall(
+            r"as\s+on\s+([A-Za-z]+\s+\d{1,2},\s+\d{4})",
+            text[gsec_heading.end() : gsec_heading.end() + 1000] if gsec_heading else "",
+            flags=re.IGNORECASE,
+        )
+        if gsec_heading
+        else []
+    )
+    if (
+        fx_date_match is None
+        or not (preceding_dates or following_dates)
+        or re.search(r"Source\s*:\s*FBIL", text, flags=re.IGNORECASE) is None
+    ):
+        raise ValueError("invalid_rbi_macro_response")
+    try:
+        fx_date = datetime.strptime(fx_date_match.group(1), "%B %d, %Y").date()
+        gsec_date_text = preceding_dates[-1] if preceding_dates else following_dates[0]
+        gsec_date = datetime.strptime(gsec_date_text, "%B %d, %Y").date()
+    except ValueError as error:
+        raise ValueError("invalid_rbi_macro_response") from error
+
+    fx_specs = (
+        ("usd_inr", r"INR\s*/\s*1\s*USD", "INR per USD", "USD/INR"),
+        ("gbp_inr", r"INR\s*/\s*1\s*GBP", "INR per GBP", "GBP/INR"),
+        ("eur_inr", r"INR\s*/\s*1\s*EUR", "INR per EUR", "EUR/INR"),
+        ("jpy_100_inr", r"INR\s*/\s*100\s*JPY", "INR per 100 JPY", "JPY/INR (100 JPY)"),
+    )
+    rows: list[dict[str, object]] = []
+    for metric_key, label_pattern, unit, instrument_label in fx_specs:
+        match = re.search(rf"{label_pattern}\s*:?\s*([0-9]+(?:\.[0-9]+)?)", text, flags=re.IGNORECASE)
+        if match is None:
+            raise ValueError("invalid_rbi_macro_response")
+        value = float(match.group(1))
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError("invalid_rbi_macro_response")
+        rows.append(
+            {
+                "date": fx_date,
+                "metric_key": metric_key,
+                "value": value,
+                "unit": unit,
+                "instrument_label": instrument_label,
+            }
+        )
+
+    gsec_candidates: list[tuple[int, float, str]] = []
+    for match in re.finditer(
+        r"((?:[0-9]+(?:\.[0-9]+)?)%\s+GS\s+(\d{4}))\s*:?\s*([0-9]+(?:\.[0-9]+)?)%",
+        text,
+        flags=re.IGNORECASE,
+    ):
+        label, maturity_text, yield_text = match.groups()
+        maturity = int(maturity_text)
+        yield_value = float(yield_text)
+        if maturity >= gsec_date.year and 0 < yield_value < 25:
+            gsec_candidates.append((maturity, yield_value, re.sub(r"\s+", " ", label).upper()))
+    if not gsec_candidates:
+        raise ValueError("invalid_rbi_macro_response")
+    maturity, yield_value, label = min(
+        gsec_candidates,
+        key=lambda item: (abs(item[0] - (gsec_date.year + 10)), item[0]),
+    )
+    rows.append(
+        {
+            "date": gsec_date,
+            "metric_key": "india_10y_gsec_yield",
+            "value": yield_value,
+            "unit": "percent yield",
+            "instrument_label": f"{label} (approx. 10-year; matures {maturity})",
+        }
+    )
+    return rows
+
+
+def calculate_macro_context_summary(rows: list[dict[str, object]]) -> dict[str, object]:
+    metric_labels = {
+        "usd_inr": "USD/INR",
+        "gbp_inr": "GBP/INR",
+        "eur_inr": "EUR/INR",
+        "jpy_100_inr": "JPY/INR (100 JPY)",
+        "india_10y_gsec_yield": "India approx. 10-year G-Sec",
+    }
+    grouped: dict[str, list[dict[str, object]]] = {key: [] for key in metric_labels}
+    for row in rows:
+        key = row.get("metric_key")
+        if key in grouped and isinstance(row.get("date"), date):
+            grouped[str(key)].append(row)
+    if any(not values for values in grouped.values()):
+        return {
+            "available": False,
+            "band": "unavailable",
+            "reason": "Run EOD update to retrieve official RBI/FBIL currency and sovereign-rate data.",
+        }
+
+    def change(values: list[dict[str, object]], sessions: int, *, yield_metric: bool) -> float | None:
+        if len(values) <= sessions:
+            return None
+        current = float(values[-1]["value"])
+        previous = float(values[-(sessions + 1)]["value"])
+        if yield_metric:
+            return round((current - previous) * 100, 2)
+        return round((current / previous - 1) * 100, 2)
+
+    metrics: dict[str, dict[str, object]] = {}
+    for key, values in grouped.items():
+        ordered = sorted(values, key=lambda item: item["date"])
+        latest = ordered[-1]
+        is_yield = key == "india_10y_gsec_yield"
+        metrics[key] = {
+            "label": metric_labels[key],
+            "level": round(float(latest["value"]), 4),
+            "unit": latest["unit"],
+            "instrument_label": latest["instrument_label"],
+            "as_of_date": latest["date"].isoformat(),
+            "five_session_change": change(ordered, 5, yield_metric=is_yield),
+            "twenty_session_change": change(ordered, 20, yield_metric=is_yield),
+            "change_unit": "basis points" if is_yield else "percent",
+            "stored_observations": len(ordered),
+        }
+    latest_dates = [date.fromisoformat(item["as_of_date"]) for item in metrics.values()]
+    return {
+        "available": True,
+        "band": "unranked",
+        "reason": "Official levels are visible; directional thresholds are not yet validated.",
+        "as_of_date": max(latest_dates).isoformat(),
+        "oldest_component_date": min(latest_dates).isoformat(),
+        "source": RBI_MACRO_SOURCE,
+        "metrics": metrics,
+    }
+
+
 def calculate_domestic_sentiment_core(
     index_candles: list[dict[str, object]],
     stock_histories: dict[str, list[dict[str, object]]],
+    *,
+    india_vix_candles: list[dict[str, object]] | None = None,
+    institutional_flow_rows: list[dict[str, object]] | None = None,
+    macro_snapshot_rows: list[dict[str, object]] | None = None,
+    futures_snapshot_rows: list[dict[str, object]] | None = None,
+    retrieved_at: datetime | None = None,
 ) -> dict[str, object]:
     """Calculate transparent EOD domestic-tape evidence from local candles."""
+    retrieved_at = (retrieved_at or datetime.now(INDIA_TIMEZONE)).astimezone(INDIA_TIMEZONE)
     ordered_index = sorted(index_candles, key=lambda item: item["date"])
     if len(ordered_index) < 252:
         raise ValueError("domestic_core_history_unavailable")
@@ -979,10 +1460,60 @@ def calculate_domestic_sentiment_core(
         volatility_band = "constructive"
         volatility_reason = "Realised volatility is below its elevated-risk range."
 
+    ordered_vix = sorted(india_vix_candles or [], key=lambda item: item["date"])
+    if len(ordered_vix) >= 252 and ordered_vix[-1]["date"] == as_of:
+        vix_closes = [float(row["close"]) for row in ordered_vix]
+        vix_level = vix_closes[-1]
+        vix_percentile = 100 * sum(value <= vix_level for value in vix_closes[-252:]) / 252
+        vix_five_day_change = vix_level - vix_closes[-6]
+        if vix_percentile >= 85:
+            vix_band = "defensive"
+            vix_reason = "India VIX is in the top 15% of its one-year range."
+        elif vix_percentile >= 60:
+            vix_band = "mixed"
+            vix_reason = "India VIX is elevated relative to its one-year range."
+        else:
+            vix_band = "constructive"
+            vix_reason = "India VIX is below its elevated-risk range."
+        india_vix = {
+            "available": True,
+            "as_of_date": ordered_vix[-1]["date"].isoformat(),
+            "level": round(vix_level, 2),
+            "five_day_change_pt": round(vix_five_day_change, 2),
+            "one_year_percentile": round(vix_percentile, 1),
+            "implied_realised_gap_pt": round(vix_level - current_vol, 2),
+            "band": vix_band,
+            "reason": vix_reason,
+        }
+    else:
+        india_vix = {
+            "available": False,
+            "as_of_date": ordered_vix[-1]["date"].isoformat() if ordered_vix else None,
+            "reason": "India VIX needs 252 aligned completed sessions from the EOD update.",
+        }
+
     eligible: list[list[float]] = []
-    for history in stock_histories.values():
+    missing_stocks: list[dict[str, object]] = []
+    for stock_name, history in sorted(stock_histories.items()):
         ordered = sorted(history, key=lambda item: item["date"])
-        if len(ordered) < 252 or ordered[-1]["date"] != as_of:
+        last_session = ordered[-1]["date"] if ordered else None
+        if not ordered:
+            reason = "no_history"
+        elif len(ordered) < 252:
+            reason = "insufficient_history"
+        elif last_session != as_of:
+            reason = "latest_session_mismatch"
+        else:
+            reason = None
+        if reason is not None:
+            missing_stocks.append(
+                {
+                    "stock": stock_name,
+                    "reason": reason,
+                    "sessions": len(ordered),
+                    "last_session": last_session.isoformat() if last_session else None,
+                }
+            )
             continue
         eligible.append([float(row["close"]) for row in ordered])
     if not eligible:
@@ -1033,13 +1564,29 @@ def calculate_domestic_sentiment_core(
     else:
         domestic_tape = "Mixed"
 
+    expected_through = completed_history_date(retrieved_at)
+    while expected_through.weekday() >= 5:
+        expected_through -= timedelta(days=1)
+    freshness_lag_days = max(0, (expected_through - as_of).days)
+    if as_of >= expected_through:
+        freshness_state = "fresh"
+    elif freshness_lag_days == 1:
+        freshness_state = "pending"
+    else:
+        freshness_state = "stale"
+    universe_total = len(stock_histories)
+    coverage_pct = 100 * len(eligible) / universe_total if universe_total else 0.0
+    institutional_flows = calculate_institutional_flow_summary(institutional_flow_rows or [])
+    macro_context = calculate_macro_context_summary(macro_snapshot_rows or [])
+    futures_oi = calculate_futures_oi_summary(futures_snapshot_rows or [])
+
     return {
         "ok": True,
         "as_of_date": as_of.isoformat(),
         "overall_regime": "Pending full model",
         "domestic_tape": domestic_tape,
         "confidence": "Partial",
-        "available_clusters": 3,
+        "available_clusters": 3 + int(institutional_flows["available"]) + int(macro_context["available"]),
         "total_clusters": 6,
         "trend": {
             "band": trend_band,
@@ -1064,6 +1611,10 @@ def calculate_domestic_sentiment_core(
             "declines": declines,
             "unchanged": unchanged,
             "advance_decline_ratio": round(advance_decline_ratio, 2) if advance_decline_ratio is not None else None,
+            "universe_total": universe_total,
+            "coverage_pct": round(coverage_pct, 1),
+            "missing_count": len(missing_stocks),
+            "missing_stocks": missing_stocks,
         },
         "price_strength": {
             "band": price_strength_band,
@@ -1078,10 +1629,19 @@ def calculate_domestic_sentiment_core(
             "realised_20d_pct": round(current_vol, 2),
             "five_day_change_pt": round(current_vol - previous_vol, 2),
             "one_year_percentile": round(vol_percentile, 1),
-            "india_vix": None,
+            "india_vix": india_vix,
         },
+        "institutional_flows": institutional_flows,
+        "macro_context": macro_context,
+        "futures_oi": futures_oi,
         "source": "Validated local Kite EOD candles",
-        "freshness": "local_eod",
+        "freshness": {
+            "state": freshness_state,
+            "expected_through": expected_through.isoformat(),
+            "latest_session": as_of.isoformat(),
+            "lag_days": freshness_lag_days,
+            "retrieved_at": retrieved_at.isoformat(timespec="seconds"),
+        },
     }
 
 
@@ -1206,6 +1766,10 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         try:
             store = _get_eod_store()
             index_candles = store.load_candles(kind="index", display_name="Nifty 50")
+            india_vix_candles = store.load_candles(kind="index", display_name="India VIX")
+            institutional_flow_rows = store.load_institutional_flows()
+            macro_snapshot_rows = store.load_macro_snapshots()
+            futures_snapshot_rows = store.load_futures_eod_snapshots()
             instruments = store.list_instruments(kind="stock")
             stock_histories = {
                 str(item["display_name"]): store.load_candles(
@@ -1213,7 +1777,14 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 )
                 for item in instruments
             }
-            payload = calculate_domestic_sentiment_core(index_candles, stock_histories)
+            payload = calculate_domestic_sentiment_core(
+                index_candles,
+                stock_histories,
+                india_vix_candles=india_vix_candles,
+                institutional_flow_rows=institutional_flow_rows,
+                macro_snapshot_rows=macro_snapshot_rows,
+                futures_snapshot_rows=futures_snapshot_rows,
+            )
             self._send_json(HTTPStatus.OK, payload)
         except ValueError as error:
             self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"ok": False, "reason": str(error)})
@@ -1293,7 +1864,8 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 raise ValueError("dashboard_index_not_available")
 
             now = datetime.now(INDIA_TIMEZONE)
-            from_date = date(now.year - 1, 12, 1)
+            from_date = now.date() - timedelta(days=400)
+            store = _get_eod_store()
             rows: list[dict[str, object]] = []
             for index, display_name in enumerate(DASHBOARD_EOD_INDICES):
                 if index:
@@ -1314,9 +1886,21 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 provider_payload, reason = self._request_provider_json(request, exchange=False)
                 if reason is not None:
                     raise ValueError(reason)
-                history = parse_daily_closes(
+                candles = parse_daily_candles(
                     provider_payload or {}, today=now.date(), now_time=now.time().replace(tzinfo=None)
                 )
+                history = [(row["date"], float(row["close"])) for row in candles]
+                if display_name == "India VIX":
+                    try:
+                        store.append_candles(
+                            kind="index",
+                            display_name=display_name,
+                            provider_token=tokens[display_name],
+                            candles=candles,
+                            retrieved_at=datetime.now(timezone.utc).isoformat(),
+                        )
+                    except CandleConflictError as error:
+                        raise ValueError("stored_candle_conflict") from error
                 rows.append(calculate_index_ytd(display_name, history))
         except ValueError as error:
             reason = str(error)
@@ -1966,7 +2550,222 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         finally:
             _HISTORICAL_MONTH_LEADERS_LOCK.release()
 
+    def _send_institutional_flow_refresh(self) -> None:
+        request = urllib.request.Request(
+            NSE_FII_DII_URL,
+            headers={
+                "Accept": "application/json,text/plain,*/*",
+                "Referer": "https://www.nseindia.com/reports/fii-dii",
+                "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+            },
+            method="GET",
+        )
+        text_payload, reason = self._request_provider_text(request, MAX_RESPONSE_BYTES)
+        if reason is not None:
+            self._send_json(
+                HTTPStatus.BAD_GATEWAY,
+                {"ok": False, "reason": "institutional_flow_source_unavailable"},
+            )
+            return
+        try:
+            parsed_payload = json.loads(text_payload or "")
+            rows = parse_institutional_flows(parsed_payload, today=datetime.now(INDIA_TIMEZONE).date())
+            store = _get_eod_store()
+            write_result = store.append_institutional_flows(
+                rows,
+                source=NSE_FII_DII_SOURCE,
+                retrieved_at=datetime.now(timezone.utc).isoformat(),
+            )
+            summary = calculate_institutional_flow_summary(store.load_institutional_flows())
+        except InstitutionalFlowConflictError:
+            self._send_json(
+                HTTPStatus.CONFLICT,
+                {"ok": False, "reason": "stored_institutional_flow_conflict"},
+            )
+            return
+        except (json.JSONDecodeError, ValueError):
+            self._send_json(
+                HTTPStatus.BAD_GATEWAY,
+                {"ok": False, "reason": "invalid_institutional_flow_response"},
+            )
+            return
+        self._send_json(
+            HTTPStatus.OK,
+            {"ok": True, **summary, "write_result": write_result},
+        )
+
+    def _send_macro_context_refresh(self) -> None:
+        request = urllib.request.Request(
+            RBI_HOME_URL,
+            headers={
+                "Accept": "text/html,application/xhtml+xml",
+                "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+            },
+            method="GET",
+        )
+        text_payload, reason = self._request_provider_text(request, RBI_MAX_RESPONSE_BYTES)
+        if reason is not None:
+            self._send_json(
+                HTTPStatus.BAD_GATEWAY,
+                {"ok": False, "reason": "rbi_macro_source_unavailable"},
+            )
+            return
+        try:
+            rows = parse_rbi_macro_snapshot(text_payload or "")
+            store = _get_eod_store()
+            write_result = store.append_macro_snapshots(
+                rows,
+                source=RBI_MACRO_SOURCE,
+                retrieved_at=datetime.now(timezone.utc).isoformat(),
+            )
+            summary = calculate_macro_context_summary(store.load_macro_snapshots())
+        except MacroSnapshotConflictError:
+            self._send_json(
+                HTTPStatus.CONFLICT,
+                {"ok": False, "reason": "stored_macro_snapshot_conflict"},
+            )
+            return
+        except ValueError:
+            self._send_json(
+                HTTPStatus.BAD_GATEWAY,
+                {"ok": False, "reason": "invalid_rbi_macro_response"},
+            )
+            return
+        self._send_json(HTTPStatus.OK, {"ok": True, **summary, "write_result": write_result})
+
+    def _send_futures_eod_refresh(self, payload: dict[str, object]) -> None:
+        raw_symbols = payload.get("symbols")
+        if (
+            not isinstance(raw_symbols, list)
+            or not raw_symbols
+            or len(raw_symbols) > 250
+            or any(
+                not isinstance(symbol, str)
+                or not re.fullmatch(r"[A-Z0-9&-]{1,32}", symbol)
+                for symbol in raw_symbols
+            )
+        ):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_futures_universe"})
+            return
+        symbols = tuple(raw_symbols)
+        if len(set(symbols)) != len(symbols):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_futures_universe"})
+            return
+        with _SESSION_LOCK:
+            session = dict(_ACTIVE_KITE_SESSION)
+        api_key = session.get("api_key")
+        access_token = session.get("access_token")
+        if not api_key or not access_token:
+            self._send_json(HTTPStatus.UNAUTHORIZED, {"ok": False, "reason": "kite_not_connected"})
+            return
+        now = datetime.now(INDIA_TIMEZONE)
+        if now.time().replace(tzinfo=None) < datetime_time(15, 40):
+            self._send_json(HTTPStatus.CONFLICT, {"ok": False, "reason": "futures_eod_not_due"})
+            return
+        instrument_request = urllib.request.Request(
+            NFO_INSTRUMENTS_URL,
+            headers={
+                "Authorization": f"token {api_key}:{access_token}",
+                "X-Kite-Version": "3",
+                "Accept": "text/csv",
+                "Accept-Encoding": "identity",
+                "User-Agent": "PG-terminal-local/0.1",
+            },
+            method="GET",
+        )
+        csv_payload, reason = self._request_provider_text(instrument_request, MAX_NFO_INSTRUMENT_BYTES)
+        if reason is not None:
+            if reason in {"access_token_invalid_or_expired", "authentication_failed"}:
+                self._clear_session()
+            self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": reason})
+            return
+        try:
+            contracts, inventory_missing = parse_near_month_stock_futures(
+                csv_payload or "", symbols, as_of=now.date()
+            )
+        except ValueError as error:
+            self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": str(error)})
+            return
+        if not contracts:
+            self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": "futures_contracts_unavailable"})
+            return
+        quote_query = urllib.parse.urlencode(
+            [("i", f"NFO:{contract['tradingsymbol']}") for contract in contracts]
+        )
+        quote_request = urllib.request.Request(
+            f"{FULL_QUOTE_URL}?{quote_query}",
+            headers={
+                "Authorization": f"token {api_key}:{access_token}",
+                "X-Kite-Version": "3",
+                "Accept": "application/json",
+                "User-Agent": "PG-terminal-local/0.1",
+            },
+            method="GET",
+        )
+        provider_payload, reason = self._request_provider_json(
+            quote_request, exchange=False, maximum_bytes=MAX_QUOTE_RESPONSE_BYTES
+        )
+        if reason is not None:
+            if reason in {"access_token_invalid_or_expired", "authentication_failed"}:
+                self._clear_session()
+            self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": reason})
+            return
+        try:
+            snapshots, quote_missing = normalize_futures_eod_quotes(
+                provider_payload or {}, contracts, now=now
+            )
+            if not snapshots:
+                raise ValueError("futures_eod_data_unavailable")
+            store = _get_eod_store()
+            write_result = store.append_futures_eod_snapshots(
+                contracts,
+                snapshots,
+                source=KITE_FUTURES_SOURCE,
+                retrieved_at=datetime.now(timezone.utc).isoformat(),
+            )
+            summary = calculate_futures_oi_summary(store.load_futures_eod_snapshots())
+        except FuturesSnapshotConflictError:
+            self._send_json(
+                HTTPStatus.CONFLICT,
+                {"ok": False, "reason": "stored_futures_snapshot_conflict"},
+            )
+            return
+        except ValueError as error:
+            self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": str(error)})
+            return
+        self._send_json(
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                **summary,
+                "requested_count": len(symbols),
+                "contract_count": len(contracts),
+                "snapshot_count": len(snapshots),
+                "inventory_missing": inventory_missing,
+                "quote_missing": quote_missing,
+                "write_result": write_result,
+            },
+        )
+
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler name
+        if self.path == "/api/market-sentiment/futures-eod/refresh":
+            payload = self._read_json_payload()
+            if payload is not None:
+                self._send_futures_eod_refresh(payload)
+            return
+
+        if self.path == "/api/market-sentiment/macro-context/refresh":
+            payload = self._read_json_payload()
+            if payload is not None:
+                self._send_macro_context_refresh()
+            return
+
+        if self.path == "/api/market-sentiment/institutional-flows/refresh":
+            payload = self._read_json_payload()
+            if payload is not None:
+                self._send_institutional_flow_refresh()
+            return
+
         if self.path == "/api/kite/historical-month-leaders":
             payload = self._read_json_payload()
             if payload is not None:

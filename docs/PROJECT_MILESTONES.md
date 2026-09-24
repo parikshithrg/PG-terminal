@@ -65,13 +65,53 @@ Completion criteria:
 
 ## Subsequent milestones
 
+### Active milestone status — Market Sentiment Phase 2
+
+Completed and available in the local EOD workflow:
+
+- India VIX history and implied-versus-realised volatility context.
+- Official provisional NSE FII/FPI and DII cash-flow snapshots, summaries, and
+  daily/cumulative charts.
+- Official RBI/FBIL USD, GBP, EUR, and JPY reference rates plus the RBI-listed
+  government security nearest ten-year maturity. Exact security identity is
+  retained and 5-/20-session changes appear only after enough observations.
+- Contract-keyed near-month price, volume, and open-interest baselines for the
+  210-stock F&O universe, collected with one post-close bulk Kite request.
+  Contract rollover creates a new baseline rather than a false OI comparison.
+- Data freshness, coverage, missing-stock details, and explicit unavailable or
+  unranked states. The main EOD update triggers every completed Phase 2 adapter.
+
+Next Phase 2 steps, in order:
+
+1. Accumulate and inspect same-contract futures observations across normal days
+   and at least one expiry rollover.
+2. Define transparent price/OI states only after continuity checks: long
+   build-up, short build-up, long unwinding, and short covering.
+3. Validate minimum volume/OI coverage, missing-contract handling, thresholds,
+   and persistence before those states influence sentiment.
+4. Add confirmed NSDL FPI reconciliation as a separate series without replacing
+   or blending the provisional NSE report.
+5. Accumulate RBI/FBIL history, calculate 5-/20-session changes, and validate
+   currency/rate thresholds before scoring the macro cluster.
+
+Phase 2 remains read-only. No derivative signal, regime score, portfolio change,
+or order action is activated by these data foundations.
+
 1. **Market sentiment and regime foundation** — implement the approved
    [Market Sentiment blueprint](MARKET_SENTIMENT_BLUEPRINT.md) in phases,
    beginning with the static evidence contract and locally reproducible domestic
    trend, breadth, price-strength, and realised-volatility inputs. External flow,
    currency, rates, and global providers require explicit source review.
    Phase 1 now has a working local page using Nifty 50 history and the 210 stored
-   NSE F&O equities; Nifty 500 expansion and external clusters remain pending.
+   NSE F&O equities. The 210-stock liquid universe is the intended permanent
+   breadth scope. Phase 1 is complete. Phase 2 has started with persisted India
+   VIX history, transparent implied-versus-realised volatility context, and an
+   append-only official NSE provisional FII/FPI-DII cash-flow series. Confirmed
+   NSDL reconciliation and validated futures-positioning labels remain pending.
+   Contract-keyed near-month futures price/open-interest baselines are now stored
+   without comparing across rollovers. The domestic context block stores official RBI/FBIL
+   FX references and the RBI-listed government security nearest ten-year maturity;
+   it remains unranked while 5-/20-session history accumulates.
 2. **Visible update pipeline** — separate inventory, candle synchronization,
    validation, breadth, seasonality, and summary stages with progress, cancel,
    resume, and precise failure details.

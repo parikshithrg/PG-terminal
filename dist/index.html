@@ -527,9 +527,26 @@
     .source-state { padding: 16px; border: 1px solid var(--line); border-radius: 6px; background: #fcfcfc; }
     .source-state strong { display: block; margin-bottom: 5px; font-size: 14px; }
     .source-state span { color: var(--muted); font-size: 12px; }
+    .sentiment-data-quality { margin-top: 16px; }
+    .coverage-detail { padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+    .flow-chart-card { grid-column: 1 / -1; }
+    .flow-chart-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 4px 0 14px; }
+    .flow-chart-legend { display: flex; flex-wrap: wrap; gap: 16px; color: var(--muted); font-size: 12px; }
+    .flow-chart-legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 2px; }
+    .flow-chart-legend .fii::before { background: #3274d9; }
+    .flow-chart-legend .dii::before { background: #e59418; }
+    .flow-chart-toolbar label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+    .flow-chart-toolbar select { min-width: 120px; padding: 7px 30px 7px 9px; border: 1px solid var(--line); border-radius: 4px; color: var(--text); background: #fff; }
+    .flow-chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .flow-chart-panel { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 5px; background: #fff; }
+    .flow-chart-panel h3 { margin: 0 0 4px; font-size: 14px; }
+    .flow-chart-panel p { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+    .flow-chart-panel canvas { display: block; width: 100%; height: 230px; }
+    .flow-chart-note { margin-top: 10px; color: var(--muted); font-size: 12px; }
 
     @media (max-width: 1100px) {
       .sentiment-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .flow-chart-grid { grid-template-columns: 1fr; }
     }
 
     .notice {
@@ -791,6 +808,18 @@
             </article>
           </section>
 
+          <details class="panel sentiment-data-quality" id="sentimentDataQuality" open>
+            <summary>Data freshness and F&amp;O stock coverage</summary>
+            <div class="panel-list">
+              <div class="panel-row"><span>Freshness</span><span id="sentimentFreshnessState">Not loaded</span></div>
+              <div class="panel-row"><span>Latest completed session</span><span id="sentimentLatestSession">—</span></div>
+              <div class="panel-row"><span>Expected through</span><span id="sentimentExpectedSession">—</span></div>
+              <div class="panel-row"><span>Calculated at</span><span id="sentimentRetrievedAt">—</span></div>
+              <div class="panel-row"><span>F&amp;O stock coverage</span><span id="sentimentStockCoverage">— / 210</span></div>
+              <div class="coverage-detail" id="sentimentMissingStocks">Missing-stock details will appear after the EOD update.</div>
+            </div>
+          </details>
+
           <div class="section-heading-row">
             <h2 class="section-title">Domestic evidence</h2>
           </div>
@@ -840,14 +869,71 @@
                 <div class="evidence-value"><strong id="realisedVolValue">—</strong><span>20d annualised</span></div>
                 <div class="evidence-value"><strong id="volChangeValue">—</strong><span>5d change</span></div>
                 <div class="evidence-value"><strong id="volPercentileValue">—</strong><span>1y percentile</span></div>
-                <div class="evidence-value"><strong>Pending</strong><span>India VIX</span></div>
+                <div class="evidence-value"><strong id="indiaVixValue">—</strong><span>India VIX</span></div>
+                <div class="evidence-value"><strong id="indiaVixChangeValue">—</strong><span>VIX 5d change</span></div>
+                <div class="evidence-value"><strong id="indiaVixPercentileValue">—</strong><span>VIX 1y percentile</span></div>
+                <div class="evidence-value"><strong id="indiaVixGapValue">—</strong><span>VIX − realised</span></div>
               </div>
+            </article>
+
+            <article class="evidence-card flow-chart-card">
+              <div class="evidence-heading"><h2>Institutional flows</h2><span class="sentiment-band" id="institutionalFlowBand">Unavailable</span></div>
+              <p class="evidence-reason" id="institutionalFlowReason">Official provisional cash-flow data has not been loaded.</p>
+              <div class="flow-chart-toolbar">
+                <div class="flow-chart-legend">
+                  <span class="fii" id="fiiFlowLegend">FII/FPI</span>
+                  <span class="dii" id="diiFlowLegend">DII</span>
+                </div>
+                <label for="flowChartWindowSelect">Window
+                  <select id="flowChartWindowSelect">
+                    <option value="20">20 sessions</option>
+                    <option value="60" selected>60 sessions</option>
+                    <option value="all">All stored</option>
+                  </select>
+                </label>
+              </div>
+              <div class="flow-chart-grid">
+                <section class="flow-chart-panel">
+                  <h3>Daily net cash flow</h3>
+                  <p>Positive values are net purchases; negative values are net sales.</p>
+                  <canvas id="institutionalDailyChart" aria-label="Daily FII FPI and DII net cash flow chart"></canvas>
+                </section>
+                <section class="flow-chart-panel">
+                  <h3>Cumulative net cash flow</h3>
+                  <p>Running total beginning with the selected chart window.</p>
+                  <canvas id="institutionalCumulativeChart" aria-label="Cumulative FII FPI and DII net cash flow chart"></canvas>
+                </section>
+              </div>
+              <div class="flow-chart-note" id="institutionalFlowChartNote">The chart will build as EOD updates store official sessions.</div>
+            </article>
+
+            <article class="evidence-card">
+              <div class="evidence-heading"><h2>Futures price and open interest</h2><span class="sentiment-band" id="futuresOiBand">Unavailable</span></div>
+              <p class="evidence-reason" id="futuresOiReason">Run EOD update after market close to establish the near-month baseline.</p>
+              <div class="evidence-values">
+                <div class="evidence-value"><strong id="futuresOiCoverage">—</strong><span>latest contracts</span></div>
+                <div class="evidence-value"><strong id="futuresOiComparable">—</strong><span>same-contract comparisons</span></div>
+                <div class="evidence-value"><strong id="futuresOiRollovers">—</strong><span>rollover baselines</span></div>
+              </div>
+              <div class="coverage-detail">Build-up, unwinding and short-covering labels remain withheld until contract continuity is validated.</div>
+            </article>
+
+            <article class="evidence-card">
+              <div class="evidence-heading"><h2>Currency and sovereign rates</h2><span class="sentiment-band" id="macroContextBand">Unavailable</span></div>
+              <p class="evidence-reason" id="macroContextReason">Official RBI/FBIL data has not been loaded.</p>
+              <div class="evidence-values">
+                <div class="evidence-value"><strong id="usdInrValue">—</strong><span>USD/INR</span></div>
+                <div class="evidence-value"><strong id="eurInrValue">—</strong><span>EUR/INR</span></div>
+                <div class="evidence-value"><strong id="gbpInrValue">—</strong><span>GBP/INR</span></div>
+                <div class="evidence-value"><strong id="jpyInrValue">—</strong><span>INR per 100 JPY</span></div>
+                <div class="evidence-value"><strong id="gsecYieldValue">—</strong><span id="gsecYieldLabel">approx. 10y G-Sec yield</span></div>
+              </div>
+              <div class="coverage-detail" id="macroContextChanges">Changes will appear after 5 and 20 stored sessions.</div>
             </article>
           </div>
 
           <div class="source-state-grid" aria-label="Pending sentiment sources">
-            <article class="source-state"><strong>Institutional flows</strong><span>Unavailable · official NSE/NSDL adapter pending</span></article>
-            <article class="source-state"><strong>Currency and rates</strong><span>Unavailable · Kite/FBIL/RBI source review pending</span></article>
+            <article class="source-state"><strong>Confirmed institutional flows</strong><span>Pending · current NSE cash activity is provisional; NSDL reconciliation remains separate</span></article>
             <article class="source-state"><strong>Global risk backdrop</strong><span>Unavailable · permitted provider not selected</span></article>
           </div>
 
@@ -1099,6 +1185,7 @@
     let noticeTimer;
     let marketBreadthRows = [];
     let marketBreadthSort = { key: 'sector', direction: 'asc' };
+    let institutionalFlowSeries = [];
 
     function appendChoice(parent, value, label) {
       const option = document.createElement('option');
@@ -1199,10 +1286,156 @@
       return `${numeric > 0 ? '+' : ''}${numeric.toFixed(digits)}%`;
     }
 
+    function signedCrore(value) {
+      if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
+      const numeric = Number(value);
+      return `${numeric > 0 ? '+' : numeric < 0 ? '−' : ''}₹${Math.abs(numeric).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Cr`;
+    }
+
     function setSentimentBand(id, band) {
       const element = document.getElementById(id);
       element.className = `sentiment-band ${band || ''}`.trim();
       element.textContent = band || 'Unavailable';
+    }
+
+    function selectedInstitutionalFlowSeries() {
+      const selection = document.getElementById('flowChartWindowSelect').value;
+      if (selection === 'all') return institutionalFlowSeries;
+      return institutionalFlowSeries.slice(-Number(selection));
+    }
+
+    function prepareFlowCanvas(id) {
+      const canvas = document.getElementById(id);
+      const width = canvas.getBoundingClientRect().width;
+      if (width < 20) return null;
+      const height = 230;
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.round(width * ratio);
+      canvas.height = Math.round(height * ratio);
+      const context = canvas.getContext('2d');
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      context.clearRect(0, 0, width, height);
+      context.font = "11px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      return { context, width, height };
+    }
+
+    function flowScale(values, top, bottom) {
+      let minimum = Math.min(0, ...values);
+      let maximum = Math.max(0, ...values);
+      if (minimum === maximum) maximum = minimum + 1;
+      const margin = (maximum - minimum) * 0.08;
+      minimum -= margin;
+      maximum += margin;
+      return {
+        minimum,
+        maximum,
+        y: (value) => top + ((maximum - value) / (maximum - minimum)) * (bottom - top),
+      };
+    }
+
+    function drawFlowFrame(context, width, height, scale, rows) {
+      const left = 58;
+      const right = width - 12;
+      const top = 12;
+      const bottom = height - 28;
+      context.strokeStyle = '#e3e6ea';
+      context.fillStyle = '#7b818a';
+      context.lineWidth = 1;
+      for (let index = 0; index <= 4; index += 1) {
+        const value = scale.maximum - ((scale.maximum - scale.minimum) * index / 4);
+        const y = scale.y(value);
+        context.beginPath();
+        context.moveTo(left, y);
+        context.lineTo(right, y);
+        context.stroke();
+        context.textAlign = 'right';
+        context.fillText(`${Math.round(value).toLocaleString('en-IN')}`, left - 7, y + 4);
+      }
+      const zeroY = scale.y(0);
+      context.strokeStyle = '#9aa0a8';
+      context.beginPath();
+      context.moveTo(left, zeroY);
+      context.lineTo(right, zeroY);
+      context.stroke();
+      if (rows.length) {
+        context.fillStyle = '#7b818a';
+        context.textAlign = 'left';
+        context.fillText(rows[0].date.slice(5), left, height - 8);
+        context.textAlign = 'right';
+        context.fillText(rows[rows.length - 1].date.slice(5), right, height - 8);
+      }
+      return { left, right, top, bottom, zeroY };
+    }
+
+    function drawInstitutionalDailyChart(rows) {
+      const prepared = prepareFlowCanvas('institutionalDailyChart');
+      if (!prepared || !rows.length) return;
+      const { context, width, height } = prepared;
+      const values = rows.flatMap((row) => [row.fii_fpi_net_crore, row.dii_net_crore]);
+      const scale = flowScale(values, 12, height - 28);
+      const frame = drawFlowFrame(context, width, height, scale, rows);
+      const groupWidth = (frame.right - frame.left) / rows.length;
+      const barWidth = Math.max(2, Math.min(12, groupWidth * 0.32));
+      rows.forEach((row, index) => {
+        const center = frame.left + groupWidth * (index + 0.5);
+        [
+          { value: row.fii_fpi_net_crore, x: center - barWidth, color: '#3274d9' },
+          { value: row.dii_net_crore, x: center, color: '#e59418' },
+        ].forEach((bar) => {
+          const y = scale.y(bar.value);
+          context.fillStyle = bar.color;
+          context.fillRect(bar.x, Math.min(y, frame.zeroY), barWidth, Math.max(1, Math.abs(frame.zeroY - y)));
+        });
+      });
+    }
+
+    function drawInstitutionalCumulativeChart(rows) {
+      const prepared = prepareFlowCanvas('institutionalCumulativeChart');
+      if (!prepared || !rows.length) return;
+      const { context, width, height } = prepared;
+      let fii = 0;
+      let dii = 0;
+      const points = rows.map((row) => {
+        fii += row.fii_fpi_net_crore;
+        dii += row.dii_net_crore;
+        return { date: row.date, fii, dii };
+      });
+      const scale = flowScale(points.flatMap((row) => [row.fii, row.dii]), 12, height - 28);
+      const frame = drawFlowFrame(context, width, height, scale, rows);
+      const x = (index) => points.length === 1
+        ? (frame.left + frame.right) / 2
+        : frame.left + ((frame.right - frame.left) * index / (points.length - 1));
+      [
+        { key: 'fii', color: '#3274d9' },
+        { key: 'dii', color: '#e59418' },
+      ].forEach((line) => {
+        context.strokeStyle = line.color;
+        context.fillStyle = line.color;
+        context.lineWidth = 2;
+        context.beginPath();
+        points.forEach((point, index) => {
+          const px = x(index);
+          const py = scale.y(point[line.key]);
+          if (index === 0) context.moveTo(px, py);
+          else context.lineTo(px, py);
+        });
+        context.stroke();
+        points.forEach((point, index) => {
+          context.beginPath();
+          context.arc(x(index), scale.y(point[line.key]), points.length > 30 ? 1.5 : 2.5, 0, Math.PI * 2);
+          context.fill();
+        });
+      });
+    }
+
+    function drawInstitutionalFlowCharts() {
+      const rows = selectedInstitutionalFlowSeries();
+      drawInstitutionalDailyChart(rows);
+      drawInstitutionalCumulativeChart(rows);
+      const note = document.getElementById('institutionalFlowChartNote');
+      if (!rows.length) note.textContent = 'The chart will build as EOD updates store official sessions.';
+      else if (rows.length === 1) note.textContent = 'One official session is stored. The trend and cumulative paths will develop with future EOD updates.';
+      else note.textContent = `${rows.length} stored provisional sessions shown · values in ₹ crore.`;
     }
 
     function renderDomesticSentiment(result) {
@@ -1212,6 +1445,28 @@
       document.getElementById('sentimentConfidenceMeta').textContent = `${result.confidence} confidence · external context pending`;
       document.getElementById('sentimentAsOfValue').textContent = result.as_of_date;
       document.getElementById('sentimentSourceMeta').textContent = result.source;
+
+      const freshness = result.freshness;
+      const freshnessLabels = { fresh: 'Fresh', pending: 'Pending latest session', stale: 'Stale' };
+      document.getElementById('sentimentFreshnessState').textContent = freshnessLabels[freshness.state] || freshness.state;
+      document.getElementById('sentimentLatestSession').textContent = freshness.latest_session;
+      document.getElementById('sentimentExpectedSession').textContent = freshness.expected_through;
+      document.getElementById('sentimentRetrievedAt').textContent = new Date(freshness.retrieved_at).toLocaleString('en-IN');
+
+      const breadthCoverage = result.breadth;
+      document.getElementById('sentimentStockCoverage').textContent = `${breadthCoverage.evaluated} / ${breadthCoverage.universe_total} (${breadthCoverage.coverage_pct.toFixed(1)}%)`;
+      const missingStocks = breadthCoverage.missing_stocks;
+      const missingElement = document.getElementById('sentimentMissingStocks');
+      if (!missingStocks.length) {
+        missingElement.textContent = 'All locally stored F&O stocks have aligned sessions and sufficient history.';
+      } else {
+        const reasonLabels = {
+          no_history: 'no history',
+          insufficient_history: 'fewer than 252 sessions',
+          latest_session_mismatch: 'latest session does not align',
+        };
+        missingElement.textContent = `Missing ${missingStocks.length}: ${missingStocks.map((item) => `${item.stock} (${reasonLabels[item.reason] || item.reason}${item.last_session ? `; last ${item.last_session}` : ''})`).join(', ')}`;
+      }
 
       setSentimentBand('trendBand', result.trend.band);
       document.getElementById('trendReason').textContent = result.trend.reason;
@@ -1242,6 +1497,75 @@
       document.getElementById('realisedVolValue').textContent = `${result.volatility.realised_20d_pct.toFixed(2)}%`;
       document.getElementById('volChangeValue').textContent = `${result.volatility.five_day_change_pt > 0 ? '+' : ''}${result.volatility.five_day_change_pt.toFixed(2)} pt`;
       document.getElementById('volPercentileValue').textContent = `${result.volatility.one_year_percentile.toFixed(1)}%`;
+      const indiaVix = result.volatility.india_vix;
+      if (indiaVix.available) {
+        document.getElementById('indiaVixValue').textContent = indiaVix.level.toFixed(2);
+        document.getElementById('indiaVixChangeValue').textContent = `${indiaVix.five_day_change_pt > 0 ? '+' : ''}${indiaVix.five_day_change_pt.toFixed(2)} pt`;
+        document.getElementById('indiaVixPercentileValue').textContent = `${indiaVix.one_year_percentile.toFixed(1)}%`;
+        document.getElementById('indiaVixGapValue').textContent = `${indiaVix.implied_realised_gap_pt > 0 ? '+' : ''}${indiaVix.implied_realised_gap_pt.toFixed(2)} pt`;
+        document.getElementById('volatilityReason').textContent = `${result.volatility.reason} ${indiaVix.reason}`;
+      } else {
+        document.getElementById('indiaVixValue').textContent = 'Unavailable';
+        document.getElementById('indiaVixChangeValue').textContent = '—';
+        document.getElementById('indiaVixPercentileValue').textContent = '—';
+        document.getElementById('indiaVixGapValue').textContent = '—';
+      }
+
+      const flows = result.institutional_flows;
+      if (flows.available) {
+        setSentimentBand('institutionalFlowBand', flows.band);
+        document.getElementById('institutionalFlowReason').textContent = `${flows.reason} ${flows.market_scope} · ${flows.as_of_date} · ${flows.publication_status}.`;
+        document.getElementById('fiiFlowLegend').textContent = `FII/FPI latest ${signedCrore(flows.latest.fii_fpi.net_crore)}`;
+        document.getElementById('diiFlowLegend').textContent = `DII latest ${signedCrore(flows.latest.dii.net_crore)}`;
+        institutionalFlowSeries = flows.series;
+        window.requestAnimationFrame(drawInstitutionalFlowCharts);
+      } else {
+        setSentimentBand('institutionalFlowBand', '');
+        document.getElementById('institutionalFlowReason').textContent = flows.reason;
+        document.getElementById('fiiFlowLegend').textContent = 'FII/FPI';
+        document.getElementById('diiFlowLegend').textContent = 'DII';
+        institutionalFlowSeries = [];
+        window.requestAnimationFrame(drawInstitutionalFlowCharts);
+      }
+
+      const macro = result.macro_context;
+      if (macro && macro.available) {
+        setSentimentBand('macroContextBand', macro.band);
+        document.getElementById('macroContextReason').textContent = `${macro.reason} FX ${macro.metrics.usd_inr.as_of_date} · rates ${macro.metrics.india_10y_gsec_yield.as_of_date}.`;
+        document.getElementById('usdInrValue').textContent = macro.metrics.usd_inr.level.toFixed(4);
+        document.getElementById('eurInrValue').textContent = macro.metrics.eur_inr.level.toFixed(4);
+        document.getElementById('gbpInrValue').textContent = macro.metrics.gbp_inr.level.toFixed(4);
+        document.getElementById('jpyInrValue').textContent = macro.metrics.jpy_100_inr.level.toFixed(4);
+        document.getElementById('gsecYieldValue').textContent = `${macro.metrics.india_10y_gsec_yield.level.toFixed(4)}%`;
+        document.getElementById('gsecYieldLabel').textContent = macro.metrics.india_10y_gsec_yield.instrument_label;
+        const usd = macro.metrics.usd_inr;
+        const gsec = macro.metrics.india_10y_gsec_yield;
+        const parts = [];
+        if (usd.five_session_change !== null) parts.push(`USD/INR 5-session ${signedPercentage(usd.five_session_change)}`);
+        if (usd.twenty_session_change !== null) parts.push(`20-session ${signedPercentage(usd.twenty_session_change)}`);
+        if (gsec.five_session_change !== null) parts.push(`G-Sec 5-session ${gsec.five_session_change > 0 ? '+' : ''}${gsec.five_session_change.toFixed(2)} bp`);
+        if (gsec.twenty_session_change !== null) parts.push(`20-session ${gsec.twenty_session_change > 0 ? '+' : ''}${gsec.twenty_session_change.toFixed(2)} bp`);
+        document.getElementById('macroContextChanges').textContent = parts.length ? parts.join(' · ') : 'Changes will appear after 5 and 20 stored sessions.';
+      } else {
+        setSentimentBand('macroContextBand', '');
+        document.getElementById('macroContextReason').textContent = macro ? macro.reason : 'Official RBI/FBIL data has not been loaded.';
+        ['usdInrValue', 'eurInrValue', 'gbpInrValue', 'jpyInrValue', 'gsecYieldValue'].forEach((id) => { document.getElementById(id).textContent = '—'; });
+        document.getElementById('gsecYieldLabel').textContent = 'approx. 10y G-Sec yield';
+        document.getElementById('macroContextChanges').textContent = 'Changes will appear after 5 and 20 stored sessions.';
+      }
+
+      const futuresOi = result.futures_oi;
+      if (futuresOi && futuresOi.available) {
+        setSentimentBand('futuresOiBand', 'unranked');
+        document.getElementById('futuresOiReason').textContent = `${futuresOi.reason} Latest session ${futuresOi.as_of_date}.`;
+        document.getElementById('futuresOiCoverage').textContent = futuresOi.latest_coverage.toLocaleString('en-IN');
+        document.getElementById('futuresOiComparable').textContent = futuresOi.comparable_count.toLocaleString('en-IN');
+        document.getElementById('futuresOiRollovers').textContent = futuresOi.rollover_baseline_count.toLocaleString('en-IN');
+      } else {
+        setSentimentBand('futuresOiBand', '');
+        document.getElementById('futuresOiReason').textContent = futuresOi ? futuresOi.reason : 'Futures EOD data has not been loaded.';
+        ['futuresOiCoverage', 'futuresOiComparable', 'futuresOiRollovers'].forEach((id) => { document.getElementById(id).textContent = '—'; });
+      }
     }
 
     async function loadDomesticSentiment(showSuccess = true) {
@@ -1759,17 +2083,64 @@
       try {
         const indexUpdated = await loadIndexSnapshot();
         const eodIndicesUpdated = await loadEodIndexSummary();
+        const institutionalFlowsUpdated = await refreshInstitutionalFlows();
+        const macroContextUpdated = await refreshMacroContext();
+        const futuresOiUpdated = await refreshFuturesOi();
         const breadthUpdated = await loadMarketBreadth();
         const monthlyLeadersUpdated = breadthUpdated ? await loadMonthlyLeaders() : false;
         const historicalLeadersUpdated = monthlyLeadersUpdated ? await loadHistoricalMonthLeaders() : false;
-        if (indexUpdated && eodIndicesUpdated && breadthUpdated && monthlyLeadersUpdated && historicalLeadersUpdated) {
-          showNotice('EOD update completed. Current and historical market summaries are ready.');
+        const sentimentUpdated = await loadDomesticSentiment(false);
+        if (indexUpdated && eodIndicesUpdated && institutionalFlowsUpdated && macroContextUpdated && futuresOiUpdated && breadthUpdated && monthlyLeadersUpdated && historicalLeadersUpdated && sentimentUpdated) {
+          showNotice('EOD update completed. Market summaries and sentiment are ready.');
         } else {
-          showNotice('EOD update finished with unavailable data. Review the dashboard status.');
+          showNotice('EOD update finished with unavailable data. Review the dashboard and sentiment status.');
         }
       } finally {
         eodUpdateButton.textContent = 'EOD update';
         eodUpdateButton.disabled = !kiteLoginButton.classList.contains('kite-authenticated');
+      }
+    }
+
+    async function refreshInstitutionalFlows() {
+      try {
+        const response = await fetch('/api/market-sentiment/institutional-flows/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+        const result = await response.json();
+        return response.ok && result.ok === true;
+      } catch (_error) {
+        return false;
+      }
+    }
+
+    async function refreshMacroContext() {
+      try {
+        const response = await fetch('/api/market-sentiment/macro-context/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+        const result = await response.json();
+        return response.ok && result.ok === true;
+      } catch (_error) {
+        return false;
+      }
+    }
+
+    async function refreshFuturesOi() {
+      const symbols = window.PG_REFERENCE_UNIVERSES.foStocks.map(([symbol]) => symbol);
+      try {
+        const response = await fetch('/api/market-sentiment/futures-eod/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbols }),
+        });
+        const result = await response.json();
+        return response.ok && result.ok === true;
+      } catch (_error) {
+        return false;
       }
     }
 
@@ -1806,7 +2177,14 @@
         historical_month_data_unavailable: 'No completed historical observations were available for the current calendar month.',
         monthly_stock_data_not_ready: 'Run EOD update first so current-month stock returns can be calculated.',
         monthly_stock_data_unavailable: 'No eligible F&O stock had complete current-month data.',
-        monthly_index_data_unavailable: 'No supported index had complete current-month data.'
+        monthly_index_data_unavailable: 'No supported index had complete current-month data.',
+        invalid_futures_universe: 'The F&O futures universe was not accepted.',
+        invalid_nfo_instrument_master: 'Kite’s current futures inventory was not accepted.',
+        futures_contracts_unavailable: 'No active near-month contracts were found for the F&O universe.',
+        futures_eod_not_due: 'Futures price and open interest can be stored after the market closes.',
+        futures_eod_data_unavailable: 'Kite did not return completed futures price and open-interest snapshots.',
+        invalid_futures_quote_response: 'Kite returned an unexpected futures quote response.',
+        stored_futures_snapshot_conflict: 'A stored futures EOD observation conflicted with a later response.'
       };
       return messages[reason] || `Kite connection failed with local reason: ${reason || 'unknown_error'}.`;
     }
@@ -1910,6 +2288,10 @@
     });
     refreshIndexButton.addEventListener('click', loadIndexSnapshot);
     refreshSentimentButton.addEventListener('click', () => loadDomesticSentiment(true));
+    document.getElementById('flowChartWindowSelect').addEventListener('change', drawInstitutionalFlowCharts);
+    window.addEventListener('resize', () => {
+      if (!marketSentimentView.hidden && institutionalFlowSeries.length) drawInstitutionalFlowCharts();
+    });
     loadBreadthButton.addEventListener('click', loadMarketBreadth);
     loadSeasonalityButton.addEventListener('click', loadSeasonality);
     loadHistoricalComparisonButton.addEventListener('click', loadHistoricalMonthLeaders);
@@ -1948,6 +2330,8 @@
         emptyPageTitle.textContent = isDashboard || isMarketSentiment || isSeasonality ? '' : button.dataset.page;
         if (isMarketSentiment && document.getElementById('sentimentAsOfValue').textContent === '—') {
           loadDomesticSentiment(false);
+        } else if (isMarketSentiment) {
+          window.requestAnimationFrame(drawInstitutionalFlowCharts);
         }
         if (window.innerWidth <= 700) setNavigation(false);
       });

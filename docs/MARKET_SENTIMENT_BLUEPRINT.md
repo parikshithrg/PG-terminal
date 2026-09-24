@@ -1,6 +1,6 @@
 # Market Sentiment and Regime blueprint
 
-Status: Phase 1 in progress. The domestic-core page now calculates local EOD
+Status: Phase 1 complete; Phase 2 in progress. The domestic-core page calculates local EOD
 trend, F&O-equity participation, price strength, and realised volatility. No
 external source or portfolio action is approved merely by this document.
 
@@ -45,13 +45,33 @@ Primary source: validated completed Kite daily candles stored locally.
 
 ### 2. Participation and price strength
 
-- Nifty 500 percentage above 20-, 50-, and 200-session averages.
+- Percentage of the 210-stock NSE F&O universe above 20-, 50-, and 200-session averages.
 - Daily and five-session advance/decline balance.
 - Percentage near 52-week highs minus percentage near 52-week lows.
 - Sector participation and concentration of the index move.
 
-Primary source: local Nifty 500 constituent candles and the official constituent
-list. Exchange-published breadth can be a cross-check, not a hidden substitute.
+The 210-stock F&O universe is the intentional scope because it concentrates on
+liquid, derivatives-eligible equities and supports a later price/open-interest
+positioning layer. Primary source: locally stored validated candles and the
+versioned NSE F&O eligibility list. Exchange-published breadth can be a
+cross-check, not a hidden substitute.
+
+### 2A. Derivatives positioning extension
+
+For each eligible stock future, classify price and open-interest changes using
+an explicit daily convention:
+
+- price up and OI up: long build-up;
+- price down and OI up: short build-up;
+- price down and OI down: long unwinding;
+- price up and OI down: short covering.
+
+This requires more than the current equity EOD candles. Contract identity,
+expiry, rollover, volume, open interest, and the chosen near-month aggregation
+rule must be stored and versioned. Expiry-day and rollover effects must be kept
+separate from genuine position changes. Results should show stock counts,
+notional or OI-weighted participation, and coverage rather than presenting a
+single unexplained long/short score.
 
 ### 3. Volatility and downside stress
 
@@ -85,9 +105,11 @@ without labels.
 - India 10-year government yield level and 5-/20-session change.
 - Yield-curve slope when reliable short-tenor data is available.
 
-Use Kite currency instruments where entitlement and history are available.
-Official FBIL/RBI sources should be evaluated for reference FX and government
-bond benchmarks. A rising yield or USD/INR is context, not automatically bearish;
+Use official FBIL reference FX rates republished by RBI for the first spot-context
+adapter. Keep Kite currency futures separate because expiring contracts require
+explicit rollover treatment. The RBI government-securities panel supplies the
+sovereign-rate observation, with the exact security name stored alongside the
+nearest-to-10-year maturity selection. A rising yield or USD/INR is context, not automatically bearish;
 the rate of change and confirmation from other clusters matter.
 
 ### 6. Global risk backdrop
@@ -177,15 +199,31 @@ These are review prompts, not target weights or automated transactions.
 - [x] Build the page frame with regime, confidence, as-of, and six cluster panels.
 - [x] Reuse local Nifty history for trend and realised volatility.
 - [x] Calculate transparent participation and price strength from all 210 NSE
-  F&O equities currently stored locally; do not label this subset Nifty 500.
-- [ ] Extend the local breadth universe to validated Nifty 500 history.
+  F&O equities currently stored locally. This is the permanent liquid-universe
+  scope and must not be labelled Nifty 500.
 - [x] Display component values without a composite score.
 
 ### Phase 2 — official domestic context
 
-- Add India VIX from the authenticated Kite inventory when available.
-- Add versioned NSE FII/DII ingestion with provisional/confirmed labels.
-- Evaluate Kite/FBIL/RBI adapters for currencies and government yields.
+- [x] Add India VIX from the authenticated Kite inventory, persist completed
+  daily history, and show its level, five-session change, one-year percentile,
+  and implied-versus-realised volatility gap.
+- [x] Add append-only ingestion of the official NSE combined-exchange FII/FPI
+  and DII cash-market report, explicitly labelled provisional, with latest,
+  five-session, and twenty-session summaries as local history accumulates.
+- [ ] Add confirmed NSDL FPI reconciliation as a separately labelled series;
+  never silently replace or mix it with provisional exchange activity.
+- [x] Add append-only RBI/FBIL currency references (USD, GBP, EUR and JPY) and
+  the RBI-listed government security nearest ten-year maturity, preserving the
+  exact security label and leaving the cluster unranked until thresholds are validated.
+- [ ] Accumulate enough official sessions to show 5-/20-session FX and yield
+  changes and validate directional thresholds before scoring the cluster.
+- [x] Add contract-keyed, append-only near-month futures price/OI snapshots for
+  the 210-stock F&O universe using one post-close bulk quote request. Preserve
+  trading symbol, expiry, lot size, and provider token; never compare OI across
+  a contract rollover.
+- [ ] Accumulate same-contract observations, validate coverage and rollover
+  behaviour, then define and test build-up, unwinding, and short-covering labels.
 
 ### Phase 3 — global source decision
 
