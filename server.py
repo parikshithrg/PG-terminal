@@ -22,6 +22,8 @@ from pathlib import Path
 from datetime import date, datetime, time as datetime_time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from eod_store import CandleConflictError, EODStore
+
 
 TOKEN_URL = "https://api.kite.trade/session/token"
 PROFILE_URL = "https://api.kite.trade/user/profile"
@@ -131,6 +133,14 @@ _HISTORICAL_MONTH_LEADERS_CACHE: dict[str, object] = {}
 _SESSION_LOCK = threading.Lock()
 _BREADTH_BUILD_LOCK = threading.Lock()
 _HISTORICAL_MONTH_LEADERS_LOCK = threading.Lock()
+_EOD_STORE: EODStore | None = None
+
+
+def _get_eod_store() -> EODStore:
+    global _EOD_STORE
+    if _EOD_STORE is None:
+        _EOD_STORE = EODStore(Path(__file__).resolve().parent / "data" / "pg_terminal_eod.sqlite3")
+    return _EOD_STORE
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -384,6 +394,38 @@ def historical_lookback_start(as_of: date, *, years: int = SEASONALITY_LOOKBACK_
         return as_of.replace(year=as_of.year - years, day=28)
 
 
+def incremental_history_ranges(
+    history_start: date,
+    end: date,
+    last_stored: date | None,
+    *,
+    chunk_days: int = SEASONALITY_HISTORY_CHUNK_DAYS,
+) -> list[tuple[date, date]]:
+    start = max(history_start, last_stored + timedelta(days=1)) if last_stored else history_start
+    if start > end:
+        return []
+    return historical_date_ranges(start, end, chunk_days=chunk_days)
+
+
+def completed_history_date(now: datetime) -> date:
+    """Return the latest date that may contain a completed daily candle."""
+    local_now = now.astimezone(INDIA_TIMEZONE)
+    if local_now.time().replace(tzinfo=None) < datetime_time(15, 40):
+        return local_now.date() - timedelta(days=1)
+    return local_now.date()
+
+
+def is_complete_seasonality_payload(payload: object) -> bool:
+    """Keep ranking-only cache entries out of full seasonality responses."""
+    return (
+        isinstance(payload, dict)
+        and payload.get("ok") is True
+        and isinstance(payload.get("month_rows"), list)
+        and isinstance(payload.get("weekday_rows"), list)
+        and isinstance(payload.get("validation"), dict)
+    )
+
+
 def _seasonality_summary(values: list[tuple[float, float]]) -> dict[str, object]:
     if not values:
         return {
@@ -401,6 +443,294 @@ def _seasonality_summary(values: list[tuple[float, float]]) -> dict[str, object]
         "average_range_pct": round(sum(ranges) / len(ranges), 2),
         "highest_return_pct": round(max(returns), 2),
         "lowest_return_pct": round(min(returns), 2),
+    }
+
+
+def _mean(values: list[float]) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
+def _sample_variance(values: list[float]) -> float | None:
+    if len(values) < 2:
+        return None
+    average = sum(values) / len(values)
+    return sum((value - average) ** 2 for value in values) / (len(values) - 1)
+
+
+def _beta_continued_fraction(a: float, b: float, x: float) -> float:
+    maximum_iterations = 200
+    epsilon = 3e-14
+    minimum = 1e-300
+    qab = a + b
+    qap = a + 1.0
+    qam = a - 1.0
+    c = 1.0
+    d = 1.0 - qab * x / qap
+    if abs(d) < minimum:
+        d = minimum
+    d = 1.0 / d
+    result = d
+    for iteration in range(1, maximum_iterations + 1):
+        twice = 2 * iteration
+        coefficient = iteration * (b - iteration) * x / ((qam + twice) * (a + twice))
+        d = 1.0 + coefficient * d
+        if abs(d) < minimum:
+            d = minimum
+        c = 1.0 + coefficient / c
+        if abs(c) < minimum:
+            c = minimum
+        d = 1.0 / d
+        result *= d * c
+        coefficient = -(a + iteration) * (qab + iteration) * x / ((a + twice) * (qap + twice))
+        d = 1.0 + coefficient * d
+        if abs(d) < minimum:
+            d = minimum
+        c = 1.0 + coefficient / c
+        if abs(c) < minimum:
+            c = minimum
+        d = 1.0 / d
+        delta = d * c
+        result *= delta
+        if abs(delta - 1.0) < epsilon:
+            break
+    return result
+
+
+def _regularized_incomplete_beta(a: float, b: float, x: float) -> float:
+    if x <= 0:
+        return 0.0
+    if x >= 1:
+        return 1.0
+    front = math.exp(
+        math.lgamma(a + b) - math.lgamma(a) - math.lgamma(b)
+        + a * math.log(x) + b * math.log1p(-x)
+    )
+    if x < (a + 1.0) / (a + b + 2.0):
+        return front * _beta_continued_fraction(a, b, x) / a
+    return 1.0 - front * _beta_continued_fraction(b, a, 1.0 - x) / b
+
+
+def _welch_test(first: list[float], second: list[float]) -> tuple[float | None, float | None]:
+    first_variance = _sample_variance(first)
+    second_variance = _sample_variance(second)
+    if first_variance is None or second_variance is None:
+        return None, None
+    first_term = first_variance / len(first)
+    second_term = second_variance / len(second)
+    denominator = first_term + second_term
+    if denominator <= 0:
+        return None, None
+    t_statistic = ((_mean(first) or 0.0) - (_mean(second) or 0.0)) / math.sqrt(denominator)
+    degrees_of_freedom_denominator = (
+        (first_term * first_term) / (len(first) - 1)
+        + (second_term * second_term) / (len(second) - 1)
+    )
+    if degrees_of_freedom_denominator <= 0:
+        return None, None
+    degrees_of_freedom = denominator * denominator / degrees_of_freedom_denominator
+    probability = _regularized_incomplete_beta(
+        degrees_of_freedom / 2.0,
+        0.5,
+        degrees_of_freedom / (degrees_of_freedom + t_statistic * t_statistic),
+    )
+    return t_statistic, max(0.0, min(1.0, probability))
+
+
+def _benjamini_hochberg(p_values: list[float | None]) -> list[float | None]:
+    valid = sorted(
+        ((value, index) for index, value in enumerate(p_values) if value is not None),
+        key=lambda item: item[0],
+    )
+    adjusted: list[float | None] = [None] * len(p_values)
+    running = 1.0
+    total = len(valid)
+    for rank in range(total, 0, -1):
+        value, index = valid[rank - 1]
+        running = min(running, value * total / rank)
+        adjusted[index] = max(0.0, min(1.0, running))
+    return adjusted
+
+
+def _turn_of_month_analysis(candles: list[dict[str, object]]) -> dict[str, object]:
+    ordered = sorted(candles, key=lambda item: item["date"])
+    daily: list[dict[str, object]] = []
+    for previous, current in zip(ordered, ordered[1:]):
+        daily.append(
+            {
+                "date": current["date"],
+                "return_pct": ((float(current["close"]) / float(previous["close"])) - 1) * 100,
+                "in_window": False,
+            }
+        )
+    month_groups: list[list[dict[str, object]]] = []
+    for row in daily:
+        key = (row["date"].year, row["date"].month)
+        if not month_groups or (month_groups[-1][0]["date"].year, month_groups[-1][0]["date"].month) != key:
+            month_groups.append([])
+        month_groups[-1].append(row)
+    for index, group in enumerate(month_groups):
+        for row in group[-3:]:
+            row["in_window"] = True
+        if index + 1 < len(month_groups):
+            for row in month_groups[index + 1][:3]:
+                row["in_window"] = True
+
+    turn_values = [float(row["return_pct"]) for row in daily if row["in_window"]]
+    rest_values = [float(row["return_pct"]) for row in daily if not row["in_window"]]
+
+    def summary(label: str, values: list[float]) -> dict[str, object]:
+        ordered_values = sorted(values)
+        middle = len(ordered_values) // 2
+        median = None
+        if ordered_values:
+            median = (
+                ordered_values[middle]
+                if len(ordered_values) % 2
+                else (ordered_values[middle - 1] + ordered_values[middle]) / 2
+            )
+        return {
+            "window": label,
+            "count": len(values),
+            "average_return_pct": round(_mean(values), 2) if values else None,
+            "median_return_pct": round(median, 2) if median is not None else None,
+            "positive_sessions_pct": round(sum(value > 0 for value in values) / len(values) * 100, 2) if values else None,
+        }
+
+    t_statistic, p_value = _welch_test(turn_values, rest_values)
+    turn_mean = _mean(turn_values)
+    rest_mean = _mean(rest_values)
+    return {
+        "rows": [summary("Turn of month", turn_values), summary("Rest of month", rest_values)],
+        "edge_pct": round(turn_mean - rest_mean, 2) if turn_mean is not None and rest_mean is not None else None,
+        "t_statistic": round(t_statistic, 3) if t_statistic is not None else None,
+        "p_value": round(p_value, 4) if p_value is not None else None,
+    }
+
+
+def calculate_seasonality_validation(
+    candles: list[dict[str, object]],
+    *,
+    today: date,
+) -> dict[str, object]:
+    ordered = sorted(candles, key=lambda item: item["date"])
+    monthly_buckets: dict[tuple[int, int], list[dict[str, object]]] = {}
+    for candle in ordered:
+        candle_date = candle["date"]
+        monthly_buckets.setdefault((candle_date.year, candle_date.month), []).append(candle)
+    completed = [
+        (key, rows)
+        for key, rows in sorted(monthly_buckets.items())
+        if key != (today.year, today.month)
+    ]
+    monthly_returns: list[dict[str, object]] = []
+    previous_close: float | None = None
+    for (_year, month), rows in completed:
+        month_close = float(rows[-1]["close"])
+        if previous_close is not None:
+            monthly_returns.append(
+                {
+                    "date": rows[-1]["date"],
+                    "month": month,
+                    "return_pct": ((month_close / previous_close) - 1) * 100,
+                }
+            )
+        previous_close = month_close
+    if len(monthly_returns) < 4:
+        raise ValueError("no_completed_historical_data")
+
+    split_index = len(monthly_returns) // 2
+    train = monthly_returns[:split_index]
+    test = monthly_returns[split_index:]
+    split_date = test[0]["date"].replace(day=1)
+    month_names = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    intermediate: list[dict[str, object]] = []
+    train_p_values: list[float | None] = []
+    for month in range(1, 13):
+        train_values = [float(row["return_pct"]) for row in train if row["month"] == month]
+        train_others = [float(row["return_pct"]) for row in train if row["month"] != month]
+        test_values = [float(row["return_pct"]) for row in test if row["month"] == month]
+        test_others = [float(row["return_pct"]) for row in test if row["month"] != month]
+        _train_t, train_p = _welch_test(train_values, train_others)
+        _test_t, test_p = _welch_test(test_values, test_others)
+        train_excess = (
+            (_mean(train_values) or 0.0) - (_mean(train_others) or 0.0)
+            if train_values and train_others else None
+        )
+        test_excess = (
+            (_mean(test_values) or 0.0) - (_mean(test_others) or 0.0)
+            if test_values and test_others else None
+        )
+        train_p_values.append(train_p)
+        intermediate.append(
+            {
+                "period": month_names[month - 1],
+                "train_count": len(train_values),
+                "train_excess_pct": train_excess,
+                "train_p_value": train_p,
+                "test_count": len(test_values),
+                "test_excess_pct": test_excess,
+                "test_p_value": test_p,
+                "same_direction": (
+                    train_excess is not None and test_excess is not None
+                    and train_excess != 0 and test_excess != 0
+                    and (train_excess > 0) == (test_excess > 0)
+                ),
+            }
+        )
+    train_q_values = _benjamini_hochberg(train_p_values)
+    held_out_rows: list[dict[str, object]] = []
+    for row, q_value in zip(intermediate, train_q_values):
+        train_significant = q_value is not None and q_value < 0.10
+        survived = (
+            train_significant
+            and row["same_direction"]
+            and row["test_p_value"] is not None
+            and row["test_p_value"] < 0.05
+        )
+        held_out_rows.append(
+            {
+                "period": row["period"],
+                "train_count": row["train_count"],
+                "train_excess_pct": round(row["train_excess_pct"], 2) if row["train_excess_pct"] is not None else None,
+                "train_significant": train_significant,
+                "test_count": row["test_count"],
+                "test_excess_pct": round(row["test_excess_pct"], 2) if row["test_excess_pct"] is not None else None,
+                "same_direction": row["same_direction"],
+                "survived": survived,
+            }
+        )
+
+    turn = _turn_of_month_analysis(ordered)
+    turn_held_out_rows: list[dict[str, object]] = []
+    for label, subset in (
+        ("Train", [row for row in ordered if row["date"] < split_date]),
+        ("Test", [row for row in ordered if row["date"] >= split_date]),
+    ):
+        result = _turn_of_month_analysis(subset)
+        p_value = result["p_value"]
+        turn_held_out_rows.append(
+            {
+                "period": label,
+                "from_date": subset[0]["date"].isoformat() if subset else None,
+                "to_date": subset[-1]["date"].isoformat() if subset else None,
+                "edge_pct": result["edge_pct"],
+                "p_value": p_value,
+                "significant": p_value is not None and p_value < 0.05,
+            }
+        )
+    return {
+        "turn_rows": turn["rows"],
+        "turn_edge_pct": turn["edge_pct"],
+        "turn_t_statistic": turn["t_statistic"],
+        "turn_p_value": turn["p_value"],
+        "holdout_split_date": split_date.isoformat(),
+        "held_out_rows": held_out_rows,
+        "held_out_summary": {
+            "same_direction": sum(bool(row["same_direction"]) for row in held_out_rows),
+            "train_significant": sum(bool(row["train_significant"]) for row in held_out_rows),
+            "survived": sum(bool(row["survived"]) for row in held_out_rows),
+        },
+        "turn_held_out_rows": turn_held_out_rows,
     }
 
 
@@ -588,6 +918,173 @@ def calculate_market_breadth(
     return rows, as_of, evaluated
 
 
+def calculate_domestic_sentiment_core(
+    index_candles: list[dict[str, object]],
+    stock_histories: dict[str, list[dict[str, object]]],
+) -> dict[str, object]:
+    """Calculate transparent EOD domestic-tape evidence from local candles."""
+    ordered_index = sorted(index_candles, key=lambda item: item["date"])
+    if len(ordered_index) < 252:
+        raise ValueError("domestic_core_history_unavailable")
+    as_of = ordered_index[-1]["date"]
+    closes = [float(row["close"]) for row in ordered_index]
+
+    def average(values: list[float]) -> float:
+        return sum(values) / len(values)
+
+    def relative_pct(value: float, reference: float) -> float:
+        return ((value / reference) - 1) * 100
+
+    latest_close = closes[-1]
+    sma20 = average(closes[-20:])
+    sma50 = average(closes[-50:])
+    sma200 = average(closes[-200:])
+    prior_sma50 = average(closes[-70:-20])
+    sma50_slope = relative_pct(sma50, prior_sma50)
+    drawdown = relative_pct(latest_close, max(closes[-252:]))
+    momentum20 = relative_pct(latest_close, closes[-21])
+
+    if latest_close > sma50 > sma200 and sma50_slope > 0:
+        trend_band = "constructive"
+        trend_reason = "Price is above aligned rising 50- and 200-session averages."
+    elif latest_close < sma50 < sma200 and sma50_slope < 0:
+        trend_band = "defensive"
+        trend_reason = "Price is below aligned falling 50- and 200-session averages."
+    else:
+        trend_band = "mixed"
+        trend_reason = "Price and moving-average evidence is not fully aligned."
+
+    daily_returns = [math.log(current / previous) for previous, current in zip(closes, closes[1:])]
+
+    def annualised_volatility(returns: list[float]) -> float:
+        variance = _sample_variance(returns)
+        if variance is None:
+            raise ValueError("domestic_core_history_unavailable")
+        return math.sqrt(variance * 252) * 100
+
+    current_vol = annualised_volatility(daily_returns[-20:])
+    rolling_vols = [
+        annualised_volatility(daily_returns[end - 20:end])
+        for end in range(max(20, len(daily_returns) - 251), len(daily_returns) + 1)
+    ]
+    previous_vol = rolling_vols[-6] if len(rolling_vols) >= 6 else rolling_vols[0]
+    vol_percentile = 100 * sum(value <= current_vol for value in rolling_vols) / len(rolling_vols)
+    if vol_percentile >= 85:
+        volatility_band = "defensive"
+        volatility_reason = "Realised volatility is in the top 15% of its one-year range."
+    elif vol_percentile >= 60:
+        volatility_band = "mixed"
+        volatility_reason = "Realised volatility is elevated relative to the past year."
+    else:
+        volatility_band = "constructive"
+        volatility_reason = "Realised volatility is below its elevated-risk range."
+
+    eligible: list[list[float]] = []
+    for history in stock_histories.values():
+        ordered = sorted(history, key=lambda item: item["date"])
+        if len(ordered) < 252 or ordered[-1]["date"] != as_of:
+            continue
+        eligible.append([float(row["close"]) for row in ordered])
+    if not eligible:
+        raise ValueError("domestic_breadth_unavailable")
+
+    def percent_above(window: int) -> float:
+        return 100 * sum(series[-1] > average(series[-window:]) for series in eligible) / len(eligible)
+
+    advances = sum(series[-1] > series[-2] for series in eligible)
+    declines = sum(series[-1] < series[-2] for series in eligible)
+    unchanged = len(eligible) - advances - declines
+    advance_decline_ratio = advances / declines if declines else None
+    near_high = sum(series[-1] >= max(series[-252:]) * 0.95 for series in eligible)
+    near_low = sum(series[-1] <= min(series[-252:]) * 1.05 for series in eligible)
+    near_high_pct = 100 * near_high / len(eligible)
+    near_low_pct = 100 * near_low / len(eligible)
+    price_strength = near_high_pct - near_low_pct
+    above20 = percent_above(20)
+    above50 = percent_above(50)
+    above200 = percent_above(200)
+    if above50 >= 55 and above200 >= 55 and advances > declines:
+        breadth_band = "constructive"
+        breadth_reason = "A majority is above medium- and long-term averages with positive daily breadth."
+    elif (above50 < 40 and above200 < 40) or (declines and advances / declines < 0.67):
+        breadth_band = "defensive"
+        breadth_reason = "Participation is weak across moving averages or daily breadth."
+    else:
+        breadth_band = "mixed"
+        breadth_reason = "Participation is neither broadly strong nor broadly weak."
+
+    if price_strength >= 10:
+        price_strength_band = "constructive"
+        price_strength_reason = "More stocks are clustered near 52-week highs than lows."
+    elif price_strength <= -10:
+        price_strength_band = "defensive"
+        price_strength_reason = "More stocks are clustered near 52-week lows than highs."
+    else:
+        price_strength_band = "mixed"
+        price_strength_reason = "The balance near 52-week extremes is inconclusive."
+
+    bands = [trend_band, breadth_band, price_strength_band, volatility_band]
+    constructive = bands.count("constructive")
+    defensive = bands.count("defensive")
+    if constructive >= 3 and defensive == 0:
+        domestic_tape = "Constructive"
+    elif defensive >= 2:
+        domestic_tape = "Defensive"
+    else:
+        domestic_tape = "Mixed"
+
+    return {
+        "ok": True,
+        "as_of_date": as_of.isoformat(),
+        "overall_regime": "Pending full model",
+        "domestic_tape": domestic_tape,
+        "confidence": "Partial",
+        "available_clusters": 3,
+        "total_clusters": 6,
+        "trend": {
+            "band": trend_band,
+            "reason": trend_reason,
+            "close": round(latest_close, 2),
+            "vs_20dma_pct": round(relative_pct(latest_close, sma20), 2),
+            "vs_50dma_pct": round(relative_pct(latest_close, sma50), 2),
+            "vs_200dma_pct": round(relative_pct(latest_close, sma200), 2),
+            "sma50_slope_20d_pct": round(sma50_slope, 2),
+            "momentum_20d_pct": round(momentum20, 2),
+            "drawdown_52w_pct": round(drawdown, 2),
+        },
+        "breadth": {
+            "band": breadth_band,
+            "reason": breadth_reason,
+            "universe": "Locally stored NSE F&O equities",
+            "evaluated": len(eligible),
+            "above_20dma_pct": round(above20, 1),
+            "above_50dma_pct": round(above50, 1),
+            "above_200dma_pct": round(above200, 1),
+            "advances": advances,
+            "declines": declines,
+            "unchanged": unchanged,
+            "advance_decline_ratio": round(advance_decline_ratio, 2) if advance_decline_ratio is not None else None,
+        },
+        "price_strength": {
+            "band": price_strength_band,
+            "reason": price_strength_reason,
+            "near_52w_high_pct": round(near_high_pct, 1),
+            "near_52w_low_pct": round(near_low_pct, 1),
+            "net_strength_pct": round(price_strength, 1),
+        },
+        "volatility": {
+            "band": volatility_band,
+            "reason": volatility_reason,
+            "realised_20d_pct": round(current_vol, 2),
+            "five_day_change_pt": round(current_vol - previous_vol, 2),
+            "one_year_percentile": round(vol_percentile, 1),
+            "india_vix": None,
+        },
+        "source": "Validated local Kite EOD candles",
+        "freshness": "local_eod",
+    }
+
+
 def normalize_index_name(value: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", value.upper().replace("&", "AND"))
 
@@ -700,7 +1197,26 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         if path == "/api/kite/seasonality":
             self._send_seasonality(urllib.parse.urlsplit(self.path).query)
             return
+        if path == "/api/market-sentiment/domestic-core":
+            self._send_domestic_sentiment_core()
+            return
         super().do_GET()
+
+    def _send_domestic_sentiment_core(self) -> None:
+        try:
+            store = _get_eod_store()
+            index_candles = store.load_candles(kind="index", display_name="Nifty 50")
+            instruments = store.list_instruments(kind="stock")
+            stock_histories = {
+                str(item["display_name"]): store.load_candles(
+                    kind="stock", display_name=str(item["display_name"])
+                )
+                for item in instruments
+            }
+            payload = calculate_domestic_sentiment_core(index_candles, stock_histories)
+            self._send_json(HTTPStatus.OK, payload)
+        except ValueError as error:
+            self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"ok": False, "reason": str(error)})
 
     def _send_index_snapshot(self) -> None:
         with _SESSION_LOCK:
@@ -883,8 +1399,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         with _SESSION_LOCK:
             cached = _SEASONALITY_CACHE.get(cache_key)
         if cached and time.monotonic() - float(cached["created_at"]) < SEASONALITY_CACHE_SECONDS:
-            self._send_json(HTTPStatus.OK, {**cached["payload"], "cache_hit": True})
-            return
+            cached_payload = cached.get("payload")
+            if is_complete_seasonality_payload(cached_payload):
+                self._send_json(HTTPStatus.OK, {**cached_payload, "cache_hit": True})
+                return
+            with _SESSION_LOCK:
+                _SEASONALITY_CACHE.pop(cache_key, None)
 
         try:
             if kind == "index":
@@ -922,9 +1442,15 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         instrument: str,
     ) -> dict[str, object]:
         now = datetime.now(INDIA_TIMEZONE)
-        candles_by_date: dict[date, dict[str, object]] = {}
-        history_start = historical_lookback_start(now.date())
-        ranges = historical_date_ranges(history_start, now.date())
+        completed_through = completed_history_date(now)
+        history_start = historical_lookback_start(completed_through)
+        store = _get_eod_store()
+        coverage_before = store.coverage(kind=kind, display_name=instrument)
+        last_stored = coverage_before["last_session"]
+        sync_start = max(history_start, last_stored + timedelta(days=1)) if last_stored else history_start
+        ranges = incremental_history_ranges(history_start, completed_through, last_stored)
+        inserted_sessions = 0
+        duplicate_sessions = 0
         for index, (from_date, to_date) in enumerate(ranges):
             if index:
                 time.sleep(HISTORICAL_REQUEST_INTERVAL_SECONDS)
@@ -953,15 +1479,34 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             )
             if reason is not None:
                 raise ValueError(reason)
-            for candle in parse_daily_candles(
+            parsed_candles = parse_daily_candles(
                 provider_payload or {},
                 today=now.date(),
                 now_time=now.time().replace(tzinfo=None),
-            ):
-                candles_by_date[candle["date"]] = candle
+            )
+            try:
+                write_result = store.append_candles(
+                    kind=kind,
+                    display_name=instrument,
+                    provider_token=token,
+                    candles=parsed_candles,
+                    retrieved_at=datetime.now(timezone.utc).isoformat(),
+                )
+            except CandleConflictError as error:
+                raise ValueError("stored_candle_conflict") from error
+            inserted_sessions += write_result["inserted"]
+            duplicate_sessions += write_result["duplicates"]
 
-        candles = [candles_by_date[key] for key in sorted(candles_by_date)]
+        candles = store.load_candles(
+            kind=kind,
+            display_name=instrument,
+            start=history_start,
+            end=completed_through,
+        )
+        if len(candles) < 2:
+            raise ValueError("no_completed_historical_data")
         month_rows, weekday_rows = calculate_seasonality(candles, today=now.date())
+        validation = calculate_seasonality_validation(candles, today=now.date())
         return {
             "ok": True,
             "instrument": instrument,
@@ -971,8 +1516,15 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             "as_of_date": candles[-1]["date"].isoformat(),
             "completed_sessions": len(candles),
             "historical_requests": len(ranges),
+            "persistent_store": True,
+            "stored_sessions_before_sync": coverage_before["session_count"],
+            "new_sessions": inserted_sessions,
+            "duplicate_sessions": duplicate_sessions,
+            "local_history_reused": coverage_before["session_count"] > 0,
+            "sync_from_date": sync_start.isoformat() if ranges else None,
             "month_rows": month_rows,
             "weekday_rows": weekday_rows,
+            **validation,
             "return_definition": "close-to-close percentage change",
             "range_definition": "(high - low) / low * 100",
             "price_source": "Kite Connect historical daily candles",
@@ -1276,9 +1828,22 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             )
             return
 
+        selected_month = payload.get("month")
+        if (
+            not isinstance(selected_month, int)
+            or isinstance(selected_month, bool)
+            or selected_month < 1
+            or selected_month > 12
+        ):
+            self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "reason": "invalid_historical_month_leader_request"},
+            )
+            return
+
         now = datetime.now(INDIA_TIMEZONE)
         cache_key = hashlib.sha256(
-            f"{now.month}\n{SEASONALITY_LOOKBACK_YEARS}\n".encode("ascii")
+            f"{selected_month}\n{SEASONALITY_LOOKBACK_YEARS}\n".encode("ascii")
             + "\n".join(symbols).encode("ascii")
         ).hexdigest()
         with _SESSION_LOCK:
@@ -1304,10 +1869,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             if any(symbol not in equity_tokens for symbol in symbols):
                 raise ValueError("instrument_not_available")
 
-            month_index = now.month - 1
+            month_index = selected_month - 1
             index_averages: dict[str, tuple[float, int]] = {}
             stock_averages: dict[str, tuple[float, int]] = {}
             total_requests = 0
+            history_start = historical_lookback_start(now.date())
+            store = _get_eod_store()
 
             def evaluate(kind: str, instrument: str, token: str) -> tuple[float, int] | None:
                 nonlocal total_requests
@@ -1317,22 +1884,35 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 if cache_item and time.monotonic() - float(cache_item["created_at"]) < SEASONALITY_CACHE_SECONDS:
                     cached = cache_item.get("payload")
                 if not isinstance(cached, dict):
-                    if total_requests:
-                        time.sleep(HISTORICAL_REQUEST_INTERVAL_SECONDS)
-                    try:
-                        cached = self._build_seasonality(
-                            api_key, access_token, token, kind, instrument
+                    stored_candles = store.load_candles(
+                        kind=kind,
+                        display_name=instrument,
+                        start=history_start,
+                        end=now.date(),
+                    )
+                    if len(stored_candles) >= 2:
+                        month_rows, _weekday_rows = calculate_seasonality(
+                            stored_candles, today=now.date()
                         )
-                    except ValueError as error:
-                        if str(error) == "no_completed_historical_data":
-                            return None
-                        raise
-                    total_requests += int(cached.get("historical_requests", 0))
-                    with _SESSION_LOCK:
-                        _SEASONALITY_CACHE[(kind, instrument)] = {
-                            "payload": cached,
-                            "created_at": time.monotonic(),
-                        }
+                        cached = {"month_rows": month_rows, "historical_requests": 0}
+                    else:
+                        if total_requests:
+                            time.sleep(HISTORICAL_REQUEST_INTERVAL_SECONDS)
+                        try:
+                            cached = self._build_seasonality(
+                                api_key, access_token, token, kind, instrument
+                            )
+                        except ValueError as error:
+                            if str(error) == "no_completed_historical_data":
+                                return None
+                            raise
+                        total_requests += int(cached.get("historical_requests", 0))
+                    if is_complete_seasonality_payload(cached):
+                        with _SESSION_LOCK:
+                            _SEASONALITY_CACHE[(kind, instrument)] = {
+                                "payload": cached,
+                                "created_at": time.monotonic(),
+                            }
                 month_rows = cached.get("month_rows")
                 if not isinstance(month_rows, list) or len(month_rows) != 12:
                     raise ValueError("invalid_provider_response")
@@ -1358,7 +1938,8 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             stock_rank = rank_historical_month_averages(stock_averages)
             result: dict[str, object] = {
                 "ok": True,
-                "calendar_month": now.strftime("%B"),
+                "calendar_month": date(2000, selected_month, 1).strftime("%B"),
+                "month": selected_month,
                 "completed_year": now.year - 1,
                 "history_start": historical_lookback_start(now.date()).isoformat(),
                 "lookback_years": SEASONALITY_LOOKBACK_YEARS,
@@ -1370,7 +1951,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 "indices_without_history": len(SEASONALITY_INDICES) - int(index_rank["evaluated"]),
                 "stocks_without_history": len(symbols) - int(stock_rank["evaluated"]),
                 "historical_requests": total_requests,
-                "return_definition": "mean close-to-close return for the current calendar month across completed years",
+                "return_definition": "mean close-to-close return for the selected calendar month across completed years",
                 "retrieved_at": datetime.now(timezone.utc).isoformat(),
             }
             with _SESSION_LOCK:

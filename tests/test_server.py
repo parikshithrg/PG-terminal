@@ -1,21 +1,26 @@
 import unittest
 import socket
 import urllib.error
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from server import (
     NIFTY_INDICES_PUBLIC_USER_AGENT,
     OFFICIAL_SECTORAL_INDICES,
     build_checksum,
     calculate_seasonality,
+    calculate_seasonality_validation,
     calculate_month_to_date_returns,
     calculate_index_ytd,
     classify_network_error,
+    completed_history_date,
     calculate_market_breadth,
+    calculate_domestic_sentiment_core,
     discover_sectoral_indices,
     extract_request_token,
     historical_date_ranges,
     historical_lookback_start,
+    is_complete_seasonality_payload,
     normalize_index_snapshot,
     parse_daily_candles,
     parse_daily_closes,
@@ -28,6 +33,32 @@ from server import (
 
 
 class KiteHandshakeHelpersTest(unittest.TestCase):
+    def test_completed_history_date_excludes_current_session_before_close(self):
+        india = ZoneInfo("Asia/Kolkata")
+        self.assertEqual(
+            completed_history_date(datetime(2026, 9, 24, 9, 30, tzinfo=india)),
+            date(2026, 9, 23),
+        )
+        self.assertEqual(
+            completed_history_date(datetime(2026, 9, 24, 15, 40, tzinfo=india)),
+            date(2026, 9, 24),
+        )
+
+    def test_full_seasonality_cache_rejects_ranking_only_payload(self):
+        self.assertFalse(
+            is_complete_seasonality_payload({"month_rows": [], "historical_requests": 0})
+        )
+        self.assertTrue(
+            is_complete_seasonality_payload(
+                {
+                    "ok": True,
+                    "month_rows": [],
+                    "weekday_rows": [],
+                    "validation": {},
+                }
+            )
+        )
+
     def test_public_constituent_request_uses_browser_identity_without_credentials(self):
         self.assertTrue(NIFTY_INDICES_PUBLIC_USER_AGENT.startswith("Mozilla/5.0"))
         self.assertNotIn("cookie", NIFTY_INDICES_PUBLIC_USER_AGENT.lower())
@@ -261,6 +292,34 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(monday["highest_return_pct"], 8.33)
         self.assertEqual(monday["lowest_return_pct"], 7.69)
 
+    def test_seasonality_validation_populates_turn_and_holdout_tables(self):
+        candles = []
+        close = 100.0
+        for month in range(1, 7):
+            for day in range(1, 9):
+                close *= 1.0 + (((month + day) % 5) - 2) / 100
+                candles.append(
+                    {
+                        "date": date(2025, month, day),
+                        "open": close,
+                        "high": close * 1.01,
+                        "low": close * 0.99,
+                        "close": close,
+                    }
+                )
+
+        result = calculate_seasonality_validation(candles, today=date(2025, 7, 15))
+
+        self.assertEqual([row["window"] for row in result["turn_rows"]], ["Turn of month", "Rest of month"])
+        self.assertEqual(sum(row["count"] for row in result["turn_rows"]), len(candles) - 1)
+        self.assertEqual(len(result["held_out_rows"]), 12)
+        self.assertEqual(len(result["turn_held_out_rows"]), 2)
+        self.assertEqual(result["holdout_split_date"], "2025-04-01")
+        self.assertEqual(
+            set(result["held_out_summary"]),
+            {"same_direction", "train_significant", "survived"},
+        )
+
     def test_month_to_date_returns_use_previous_month_final_close(self):
         histories = {
             "AAA": [
@@ -323,6 +382,34 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(by_sector["Alpha"]["above_20dma_pct"], 50)
         self.assertEqual(by_sector["Alpha"]["above_200dma_pct"], 50)
         self.assertEqual(by_sector["Beta"]["evaluated"], 1)
+
+    def test_domestic_sentiment_core_reports_transparent_local_evidence(self):
+        start = date(2025, 1, 1)
+        dates = [start + timedelta(days=index) for index in range(300)]
+
+        def candles(multiplier, *, stale=False):
+            rows = [
+                {
+                    "date": candle_date,
+                    "open": 100.0 + index * multiplier,
+                    "high": 101.0 + index * multiplier,
+                    "low": 99.0 + index * multiplier,
+                    "close": 100.0 + index * multiplier,
+                }
+                for index, candle_date in enumerate(dates)
+            ]
+            return rows[:-1] if stale else rows
+
+        result = calculate_domestic_sentiment_core(
+            candles(1.0),
+            {"UP1": candles(1.0), "UP2": candles(0.5), "STALE": candles(0.2, stale=True)},
+        )
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["trend"]["band"], "constructive")
+        self.assertEqual(result["breadth"]["evaluated"], 2)
+        self.assertEqual(result["breadth"]["above_200dma_pct"], 100.0)
+        self.assertEqual(result["price_strength"]["near_52w_high_pct"], 100.0)
+        self.assertEqual(result["available_clusters"], 3)
 
     def test_index_snapshot_preserves_exact_requested_indices(self):
         targets = [

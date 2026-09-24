@@ -510,6 +510,28 @@
     .panel-row { display: flex; justify-content: space-between; gap: 15px; color: #51555c; }
     .panel-row span:last-child { color: var(--muted); white-space: nowrap; }
 
+    .evidence-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+    .evidence-card { padding: 18px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+    .evidence-card h2 { margin: 0; color: #2b2e33; font-size: 17px; }
+    .evidence-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .evidence-reason { min-height: 38px; margin: 7px 0 15px; color: var(--muted); font-size: 13px; }
+    .evidence-values { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .evidence-value { padding-top: 10px; border-top: 1px solid var(--line); }
+    .evidence-value strong { display: block; color: #25282d; font-size: 17px; }
+    .evidence-value span { color: var(--muted); font-size: 12px; }
+    .sentiment-band { display: inline-flex; padding: 4px 8px; border-radius: 999px; color: #666b73; background: #f0f2f3; font-size: 12px; font-weight: 650; text-transform: capitalize; }
+    .sentiment-band.constructive { color: #187a42; background: #e8f7ee; }
+    .sentiment-band.mixed { color: #94620a; background: #fff4db; }
+    .sentiment-band.defensive { color: #a42f35; background: #fdebec; }
+    .source-state-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 28px; }
+    .source-state { padding: 16px; border: 1px solid var(--line); border-radius: 6px; background: #fcfcfc; }
+    .source-state strong { display: block; margin-bottom: 5px; font-size: 14px; }
+    .source-state span { color: var(--muted); font-size: 12px; }
+
+    @media (max-width: 1100px) {
+      .sentiment-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
     .notice {
       position: fixed;
       right: 18px;
@@ -533,6 +555,7 @@
 
     @media (max-width: 900px) {
       .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .evidence-grid, .source-state-grid { grid-template-columns: 1fr; }
       .brand-note { display: none; }
       main { padding-inline: 22px; }
     }
@@ -732,6 +755,105 @@
           </div>
         </div>
 
+        <section id="marketSentimentView" hidden aria-labelledby="marketSentimentTitle">
+          <div class="page-tabs" aria-label="Market sentiment views">
+            <div class="page-tab active">Overview</div>
+          </div>
+
+          <div class="analysis-intro">
+            <div>
+              <h1 id="marketSentimentTitle">Market Sentiment</h1>
+              <p class="analysis-caption">Phase 1 · domestic EOD evidence from validated local history</p>
+            </div>
+            <button class="panel-button" id="refreshSentimentButton" type="button">Refresh local analysis</button>
+          </div>
+
+          <section class="summary-grid sentiment-summary" aria-label="Market regime summary">
+            <article class="summary-card">
+              <div class="summary-label">Overall regime</div>
+              <div class="summary-value" id="sentimentRegimeValue">Pending</div>
+              <div class="summary-meta">Full six-cluster model not active</div>
+            </article>
+            <article class="summary-card">
+              <div class="summary-label">Domestic tape</div>
+              <div class="summary-value" id="sentimentDomesticValue">—</div>
+              <div class="summary-meta">Trend, participation and volatility</div>
+            </article>
+            <article class="summary-card">
+              <div class="summary-label">Evidence coverage</div>
+              <div class="summary-value" id="sentimentCoverageValue">— / 6</div>
+              <div class="summary-meta" id="sentimentConfidenceMeta">Partial confidence</div>
+            </article>
+            <article class="summary-card">
+              <div class="summary-label">As of</div>
+              <div class="summary-value" id="sentimentAsOfValue">—</div>
+              <div class="summary-meta" id="sentimentSourceMeta">Local EOD data not loaded</div>
+            </article>
+          </section>
+
+          <div class="section-heading-row">
+            <h2 class="section-title">Domestic evidence</h2>
+          </div>
+          <p class="section-note">Each cluster remains visible independently. Phase 1 does not publish a composite fear/greed score.</p>
+
+          <div class="evidence-grid">
+            <article class="evidence-card">
+              <div class="evidence-heading"><h2>Cash trend</h2><span class="sentiment-band" id="trendBand">Unavailable</span></div>
+              <p class="evidence-reason" id="trendReason">Local Nifty 50 history has not been evaluated.</p>
+              <div class="evidence-values">
+                <div class="evidence-value"><strong id="trend20Value">—</strong><span>vs 20DMA</span></div>
+                <div class="evidence-value"><strong id="trend50Value">—</strong><span>vs 50DMA</span></div>
+                <div class="evidence-value"><strong id="trend200Value">—</strong><span>vs 200DMA</span></div>
+                <div class="evidence-value"><strong id="trendSlopeValue">—</strong><span>50DMA 20d slope</span></div>
+                <div class="evidence-value"><strong id="trendMomentumValue">—</strong><span>20d momentum</span></div>
+                <div class="evidence-value"><strong id="trendDrawdownValue">—</strong><span>52w drawdown</span></div>
+              </div>
+            </article>
+
+            <article class="evidence-card">
+              <div class="evidence-heading"><h2>Participation</h2><span class="sentiment-band" id="breadthBand">Unavailable</span></div>
+              <p class="evidence-reason" id="breadthReason">Local equity breadth has not been evaluated.</p>
+              <div class="evidence-values">
+                <div class="evidence-value"><strong id="breadth20Value">—</strong><span>above 20DMA</span></div>
+                <div class="evidence-value"><strong id="breadth50Value">—</strong><span>above 50DMA</span></div>
+                <div class="evidence-value"><strong id="breadth200Value">—</strong><span>above 200DMA</span></div>
+                <div class="evidence-value"><strong id="breadthAdvancesValue">—</strong><span>advances</span></div>
+                <div class="evidence-value"><strong id="breadthDeclinesValue">—</strong><span>declines</span></div>
+                <div class="evidence-value"><strong id="breadthCoverageValue">—</strong><span>stocks evaluated</span></div>
+              </div>
+            </article>
+
+            <article class="evidence-card">
+              <div class="evidence-heading"><h2>Price strength</h2><span class="sentiment-band" id="priceStrengthBand">Unavailable</span></div>
+              <p class="evidence-reason" id="priceStrengthReason">The balance near 52-week highs and lows has not been evaluated.</p>
+              <div class="evidence-values">
+                <div class="evidence-value"><strong id="nearHighValue">—</strong><span>near 52w high</span></div>
+                <div class="evidence-value"><strong id="nearLowValue">—</strong><span>near 52w low</span></div>
+                <div class="evidence-value"><strong id="netStrengthValue">—</strong><span>net strength</span></div>
+              </div>
+            </article>
+
+            <article class="evidence-card">
+              <div class="evidence-heading"><h2>Volatility</h2><span class="sentiment-band" id="volatilityBand">Unavailable</span></div>
+              <p class="evidence-reason" id="volatilityReason">Local realised volatility has not been evaluated.</p>
+              <div class="evidence-values">
+                <div class="evidence-value"><strong id="realisedVolValue">—</strong><span>20d annualised</span></div>
+                <div class="evidence-value"><strong id="volChangeValue">—</strong><span>5d change</span></div>
+                <div class="evidence-value"><strong id="volPercentileValue">—</strong><span>1y percentile</span></div>
+                <div class="evidence-value"><strong>Pending</strong><span>India VIX</span></div>
+              </div>
+            </article>
+          </div>
+
+          <div class="source-state-grid" aria-label="Pending sentiment sources">
+            <article class="source-state"><strong>Institutional flows</strong><span>Unavailable · official NSE/NSDL adapter pending</span></article>
+            <article class="source-state"><strong>Currency and rates</strong><span>Unavailable · Kite/FBIL/RBI source review pending</span></article>
+            <article class="source-state"><strong>Global risk backdrop</strong><span>Unavailable · permitted provider not selected</span></article>
+          </div>
+
+          <div class="analysis-note">Portfolio balancing remains a read-only review step. Phase 1 does not prescribe weights or trigger transactions.</div>
+        </section>
+
         <section id="seasonalityView" hidden aria-labelledby="seasonalityTitle">
           <div class="page-tabs" aria-label="Seasonality views">
             <div class="page-tab active">Overview</div>
@@ -775,7 +897,37 @@
               </div>
               <div class="summary-meta" id="monthlyLeadersMeta">Run EOD update to calculate.</div>
             </article>
-            <article class="summary-card">
+          </section>
+
+          <div class="universe-controls" aria-label="Historical monthly comparison selection">
+            <div class="selector-field">
+              <label for="historicalMonthSelect">Historical calendar month</label>
+              <select id="historicalMonthSelect">
+                <option value="1">January</option><option value="2">February</option>
+                <option value="3">March</option><option value="4">April</option>
+                <option value="5">May</option><option value="6">June</option>
+                <option value="7">July</option><option value="8">August</option>
+                <option value="9">September</option><option value="10">October</option>
+                <option value="11">November</option><option value="12">December</option>
+              </select>
+            </div>
+            <div class="selector-field">
+              <label for="historicalUniverseSelect">Compare universe</label>
+              <select id="historicalUniverseSelect">
+                <option value="both">Indices and F&amp;O stocks</option>
+                <option value="index">Indices</option>
+                <option value="stock">F&amp;O stocks</option>
+              </select>
+            </div>
+            <div class="universe-action-row">
+              <button class="panel-button" id="loadHistoricalComparisonButton" type="button" disabled>Show historical comparison</button>
+              <span class="universe-action-status" id="historicalComparisonStatus">Run EOD update once to build the local 10-year history.</span>
+            </div>
+            <p class="universe-source">Results compare average return for the selected calendar month across the rolling 10-year history.</p>
+          </div>
+
+          <section class="seasonality-headline-grid" aria-label="Selected historical month comparison">
+            <article class="summary-card" id="historicalIndexCard">
               <div class="summary-label">Historical monthly indices</div>
               <div class="leader-list">
                 <div class="leader-row"><span class="leader-kind">Leading</span><span class="leader-result" id="historicalIndexLeader">—</span></div>
@@ -783,7 +935,7 @@
               </div>
               <div class="summary-meta" id="historicalIndexMeta">Current calendar month · 10-year universe history not loaded</div>
             </article>
-            <article class="summary-card">
+            <article class="summary-card" id="historicalStockCard">
               <div class="summary-label">Historical monthly F&amp;O stocks</div>
               <div class="leader-list">
                 <div class="leader-row"><span class="leader-kind">Leading</span><span class="leader-result" id="historicalStockLeader">—</span></div>
@@ -832,10 +984,10 @@
 
           <section class="analysis-section">
             <h2>Turn of month</h2>
-            <p class="section-note">Comparison frame for the defined turn-of-month window and all remaining sessions.</p>
+            <p class="section-note" id="seasonalityTurnNote">Last three and first three trading sessions of each month compared with all remaining sessions.</p>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Window</th><th>n</th><th>Mean %</th></tr></thead>
+                <thead><tr><th>Window</th><th>Count</th><th>Average Return %</th><th>Median Return %</th><th>Positive Sessions %</th></tr></thead>
                 <tbody id="seasonalityTurnBody"></tbody>
               </table>
             </div>
@@ -846,22 +998,22 @@
             <p class="section-note">A validation frame intended to reject unstable patterns rather than certify predictions.</p>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Period</th><th>n (train)</th><th>Mean % (train)</th><th>Sig. (train)</th><th>n (test)</th><th>Mean % (test)</th><th>Confirmed</th><th>Survived</th></tr></thead>
+                <thead><tr><th>Period</th><th>Train Count</th><th>Train Excess %</th><th>Train Significant</th><th>Test Count</th><th>Test Excess %</th><th>Same Direction</th><th>Survived</th></tr></thead>
                 <tbody id="seasonalityHeldOutBody"></tbody>
               </table>
             </div>
-            <div class="analysis-note">Consistency, train significance, test confirmation, and survival counts will appear here after the data and methodology contract is implemented.</div>
+            <div class="analysis-note" id="seasonalityHeldOutNote">Load completed history to run the chronological train/test check.</div>
           </section>
 
           <section class="analysis-section">
             <h2>Turn of month — held-out check</h2>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Period</th><th>From</th><th>To</th><th>Edge %</th><th>Confirmed</th></tr></thead>
+                <thead><tr><th>Period</th><th>From</th><th>To</th><th>Edge % / Day</th><th>p-value</th><th>Significant</th></tr></thead>
                 <tbody id="seasonalityTurnHeldOutBody"></tbody>
               </table>
             </div>
-            <div class="analysis-note">Monthly and weekday summaries use completed Kite EOD history. Turn-of-month and held-out validation remain placeholders.</div>
+            <div class="analysis-note" id="seasonalityTurnHeldOutNote">The edge is the turn-window average daily return minus the rest-of-month average daily return.</div>
           </section>
         </section>
 
@@ -880,6 +1032,8 @@
     const menuButton = document.getElementById('menuButton');
     const scrim = document.getElementById('scrim');
     const dashboardView = document.getElementById('dashboardView');
+    const marketSentimentView = document.getElementById('marketSentimentView');
+    const refreshSentimentButton = document.getElementById('refreshSentimentButton');
     const seasonalityView = document.getElementById('seasonalityView');
     const seasonalityIndexSelect = document.getElementById('seasonalityIndexSelect');
     const seasonalityStockSelect = document.getElementById('seasonalityStockSelect');
@@ -906,6 +1060,12 @@
     const historicalStockLeader = document.getElementById('historicalStockLeader');
     const historicalStockLagger = document.getElementById('historicalStockLagger');
     const historicalStockMeta = document.getElementById('historicalStockMeta');
+    const historicalMonthSelect = document.getElementById('historicalMonthSelect');
+    const historicalUniverseSelect = document.getElementById('historicalUniverseSelect');
+    const loadHistoricalComparisonButton = document.getElementById('loadHistoricalComparisonButton');
+    const historicalComparisonStatus = document.getElementById('historicalComparisonStatus');
+    const historicalIndexCard = document.getElementById('historicalIndexCard');
+    const historicalStockCard = document.getElementById('historicalStockCard');
     const emptyView = document.getElementById('emptyView');
     const emptyPageTitle = document.getElementById('emptyPageTitle');
     const kiteLoginButton = document.getElementById('kiteLoginButton');
@@ -960,6 +1120,7 @@
         .sort((left, right) => left[0].localeCompare(right[0]))
         .forEach(([symbol, name]) => appendChoice(seasonalityStockSelect, symbol, `${symbol} — ${name}`));
       seasonalityIndexSelect.value = 'Nifty 50';
+      historicalMonthSelect.value = String(new Date().getMonth() + 1);
       seasonalitySelectionNote.textContent = `${reference.indexGroups.reduce((total, group) => total + group.items.length, 0)} Kite-supported indices and ${reference.foStocks.length} NSE F&O stocks · rolling 10-year history · reference snapshot ${reference.asOf}.`;
     }
 
@@ -995,6 +1156,12 @@
     function resetSeasonalityData() {
       document.getElementById('seasonalityMonthBody').innerHTML = placeholderRows(seasonalityMonthLabels, 5);
       document.getElementById('seasonalityWeekdayBody').innerHTML = placeholderRows(seasonalityWeekdayLabels, 5);
+      document.getElementById('seasonalityTurnBody').innerHTML = placeholderRows(
+        ['Turn of month', 'Rest of month'],
+        4
+      );
+      document.getElementById('seasonalityHeldOutBody').innerHTML = placeholderRows(seasonalityMonthLabels, 7);
+      document.getElementById('seasonalityTurnHeldOutBody').innerHTML = placeholderRows(['Train', 'Test'], 5);
       seasonalityMonthsValue.textContent = '— of 12';
       seasonalityStrongestValue.textContent = '—';
       seasonalitySessionsValue.textContent = '—';
@@ -1004,24 +1171,15 @@
         : 'Connect Kite to load completed daily history.';
       seasonalityMonthNote.textContent = 'Monthly return and trading-range summary.';
       seasonalityWeekdayNote.textContent = 'Daily-return behaviour grouped by exchange trading weekday.';
+      document.getElementById('seasonalityTurnNote').textContent = 'Last three and first three trading sessions of each month compared with all remaining sessions.';
+      document.getElementById('seasonalityHeldOutNote').textContent = 'Load completed history to run the chronological train/test check.';
+      document.getElementById('seasonalityTurnHeldOutNote').textContent = 'The edge is the turn-window average daily return minus the rest-of-month average daily return.';
     }
 
     resetSeasonalityData();
     resetMonthlyLeaders();
     resetHistoricalMonthLeaders();
-    document.getElementById('seasonalityTurnBody').innerHTML = placeholderRows(
-      ['Turn of month', 'Rest of month'],
-      2
-    );
-    document.getElementById('seasonalityHeldOutBody').innerHTML = placeholderRows(
-      ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-      7
-    );
-    document.getElementById('seasonalityTurnHeldOutBody').innerHTML = placeholderRows(
-      ['Train', 'Test'],
-      4
-    );
-
+    updateHistoricalUniverseVisibility();
     function setNavigation(open) {
       body.classList.toggle('nav-open', open);
       menuButton.setAttribute('aria-expanded', String(open));
@@ -1033,6 +1191,79 @@
       notice.textContent = message;
       notice.classList.add('show');
       noticeTimer = window.setTimeout(() => notice.classList.remove('show'), 2800);
+    }
+
+    function signedPercentage(value, digits = 2) {
+      if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
+      const numeric = Number(value);
+      return `${numeric > 0 ? '+' : ''}${numeric.toFixed(digits)}%`;
+    }
+
+    function setSentimentBand(id, band) {
+      const element = document.getElementById(id);
+      element.className = `sentiment-band ${band || ''}`.trim();
+      element.textContent = band || 'Unavailable';
+    }
+
+    function renderDomesticSentiment(result) {
+      document.getElementById('sentimentRegimeValue').textContent = result.overall_regime;
+      document.getElementById('sentimentDomesticValue').textContent = result.domestic_tape;
+      document.getElementById('sentimentCoverageValue').textContent = `${result.available_clusters} / ${result.total_clusters}`;
+      document.getElementById('sentimentConfidenceMeta').textContent = `${result.confidence} confidence · external context pending`;
+      document.getElementById('sentimentAsOfValue').textContent = result.as_of_date;
+      document.getElementById('sentimentSourceMeta').textContent = result.source;
+
+      setSentimentBand('trendBand', result.trend.band);
+      document.getElementById('trendReason').textContent = result.trend.reason;
+      document.getElementById('trend20Value').textContent = signedPercentage(result.trend.vs_20dma_pct);
+      document.getElementById('trend50Value').textContent = signedPercentage(result.trend.vs_50dma_pct);
+      document.getElementById('trend200Value').textContent = signedPercentage(result.trend.vs_200dma_pct);
+      document.getElementById('trendSlopeValue').textContent = signedPercentage(result.trend.sma50_slope_20d_pct);
+      document.getElementById('trendMomentumValue').textContent = signedPercentage(result.trend.momentum_20d_pct);
+      document.getElementById('trendDrawdownValue').textContent = signedPercentage(result.trend.drawdown_52w_pct);
+
+      setSentimentBand('breadthBand', result.breadth.band);
+      document.getElementById('breadthReason').textContent = `${result.breadth.reason} Universe: ${result.breadth.universe}.`;
+      document.getElementById('breadth20Value').textContent = `${result.breadth.above_20dma_pct.toFixed(1)}%`;
+      document.getElementById('breadth50Value').textContent = `${result.breadth.above_50dma_pct.toFixed(1)}%`;
+      document.getElementById('breadth200Value').textContent = `${result.breadth.above_200dma_pct.toFixed(1)}%`;
+      document.getElementById('breadthAdvancesValue').textContent = result.breadth.advances.toLocaleString('en-IN');
+      document.getElementById('breadthDeclinesValue').textContent = result.breadth.declines.toLocaleString('en-IN');
+      document.getElementById('breadthCoverageValue').textContent = result.breadth.evaluated.toLocaleString('en-IN');
+
+      setSentimentBand('priceStrengthBand', result.price_strength.band);
+      document.getElementById('priceStrengthReason').textContent = result.price_strength.reason;
+      document.getElementById('nearHighValue').textContent = `${result.price_strength.near_52w_high_pct.toFixed(1)}%`;
+      document.getElementById('nearLowValue').textContent = `${result.price_strength.near_52w_low_pct.toFixed(1)}%`;
+      document.getElementById('netStrengthValue').textContent = signedPercentage(result.price_strength.net_strength_pct, 1);
+
+      setSentimentBand('volatilityBand', result.volatility.band);
+      document.getElementById('volatilityReason').textContent = result.volatility.reason;
+      document.getElementById('realisedVolValue').textContent = `${result.volatility.realised_20d_pct.toFixed(2)}%`;
+      document.getElementById('volChangeValue').textContent = `${result.volatility.five_day_change_pt > 0 ? '+' : ''}${result.volatility.five_day_change_pt.toFixed(2)} pt`;
+      document.getElementById('volPercentileValue').textContent = `${result.volatility.one_year_percentile.toFixed(1)}%`;
+    }
+
+    async function loadDomesticSentiment(showSuccess = true) {
+      refreshSentimentButton.disabled = true;
+      refreshSentimentButton.textContent = 'Refreshing…';
+      try {
+        const response = await fetch('/api/market-sentiment/domestic-core', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          showNotice('Local market-sentiment history is unavailable. Run EOD update first.');
+          return false;
+        }
+        renderDomesticSentiment(result);
+        if (showSuccess) showNotice(`Domestic sentiment updated through ${result.as_of_date}.`);
+        return true;
+      } catch (_error) {
+        showNotice('The local market-sentiment service is unavailable.');
+        return false;
+      } finally {
+        refreshSentimentButton.disabled = false;
+        refreshSentimentButton.textContent = 'Refresh local analysis';
+      }
     }
 
     function setKitePanel(open, clear = false) {
@@ -1052,6 +1283,7 @@
       refreshIndexButton.disabled = !authenticated;
       loadBreadthButton.disabled = !authenticated;
       loadSeasonalityButton.disabled = !authenticated;
+      loadHistoricalComparisonButton.disabled = !authenticated;
       seasonalityLoadStatus.textContent = authenticated
         ? 'Ready to load completed daily history.'
         : 'Connect Kite to load completed daily history.';
@@ -1100,9 +1332,56 @@
       </tr>`).join('');
     }
 
+    function yesOrNo(value) {
+      return value ? 'Yes' : 'No';
+    }
+
+    function renderTurnOfMonth(result) {
+      document.getElementById('seasonalityTurnBody').innerHTML = result.turn_rows.map((row) => `<tr>
+        <td>${escapeHtml(row.window)}</td>
+        <td>${row.count}</td>
+        <td>${formatSeasonalityPercentage(row.average_return_pct, true)}</td>
+        <td>${formatSeasonalityPercentage(row.median_return_pct, true)}</td>
+        <td>${formatSeasonalityPercentage(row.positive_sessions_pct)}</td>
+      </tr>`).join('');
+      const tValue = result.turn_t_statistic === null ? '—' : Number(result.turn_t_statistic).toFixed(2);
+      const pValue = result.turn_p_value === null ? '—' : Number(result.turn_p_value).toFixed(4);
+      document.getElementById('seasonalityTurnNote').textContent =
+        `Last three and first three trading sessions. Full-history edge ${formatSeasonalityPercentage(result.turn_edge_pct, true)} per day · t ${tValue} · p ${pValue}.`;
+    }
+
+    function renderHeldOut(result) {
+      document.getElementById('seasonalityHeldOutBody').innerHTML = result.held_out_rows.map((row) => `<tr>
+        <td>${escapeHtml(row.period)}</td>
+        <td>${row.train_count}</td>
+        <td>${formatSeasonalityPercentage(row.train_excess_pct, true)}</td>
+        <td>${yesOrNo(row.train_significant)}</td>
+        <td>${row.test_count}</td>
+        <td>${formatSeasonalityPercentage(row.test_excess_pct, true)}</td>
+        <td>${yesOrNo(row.same_direction)}</td>
+        <td>${yesOrNo(row.survived)}</td>
+      </tr>`).join('');
+      const summary = result.held_out_summary;
+      document.getElementById('seasonalityHeldOutNote').textContent =
+        `Chronological split at ${result.holdout_split_date}. ${summary.same_direction}/12 months kept the same excess-return direction; ${summary.train_significant} were significant in training after FDR adjustment; ${summary.survived} survived both halves.`;
+
+      document.getElementById('seasonalityTurnHeldOutBody').innerHTML = result.turn_held_out_rows.map((row) => `<tr>
+        <td>${escapeHtml(row.period)}</td>
+        <td>${row.from_date || '—'}</td>
+        <td>${row.to_date || '—'}</td>
+        <td>${formatSeasonalityPercentage(row.edge_pct, true)}</td>
+        <td>${row.p_value === null ? '—' : Number(row.p_value).toFixed(4)}</td>
+        <td>${yesOrNo(row.significant)}</td>
+      </tr>`).join('');
+      document.getElementById('seasonalityTurnHeldOutNote').textContent =
+        `Train and test use the same ${result.holdout_split_date} boundary. Significance uses a two-sided Welch test at p < 0.05.`;
+    }
+
     function renderSeasonality(result) {
       renderSeasonalityRows('seasonalityMonthBody', result.month_rows);
       renderSeasonalityRows('seasonalityWeekdayBody', result.weekday_rows);
+      renderTurnOfMonth(result);
+      renderHeldOut(result);
       const populatedMonths = result.month_rows.filter((row) => row.count > 0);
       const strongest = populatedMonths.reduce(
         (best, row) => best === null || row.average_return_pct > best.average_return_pct ? row : best,
@@ -1114,7 +1393,11 @@
         : '—';
       seasonalitySessionsValue.textContent = Number(result.completed_sessions).toLocaleString('en-IN');
       seasonalityDataStatus.textContent = `Kite EOD through ${result.as_of_date}`;
-      const cacheText = result.cache_hit ? ' · cached locally' : '';
+      const cacheText = result.cache_hit
+        ? ' · memory cache'
+        : result.local_history_reused
+          ? ` · local history reused · ${result.new_sessions} new sessions`
+          : ` · ${result.new_sessions || 0} sessions saved locally`;
       seasonalityLoadStatus.textContent = `${result.from_date} to ${result.as_of_date}${cacheText}`;
       seasonalityMonthNote.textContent = 'Return: close-to-close. Range: (monthly high − monthly low) / monthly low. The current incomplete month is excluded.';
       seasonalityWeekdayNote.textContent = 'Completed daily sessions grouped by exchange weekday. Return: close-to-close; range: (high − low) / low.';
@@ -1215,8 +1498,10 @@
       historicalIndexLagger.textContent = '—';
       historicalStockLeader.textContent = '—';
       historicalStockLagger.textContent = '—';
-      historicalIndexMeta.textContent = 'Current calendar month · 10-year universe history not loaded';
-      historicalStockMeta.textContent = 'Current calendar month · 10-year universe history not loaded';
+      historicalIndexMeta.textContent = 'Selected month · 10-year universe history not loaded';
+      historicalStockMeta.textContent = 'Selected month · 10-year universe history not loaded';
+      historicalComparisonStatus.textContent = 'Run EOD update once to build the local 10-year history.';
+      updateHistoricalUniverseVisibility();
     }
 
     function formatHistoricalRank(row) {
@@ -1231,19 +1516,30 @@
       const cacheText = result.cache_hit ? ' · cached locally' : '';
       historicalIndexMeta.textContent = `${result.calendar_month} ${result.lookback_years}-year averages · ${result.index.evaluated}/${result.indices_requested} indices${cacheText}`;
       historicalStockMeta.textContent = `${result.calendar_month} ${result.lookback_years}-year averages · ${result.stock.evaluated}/${result.stocks_requested} F&O stocks${cacheText}`;
+      historicalComparisonStatus.textContent = `${result.calendar_month} comparison ready${cacheText}.`;
+      updateHistoricalUniverseVisibility();
+    }
+
+    function updateHistoricalUniverseVisibility() {
+      const universe = historicalUniverseSelect.value;
+      historicalIndexCard.hidden = universe === 'stock';
+      historicalStockCard.hidden = universe === 'index';
     }
 
     async function loadHistoricalMonthLeaders() {
       const symbols = window.PG_REFERENCE_UNIVERSES.foStocks.map(([symbol]) => symbol);
-      historicalIndexMeta.textContent = 'Loading 10-year index history from Kite…';
-      historicalStockMeta.textContent = 'Loading 10-year F&O history from Kite…';
-      eodUpdateButton.textContent = 'Building historical ranks…';
+      const selectedMonth = Number(historicalMonthSelect.value);
+      historicalIndexMeta.textContent = 'Reading 10-year index history…';
+      historicalStockMeta.textContent = 'Reading 10-year F&O history…';
+      historicalComparisonStatus.textContent = 'Loading the selected historical comparison…';
+      loadHistoricalComparisonButton.disabled = true;
+      loadHistoricalComparisonButton.textContent = 'Loading comparison…';
       try {
         const response = await fetch('/api/kite/historical-month-leaders', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           cache: 'no-store',
-          body: JSON.stringify({ symbols })
+          body: JSON.stringify({ symbols, month: selectedMonth })
         });
         const result = await response.json();
         if (!response.ok || result.ok !== true) {
@@ -1260,6 +1556,9 @@
         resetHistoricalMonthLeaders();
         showNotice('The local historical-ranking service is unavailable.');
         return false;
+      } finally {
+        loadHistoricalComparisonButton.textContent = 'Show historical comparison';
+        loadHistoricalComparisonButton.disabled = !kiteLoginButton.classList.contains('kite-authenticated');
       }
     }
 
@@ -1610,8 +1909,11 @@
       }
     });
     refreshIndexButton.addEventListener('click', loadIndexSnapshot);
+    refreshSentimentButton.addEventListener('click', () => loadDomesticSentiment(true));
     loadBreadthButton.addEventListener('click', loadMarketBreadth);
     loadSeasonalityButton.addEventListener('click', loadSeasonality);
+    loadHistoricalComparisonButton.addEventListener('click', loadHistoricalMonthLeaders);
+    historicalUniverseSelect.addEventListener('change', updateHistoricalUniverseVisibility);
     eodUpdateButton.addEventListener('click', runEodUpdate);
     document.querySelectorAll('.sortable-heading').forEach((heading) => {
       heading.querySelector('.sort-button').addEventListener('click', () => {
@@ -1637,11 +1939,16 @@
         document.querySelectorAll('.nav-button').forEach((item) => item.classList.remove('active'));
         button.classList.add('active');
         const isDashboard = button.dataset.page === 'Dashboard';
+        const isMarketSentiment = button.dataset.page === 'Market Sentiment';
         const isSeasonality = button.dataset.page === 'Seasonality Analysis';
         dashboardView.hidden = !isDashboard;
+        marketSentimentView.hidden = !isMarketSentiment;
         seasonalityView.hidden = !isSeasonality;
-        emptyView.hidden = isDashboard || isSeasonality;
-        emptyPageTitle.textContent = isDashboard || isSeasonality ? '' : button.dataset.page;
+        emptyView.hidden = isDashboard || isMarketSentiment || isSeasonality;
+        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isSeasonality ? '' : button.dataset.page;
+        if (isMarketSentiment && document.getElementById('sentimentAsOfValue').textContent === '—') {
+          loadDomesticSentiment(false);
+        }
         if (window.innerWidth <= 700) setNavigation(false);
       });
     });
