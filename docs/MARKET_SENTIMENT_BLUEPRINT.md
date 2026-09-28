@@ -262,6 +262,9 @@ These are review prompts, not target weights or automated transactions.
 - [x] Store canonical, hashed daily evidence snapshots with an explicit model
   version. Exact reruns are idempotent; changed same-day evidence is preserved
   as another immutable revision for audit rather than overwritten.
+- [x] Add a collapsible plain-language interpretation guide that exposes the
+  provisional domestic reading, freshness, F&O coverage, cluster coverage, and
+  limitations before a composite score is activated.
 - [ ] Define and freeze the first candidate regime rule version separately from
   the evidence-snapshot version.
 - Run walk-forward and event validation.

@@ -5,7 +5,7 @@ Updated: 2026-09-28
 ## Saved state
 
 - Branch: `main`
-- Latest pushed commit before this handoff: `d5f6496` — Add session handoff for regime validation
+- Latest pushed commit before this handoff: `90a62d1` — Improve sentiment workflow and add F&O workspace
 - Phase 4 foundation commit: `d7fcb23` — Start versioned sentiment validation snapshots
 - Verification at handoff: 55 automated tests passed; Python and embedded browser JavaScript syntax checks passed.
 
@@ -39,6 +39,16 @@ portfolio instruction.
   Positive, Mixed, Negative, Monitoring only, and Score not ready. Future regime
   labels use Positive market, Cautiously positive, Uncertain market, Weak market,
   High-risk market, Recovering market, and Not enough reliable data.
+- Standardized user-facing dates across the site as `DD-MMM-YY`, while keeping
+  provider and storage dates unchanged internally.
+- Fixed a date-formatter initialization error that prevented the theme, Kite
+  login, and EOD update controls from receiving their event handlers. Browser
+  checks confirmed theme switching, Kite-panel opening, and staged EOD progress.
+- Added a collapsible score-interpretation guide at the top of Market Sentiment.
+  It explains Positive, Mixed, and Negative readings and builds a live snapshot
+  from the domestic evidence count, data freshness, F&O coverage, and available
+  clusters. It explicitly states that the composite score is not active and the
+  reading is context rather than a buy/sell instruction.
 
 ## Next work
 
@@ -61,10 +71,10 @@ silently substitute an ETF or scraped proxy.
 
 ## Resume note
 
-The local server was restarted after the history and VIX corrections. Kite
-credentials remain in server memory only, so reconnect Kite whenever the local
-server is restarted. Run EOD Update after reconnecting to advance stale NIFTY 50
-and F&O equity histories; the updater now requests only missing dates.
+Kite credentials remain in server memory only, so reconnect Kite whenever the
+local server is restarted. The latest browser verification completed through
+`28-Sep-26` with all 210 F&O stocks aligned. Future EOD updates request only
+missing dates.
 
 Do not store API keys, API secrets, request tokens, or access tokens in this
 handoff or in Git.

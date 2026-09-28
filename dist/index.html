@@ -580,6 +580,49 @@
     .sentiment-band.constructive { color: #187a42; background: #e8f7ee; }
     .sentiment-band.mixed { color: #94620a; background: #fff4db; }
     .sentiment-band.defensive { color: #a42f35; background: #fdebec; }
+    .score-guide { margin-bottom: 18px; }
+    .score-guide summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      cursor: pointer;
+      list-style: none;
+      font-weight: 700;
+    }
+    .score-guide summary::-webkit-details-marker { display: none; }
+    .score-guide summary::after { content: "+"; color: var(--muted); font-size: 16px; }
+    .score-guide[open] summary::after { content: "−"; }
+    .score-guide-status {
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      text-align: right;
+    }
+    .score-guide-body { padding-top: 14px; }
+    .score-guide-current {
+      margin: 0 0 14px;
+      padding: 11px 13px;
+      border-radius: 5px;
+      color: var(--text-soft);
+      background: var(--surface-soft);
+      font-size: 13px;
+    }
+    .score-guide-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .score-guide-item {
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .score-guide-item strong { display: block; margin-bottom: 4px; color: var(--ink); font-size: 13px; }
+    .score-guide-note { margin: 12px 0 0; color: var(--muted); font-size: 12px; }
     .source-state-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 28px; }
     .source-state { padding: 16px; border: 1px solid var(--line); border-radius: 6px; background: #fcfcfc; }
     .source-state strong { display: block; margin-bottom: 5px; font-size: 14px; }
@@ -737,6 +780,8 @@
       .split-panels { grid-template-columns: 1fr; }
       .universe-controls { grid-template-columns: 1fr; }
       .universe-source { grid-column: 1; }
+      .score-guide-grid { grid-template-columns: 1fr; }
+      .score-guide-status { display: none; }
     }
 
     @media (max-width: 430px) {
@@ -933,6 +978,22 @@
             </div>
             <button class="panel-button" id="refreshSentimentButton" type="button">Refresh local analysis</button>
           </div>
+
+          <details class="panel score-guide" id="sentimentScoreGuide">
+            <summary>
+              <span>How to read the sentiment result</span>
+              <span class="score-guide-status" id="scoreInterpretationStatus">Score not ready · run EOD update</span>
+            </summary>
+            <div class="score-guide-body">
+              <p class="score-guide-current" id="scoreInterpretationText">The full score is not active yet. Load current EOD data to view the provisional domestic-market reading.</p>
+              <div class="score-guide-grid" aria-label="Sentiment interpretation bands">
+                <div class="score-guide-item"><strong class="positive">Positive</strong>Most active evidence points to healthier market conditions. Treat this as supportive context, not an automatic buy signal.</div>
+                <div class="score-guide-item"><strong>Mixed</strong>The evidence disagrees or lacks breadth. Review the individual cards before changing portfolio risk.</div>
+                <div class="score-guide-item"><strong class="negative">Negative</strong>Multiple inputs point to market stress. Review exposure and risk controls; this is not an automatic sell signal.</div>
+              </div>
+              <p class="score-guide-note"><strong>Reliability:</strong> fresher data, broader stock coverage and more available evidence clusters make the reading more useful. “Score not ready” means the six-cluster composite is still under development; the domestic reading is provisional.</p>
+            </div>
+          </details>
 
           <section class="summary-grid sentiment-summary" aria-label="Market regime summary">
             <article class="summary-card">
@@ -1433,6 +1494,7 @@
     let priceStrengthSeries = [];
     let futuresOiRows = [];
     let futuresOiSort = { key: 'underlying', direction: 'asc' };
+    const displayMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     function currentTheme() {
       return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
@@ -1479,7 +1541,7 @@
         .forEach(([symbol, name]) => appendChoice(seasonalityStockSelect, symbol, `${symbol} — ${name}`));
       seasonalityIndexSelect.value = 'Nifty 50';
       historicalMonthSelect.value = String(new Date().getMonth() + 1);
-      seasonalitySelectionNote.textContent = `${reference.indexGroups.reduce((total, group) => total + group.items.length, 0)} Kite-supported indices and ${reference.foStocks.length} NSE F&O stocks · rolling 10-year history · reference snapshot ${reference.asOf}.`;
+      seasonalitySelectionNote.textContent = `${reference.indexGroups.reduce((total, group) => total + group.items.length, 0)} Kite-supported indices and ${reference.foStocks.length} NSE F&O stocks · rolling 10-year history · reference snapshot ${formatDisplayDate(reference.asOf)}.`;
     }
 
     function selectSeasonalityIndex() {
@@ -1602,9 +1664,9 @@
           <td>${signedPercentage(row.oi_change_pct)}</td>
           <td>${row.volume.toLocaleString('en-IN')}</td>
           <td>${row.open_interest.toLocaleString('en-IN')}</td>
-          <td>${row.expiry}</td>
+          <td>${formatDisplayDate(row.expiry)}</td>
           <td>${row.tradingsymbol}</td>
-          <td>${row.from_date} → ${row.to_date}</td>
+          <td>${formatDisplayDate(row.from_date)} → ${formatDisplayDate(row.to_date)}</td>
         </tr>
       `).join('');
     }
@@ -1688,9 +1750,9 @@
       if (rows.length) {
         context.fillStyle = chartLabel;
         context.textAlign = 'left';
-        context.fillText(rows[0].date.slice(5), left, height - 8);
+        context.fillText(formatDisplayDate(rows[0].date), left, height - 8);
         context.textAlign = 'right';
-        context.fillText(rows[rows.length - 1].date.slice(5), right, height - 8);
+        context.fillText(formatDisplayDate(rows[rows.length - 1].date), right, height - 8);
       }
       return { left, right, top, bottom, zeroY };
     }
@@ -1800,7 +1862,7 @@
         });
         context.stroke();
       });
-      note.textContent = `${priceStrengthSeries.length} aligned sessions shown · latest ${priceStrengthSeries[priceStrengthSeries.length - 1].date}.`;
+      note.textContent = `${priceStrengthSeries.length} aligned sessions shown · latest ${formatDisplayDate(priceStrengthSeries[priceStrengthSeries.length - 1].date)}.`;
     }
 
     function renderDomesticSentiment(result) {
@@ -1814,18 +1876,32 @@
       document.getElementById('sentimentDomesticValue').textContent = regimeLabels[result.domestic_tape] || result.domestic_tape;
       document.getElementById('sentimentCoverageValue').textContent = `${result.available_clusters} / ${result.total_clusters}`;
       document.getElementById('sentimentConfidenceMeta').textContent = `${result.confidence} confidence · external context pending`;
-      document.getElementById('sentimentAsOfValue').textContent = result.as_of_date;
+      document.getElementById('sentimentAsOfValue').textContent = formatDisplayDate(result.as_of_date);
       document.getElementById('sentimentSourceMeta').textContent = result.source;
 
       const freshness = result.freshness;
       const freshnessLabels = { fresh: 'Fresh', pending: 'Pending latest session', stale: 'Stale' };
       document.getElementById('sentimentFreshnessState').textContent = freshnessLabels[freshness.state] || freshness.state;
-      document.getElementById('sentimentLatestSession').textContent = freshness.latest_session;
-      document.getElementById('sentimentExpectedSession').textContent = freshness.expected_through;
-      document.getElementById('sentimentRetrievedAt').textContent = new Date(freshness.retrieved_at).toLocaleString('en-IN');
+      document.getElementById('sentimentLatestSession').textContent = formatDisplayDate(freshness.latest_session);
+      document.getElementById('sentimentExpectedSession').textContent = formatDisplayDate(freshness.expected_through);
+      document.getElementById('sentimentRetrievedAt').textContent = formatDisplayDateTime(freshness.retrieved_at);
 
       const breadthCoverage = result.breadth;
       document.getElementById('sentimentStockCoverage').textContent = `${breadthCoverage.evaluated} / ${breadthCoverage.universe_total} (${breadthCoverage.coverage_pct.toFixed(1)}%)`;
+      const domesticLabel = regimeLabels[result.domestic_tape] || result.domestic_tape;
+      const activeBands = [result.trend.band, result.breadth.band, result.price_strength.band, result.volatility.band];
+      const positiveInputs = activeBands.filter((band) => band === 'constructive').length;
+      const negativeInputs = activeBands.filter((band) => band === 'defensive').length;
+      const interpretationLead = domesticLabel === 'Positive'
+        ? `${positiveInputs} of 4 domestic inputs are supportive, with no broad stress signal.`
+        : domesticLabel === 'Negative'
+          ? `${negativeInputs} of 4 domestic inputs show stress.`
+          : 'Domestic inputs are divided, so there is no clear directional message.';
+      document.getElementById('scoreInterpretationStatus').textContent = `Score not ready · ${domesticLabel} domestic reading`;
+      document.getElementById('scoreInterpretationText').textContent =
+        `${interpretationLead} Data is ${String(freshnessLabels[freshness.state] || freshness.state).toLowerCase()}, `
+        + `stock coverage is ${breadthCoverage.coverage_pct.toFixed(1)}%, and ${result.available_clusters} of ${result.total_clusters} evidence clusters are available. `
+        + 'Use the reading as portfolio context and confirm it against the individual evidence cards.';
       const missingStocks = breadthCoverage.missing_stocks;
       const missingElement = document.getElementById('sentimentMissingStocks');
       if (!missingStocks.length) {
@@ -1836,7 +1912,7 @@
           insufficient_history: 'fewer than 252 sessions',
           latest_session_mismatch: 'latest session does not align',
         };
-        missingElement.textContent = `Missing ${missingStocks.length}: ${missingStocks.map((item) => `${item.stock} (${reasonLabels[item.reason] || item.reason}${item.last_session ? `; last ${item.last_session}` : ''})`).join(', ')}`;
+        missingElement.textContent = `Missing ${missingStocks.length}: ${missingStocks.map((item) => `${item.stock} (${reasonLabels[item.reason] || item.reason}${item.last_session ? `; last ${formatDisplayDate(item.last_session)}` : ''})`).join(', ')}`;
       }
 
       setSentimentBand('trendBand', result.trend.band);
@@ -1887,7 +1963,7 @@
       const flows = result.institutional_flows;
       if (flows.available) {
         setSentimentBand('institutionalFlowBand', flows.band);
-        document.getElementById('institutionalFlowReason').textContent = `${flows.reason} ${flows.market_scope} · ${flows.as_of_date} · ${flows.publication_status}.`;
+        document.getElementById('institutionalFlowReason').textContent = `${flows.reason} ${flows.market_scope} · ${formatDisplayDate(flows.as_of_date)} · ${flows.publication_status}.`;
         document.getElementById('fiiFlowLegend').textContent = `FII/FPI latest ${signedCrore(flows.latest.fii_fpi.net_crore)}`;
         document.getElementById('diiFlowLegend').textContent = `DII latest ${signedCrore(flows.latest.dii.net_crore)}`;
         institutionalFlowSeries = flows.series;
@@ -1904,7 +1980,7 @@
       const confirmedFpi = result.confirmed_fpi;
       if (confirmedFpi && confirmedFpi.available) {
         setSentimentBand('confirmedFpiBand', 'confirmed');
-        document.getElementById('confirmedFpiReason').textContent = `Custodian-confirmed equity investment · reporting date ${confirmedFpi.as_of_date} · ${confirmedFpi.reporting_lag_calendar_days} calendar-day publication lag.`;
+        document.getElementById('confirmedFpiReason').textContent = `Custodian-confirmed equity investment · reporting date ${formatDisplayDate(confirmedFpi.as_of_date)} · ${confirmedFpi.reporting_lag_calendar_days} calendar-day publication lag.`;
         document.getElementById('confirmedFpiSubtotal').textContent = signedCrore(confirmedFpi.latest.subtotal.net_investment_crore);
         document.getElementById('confirmedFpiExchange').textContent = signedCrore(confirmedFpi.latest.stock_exchange.net_investment_crore);
         document.getElementById('confirmedFpiPrimary').textContent = signedCrore(confirmedFpi.latest.primary_market_and_others.net_investment_crore);
@@ -1912,7 +1988,7 @@
           ? 'Building history'
           : signedCrore(confirmedFpi.five_session_net_crore);
         document.getElementById('confirmedFpiCoverage').textContent = `${confirmedFpi.session_count} confirmed reporting dates stored. ${confirmedFpi.comparison_note}`;
-        document.getElementById('confirmedFpiSourceState').textContent = `NSDL confirmed equity · ${confirmedFpi.as_of_date} · separate from NSE provisional flows`;
+        document.getElementById('confirmedFpiSourceState').textContent = `NSDL confirmed equity · ${formatDisplayDate(confirmedFpi.as_of_date)} · separate from NSE provisional flows`;
       } else {
         setSentimentBand('confirmedFpiBand', '');
         document.getElementById('confirmedFpiReason').textContent = confirmedFpi
@@ -1926,7 +2002,7 @@
       const macro = result.macro_context;
       if (macro && macro.available) {
         setSentimentBand('macroContextBand', macro.band);
-        document.getElementById('macroContextReason').textContent = `${macro.reason} FX ${macro.metrics.usd_inr.as_of_date} · rates ${macro.metrics.india_10y_gsec_yield.as_of_date}.`;
+        document.getElementById('macroContextReason').textContent = `${macro.reason} FX ${formatDisplayDate(macro.metrics.usd_inr.as_of_date)} · rates ${formatDisplayDate(macro.metrics.india_10y_gsec_yield.as_of_date)}.`;
         document.getElementById('usdInrValue').textContent = macro.metrics.usd_inr.level.toFixed(4);
         document.getElementById('eurInrValue').textContent = macro.metrics.eur_inr.level.toFixed(4);
         document.getElementById('gbpInrValue').textContent = macro.metrics.gbp_inr.level.toFixed(4);
@@ -1952,7 +2028,7 @@
       const globalRisk = result.global_risk;
       if (globalRisk && globalRisk.available) {
         setSentimentBand('globalRiskBand', globalRisk.band);
-        document.getElementById('globalRiskReason').textContent = `${globalRisk.reason} Components span ${globalRisk.oldest_component_date} to ${globalRisk.as_of_date}.`;
+        document.getElementById('globalRiskReason').textContent = `${globalRisk.reason} Components span ${formatDisplayDate(globalRisk.oldest_component_date)} to ${formatDisplayDate(globalRisk.as_of_date)}.`;
         const sp500 = globalRisk.metrics.sp500;
         const usVix = globalRisk.metrics.us_vix;
         const broadUsd = globalRisk.metrics.broad_usd;
@@ -1970,7 +2046,7 @@
         if (usdJpy.twenty_session_change_pct !== null) globalParts.push(`USD/JPY ${signedPercentage(usdJpy.twenty_session_change_pct)}`);
         if (brent.twenty_session_change_pct !== null) globalParts.push(`Brent ${signedPercentage(brent.twenty_session_change_pct)}`);
         document.getElementById('globalRiskChanges').textContent = `${globalParts.join(' · ')} · descriptive only; regime scoring off.`;
-        document.getElementById('globalRiskSourceState').textContent = `FRED EOD series · latest component ${globalRisk.as_of_date} · scoring off`;
+        document.getElementById('globalRiskSourceState').textContent = `FRED EOD series · latest component ${formatDisplayDate(globalRisk.as_of_date)} · scoring off`;
       } else {
         setSentimentBand('globalRiskBand', '');
         document.getElementById('globalRiskReason').textContent = globalRisk ? globalRisk.reason : 'Permitted global EOD series have not been loaded.';
@@ -1982,7 +2058,7 @@
       const futuresOi = result.futures_oi;
       if (futuresOi && futuresOi.available) {
         setSentimentBand('futuresOiBand', 'unranked');
-        document.getElementById('futuresOiReason').textContent = `${futuresOi.reason} Latest session ${futuresOi.as_of_date}.`;
+        document.getElementById('futuresOiReason').textContent = `${futuresOi.reason} Latest session ${formatDisplayDate(futuresOi.as_of_date)}.`;
         document.getElementById('futuresOiCoverage').textContent = futuresOi.latest_coverage.toLocaleString('en-IN');
         document.getElementById('futuresOiComparable').textContent = futuresOi.comparable_count.toLocaleString('en-IN');
         document.getElementById('futuresOiRollovers').textContent = futuresOi.rollover_baseline_count.toLocaleString('en-IN');
@@ -2034,7 +2110,7 @@
           return false;
         }
         renderDomesticSentiment(result);
-        if (showSuccess) showNotice(`Domestic sentiment updated through ${result.as_of_date}.`);
+        if (showSuccess) showNotice(`Domestic sentiment updated through ${formatDisplayDate(result.as_of_date)}.`);
         return true;
       } catch (_error) {
         showNotice('The local market-sentiment service is unavailable.');
@@ -2084,6 +2160,32 @@
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
       });
+    }
+
+    function displayDateParts(year, month, day) {
+      const monthName = displayMonthNames[Number(month) - 1];
+      if (!monthName) return null;
+      return `${String(day).padStart(2, '0')}-${monthName}-${String(year).slice(-2)}`;
+    }
+
+    function formatDisplayDate(value) {
+      if (!value) return '—';
+      const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!match) return String(value);
+      return displayDateParts(match[1], match[2], match[3]) || String(value);
+    }
+
+    function formatDisplayDateTime(value) {
+      if (!value) return '—';
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return String(value);
+      const dateText = displayDateParts(parsed.getFullYear(), parsed.getMonth() + 1, parsed.getDate());
+      const timeText = parsed.toLocaleTimeString('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+      return `${dateText}, ${timeText}`;
     }
 
     function escapeHtml(value) {
@@ -2144,18 +2246,18 @@
       </tr>`).join('');
       const summary = result.held_out_summary;
       document.getElementById('seasonalityHeldOutNote').textContent =
-        `Chronological split at ${result.holdout_split_date}. ${summary.same_direction}/12 months kept the same excess-return direction; ${summary.train_significant} were significant in training after FDR adjustment; ${summary.survived} survived both halves.`;
+        `Chronological split at ${formatDisplayDate(result.holdout_split_date)}. ${summary.same_direction}/12 months kept the same excess-return direction; ${summary.train_significant} were significant in training after FDR adjustment; ${summary.survived} survived both halves.`;
 
       document.getElementById('seasonalityTurnHeldOutBody').innerHTML = result.turn_held_out_rows.map((row) => `<tr>
         <td>${escapeHtml(row.period)}</td>
-        <td>${row.from_date || '—'}</td>
-        <td>${row.to_date || '—'}</td>
+        <td>${formatDisplayDate(row.from_date)}</td>
+        <td>${formatDisplayDate(row.to_date)}</td>
         <td>${formatSeasonalityPercentage(row.edge_pct, true)}</td>
         <td>${row.p_value === null ? '—' : Number(row.p_value).toFixed(4)}</td>
         <td>${yesOrNo(row.significant)}</td>
       </tr>`).join('');
       document.getElementById('seasonalityTurnHeldOutNote').textContent =
-        `Train and test use the same ${result.holdout_split_date} boundary. Significance uses a two-sided Welch test at p < 0.05.`;
+        `Train and test use the same ${formatDisplayDate(result.holdout_split_date)} boundary. Significance uses a two-sided Welch test at p < 0.05.`;
     }
 
     function renderSeasonality(result) {
@@ -2173,13 +2275,13 @@
         ? `${strongest.period} ${formatSeasonalityPercentage(strongest.average_return_pct, true)}`
         : '—';
       seasonalitySessionsValue.textContent = Number(result.completed_sessions).toLocaleString('en-IN');
-      seasonalityDataStatus.textContent = `Kite EOD through ${result.as_of_date}`;
+      seasonalityDataStatus.textContent = `Kite EOD through ${formatDisplayDate(result.as_of_date)}`;
       const cacheText = result.cache_hit
         ? ' · memory cache'
         : result.local_history_reused
           ? ` · local history reused · ${result.new_sessions} new sessions`
           : ` · ${result.new_sessions || 0} sessions saved locally`;
-      seasonalityLoadStatus.textContent = `${result.from_date} to ${result.as_of_date}${cacheText}`;
+      seasonalityLoadStatus.textContent = `${formatDisplayDate(result.from_date)} to ${formatDisplayDate(result.as_of_date)}${cacheText}`;
       seasonalityMonthNote.textContent = 'Return: close-to-close. Range: (monthly high − monthly low) / monthly low. The current incomplete month is excluded.';
       seasonalityWeekdayNote.textContent = 'Completed daily sessions grouped by exchange weekday. Return: close-to-close; range: (high − low) / low.';
     }
@@ -2240,7 +2342,7 @@
       nifty50MonthReturn.classList.remove('positive', 'negative');
       if (niftyReturn > 0) nifty50MonthReturn.classList.add('positive');
       if (niftyReturn < 0) nifty50MonthReturn.classList.add('negative');
-      nifty50MonthMeta.textContent = `NIFTY 50 MTD through ${result.as_of_date}`;
+      nifty50MonthMeta.textContent = `NIFTY 50 MTD through ${formatDisplayDate(result.as_of_date)}`;
       bestMonthIndex.textContent = `${result.best_index.instrument} ${formatSeasonalityPercentage(result.best_index.return_pct, true)}`;
       bestMonthStock.textContent = `${result.best_stock.instrument} ${formatSeasonalityPercentage(result.best_stock.return_pct, true)}`;
       const cacheText = result.cache_hit ? ' · cached locally' : '';
@@ -2390,8 +2492,7 @@
           <td><span class="status"><span class="status-dot"></span>Live snapshot</span></td>
         </tr>`);
       indexSnapshotBody.innerHTML = availableRows.join('');
-      const retrieved = new Date(result.retrieved_at);
-      const retrievalText = retrieved.toLocaleString('en-IN');
+      const retrievalText = formatDisplayDateTime(result.retrieved_at);
       indexSnapshotNote.textContent = `Kite OHLC snapshot retrieved ${retrievalText}. Only indices available in Kite are shown; previous close is the last trading day’s close.`;
       currentQuotesStatus.textContent = `${result.rows.length} indices loaded`;
     }
@@ -2403,7 +2504,7 @@
       updateEodIndexCard(niftyItValue, niftyItMeta, rowsByName.get('Nifty IT'));
       updateEodIndexCard(niftyEnergyValue, niftyEnergyMeta, rowsByName.get('Nifty Energy'));
       const dates = result.rows.map((row) => row.as_of_date).sort();
-      dashboardAsOf.textContent = `Completed close · ${dates[dates.length - 1]}`;
+      dashboardAsOf.textContent = `Completed close · ${formatDisplayDate(dates[dates.length - 1])}`;
     }
 
     async function loadEodIndexSummary() {
@@ -2499,8 +2600,8 @@
       marketBreadthRows = [...result.rows];
       renderMarketBreadthRows();
       const cacheText = result.cache_hit ? ' · cached locally' : '';
-      marketBreadthNote.textContent = `NIFTY 500 breadth as of ${result.as_of_date}: ${result.evaluated_count}/${result.universe_count} securities evaluated${cacheText}. 1d chg is the percentage-point change in %>20DMA. Prices: Kite daily candles; classification: official NIFTY 500 constituent file.`;
-      eodDatasetStatus.textContent = `Updated through ${result.as_of_date}`;
+      marketBreadthNote.textContent = `NIFTY 500 breadth as of ${formatDisplayDate(result.as_of_date)}: ${result.evaluated_count}/${result.universe_count} securities evaluated${cacheText}. 1d chg is the percentage-point change in %>20DMA. Prices: Kite daily candles; classification: official NIFTY 500 constituent file.`;
+      eodDatasetStatus.textContent = `Updated through ${formatDisplayDate(result.as_of_date)}`;
     }
 
     async function loadMarketBreadth() {
