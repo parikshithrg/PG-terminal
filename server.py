@@ -129,6 +129,7 @@ SEASONALITY_LOOKBACK_YEARS = 10
 SEASONALITY_HISTORY_CHUNK_DAYS = 1800
 HISTORICAL_REQUEST_INTERVAL_SECONDS = 0.36
 FNO_UNIVERSE_EXPECTED = 210
+PRICE_STRENGTH_SERIES_SESSIONS = 126
 FUTURES_PRICE_NOISE_PCT = 0.25
 FUTURES_OI_NOISE_PCT = 1.0
 FUTURES_MAX_COMPARISON_GAP_DAYS = 4
@@ -1939,7 +1940,11 @@ def calculate_domestic_sentiment_core(
         volatility_band = "constructive"
         volatility_reason = "Realised volatility is below its elevated-risk range."
 
-    ordered_vix = sorted(india_vix_candles or [], key=lambda item: item["date"])
+    ordered_vix = [
+        row
+        for row in sorted(india_vix_candles or [], key=lambda item: item["date"])
+        if row["date"] <= as_of
+    ]
     if len(ordered_vix) >= 252 and ordered_vix[-1]["date"] == as_of:
         vix_closes = [float(row["close"]) for row in ordered_vix]
         vix_level = vix_closes[-1]
@@ -1972,6 +1977,7 @@ def calculate_domestic_sentiment_core(
         }
 
     eligible: list[list[float]] = []
+    eligible_by_date: list[dict[date, float]] = []
     missing_stocks: list[dict[str, object]] = []
     for stock_name, history in sorted(stock_histories.items()):
         ordered = sorted(history, key=lambda item: item["date"])
@@ -1995,6 +2001,7 @@ def calculate_domestic_sentiment_core(
             )
             continue
         eligible.append([float(row["close"]) for row in ordered])
+        eligible_by_date.append({row["date"]: float(row["close"]) for row in ordered})
     if not eligible:
         raise ValueError("domestic_breadth_unavailable")
 
@@ -2005,11 +2012,43 @@ def calculate_domestic_sentiment_core(
     declines = sum(series[-1] < series[-2] for series in eligible)
     unchanged = len(eligible) - advances - declines
     advance_decline_ratio = advances / declines if declines else None
-    near_high = sum(series[-1] >= max(series[-252:]) * 0.95 for series in eligible)
-    near_low = sum(series[-1] <= min(series[-252:]) * 1.05 for series in eligible)
-    near_high_pct = 100 * near_high / len(eligible)
-    near_low_pct = 100 * near_low / len(eligible)
-    price_strength = near_high_pct - near_low_pct
+    common_dates = sorted(
+        set.intersection(*(set(series) for series in eligible_by_date))
+    )
+    price_strength_series: list[dict[str, object]] = []
+    if len(common_dates) >= 252:
+        first_evaluation = max(251, len(common_dates) - PRICE_STRENGTH_SERIES_SESSIONS)
+        for position in range(first_evaluation, len(common_dates)):
+            window_dates = common_dates[position - 251 : position + 1]
+            evaluation_date = common_dates[position]
+            near_high_count = 0
+            near_low_count = 0
+            for history in eligible_by_date:
+                window = [history[session] for session in window_dates]
+                latest = window[-1]
+                near_high_count += latest >= max(window) * 0.95
+                near_low_count += latest <= min(window) * 1.05
+            high_pct = 100 * near_high_count / len(eligible_by_date)
+            low_pct = 100 * near_low_count / len(eligible_by_date)
+            price_strength_series.append(
+                {
+                    "date": evaluation_date.isoformat(),
+                    "near_52w_high_pct": round(high_pct, 1),
+                    "near_52w_low_pct": round(low_pct, 1),
+                    "net_strength_pct": round(high_pct - low_pct, 1),
+                }
+            )
+    if price_strength_series:
+        latest_strength = price_strength_series[-1]
+        near_high_pct = float(latest_strength["near_52w_high_pct"])
+        near_low_pct = float(latest_strength["near_52w_low_pct"])
+        price_strength = float(latest_strength["net_strength_pct"])
+    else:
+        near_high = sum(series[-1] >= max(series[-252:]) * 0.95 for series in eligible)
+        near_low = sum(series[-1] <= min(series[-252:]) * 1.05 for series in eligible)
+        near_high_pct = 100 * near_high / len(eligible)
+        near_low_pct = 100 * near_low / len(eligible)
+        price_strength = near_high_pct - near_low_pct
     above20 = percent_above(20)
     above50 = percent_above(50)
     above200 = percent_above(200)
@@ -2108,6 +2147,8 @@ def calculate_domestic_sentiment_core(
             "near_52w_high_pct": round(near_high_pct, 1),
             "near_52w_low_pct": round(near_low_pct, 1),
             "net_strength_pct": round(price_strength, 1),
+            "series": price_strength_series,
+            "series_window_sessions": PRICE_STRENGTH_SERIES_SESSIONS,
         },
         "volatility": {
             "band": volatility_band,
@@ -2954,6 +2995,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             return
 
         now = datetime.now(INDIA_TIMEZONE)
+        price_history_through = completed_history_date(now)
         cache_key = hashlib.sha256(
             f"{selected_month}\n{SEASONALITY_LOOKBACK_YEARS}\n".encode("ascii")
             + "\n".join(symbols).encode("ascii")
@@ -2961,7 +3003,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         with _SESSION_LOCK:
             cached_key = _HISTORICAL_MONTH_LEADERS_CACHE.get("key")
             cached_payload = _HISTORICAL_MONTH_LEADERS_CACHE.get("payload")
-        if cached_key == cache_key and isinstance(cached_payload, dict):
+        if (
+            cached_key == cache_key
+            and isinstance(cached_payload, dict)
+            and cached_payload.get("price_history_requested_through")
+            == price_history_through.isoformat()
+        ):
             self._send_json(HTTPStatus.OK, {**cached_payload, "cache_hit": True})
             return
         if not _HISTORICAL_MONTH_LEADERS_LOCK.acquire(blocking=False):
@@ -2990,12 +3037,27 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
 
             def evaluate(kind: str, instrument: str, token: str) -> tuple[float, int] | None:
                 nonlocal total_requests
+                coverage = store.coverage(kind=kind, display_name=instrument)
+                last_stored = coverage["last_session"]
+                needs_sync = last_stored is None or last_stored < price_history_through
                 with _SESSION_LOCK:
                     cache_item = _SEASONALITY_CACHE.get((kind, instrument))
                 cached = None
                 if cache_item and time.monotonic() - float(cache_item["created_at"]) < SEASONALITY_CACHE_SECONDS:
                     cached = cache_item.get("payload")
-                if not isinstance(cached, dict):
+                if needs_sync:
+                    if total_requests:
+                        time.sleep(HISTORICAL_REQUEST_INTERVAL_SECONDS)
+                    try:
+                        cached = self._build_seasonality(
+                            api_key, access_token, token, kind, instrument
+                        )
+                    except ValueError as error:
+                        if str(error) == "no_completed_historical_data":
+                            return None
+                        raise
+                    total_requests += int(cached.get("historical_requests", 0))
+                elif not isinstance(cached, dict):
                     stored_candles = store.load_candles(
                         kind=kind,
                         display_name=instrument,
@@ -3063,6 +3125,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 "indices_without_history": len(SEASONALITY_INDICES) - int(index_rank["evaluated"]),
                 "stocks_without_history": len(symbols) - int(stock_rank["evaluated"]),
                 "historical_requests": total_requests,
+                "price_history_requested_through": price_history_through.isoformat(),
                 "return_definition": "mean close-to-close return for the selected calendar month across completed years",
                 "retrieved_at": datetime.now(timezone.utc).isoformat(),
             }

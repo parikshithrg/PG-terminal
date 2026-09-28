@@ -5,10 +5,9 @@ Updated: 2026-09-28
 ## Saved state
 
 - Branch: `main`
-- Latest pushed commit: `d7fcb23` — Start versioned sentiment validation snapshots
-- Previous foundation commit: `468ff3e` — Expand market sentiment data foundations
-- Verification at handoff: 54 automated tests passed; Python and embedded browser JavaScript syntax checks passed.
-- Working tree was clean immediately after the latest push.
+- Latest pushed commit before this handoff: `d5f6496` — Add session handoff for regime validation
+- Phase 4 foundation commit: `d7fcb23` — Start versioned sentiment validation snapshots
+- Verification at handoff: 55 automated tests passed; Python and embedded browser JavaScript syntax checks passed.
 
 ## Current milestone
 
@@ -19,6 +18,27 @@ preserved as a separate immutable revision for audit.
 
 The evidence snapshot is not yet a market-regime score, trading signal, or
 portfolio instruction.
+
+## Latest implementation
+
+- Added a persistent site-wide light/dark theme switcher, including dark-aware
+  tables, dialogs, notices, forms, and canvas charts.
+- Corrected the incremental EOD history path so NIFTY 50 and the 210-stock F&O
+  universe request sessions after their last stored date even when an unrelated
+  EOD adapter fails. Historical-ranking cache reuse is now trading-date aware.
+- India VIX is aligned to the sentiment as-of date instead of being rejected
+  merely because its local history is newer than stale cash-market history.
+- Price strength now includes an aligned historical chart for the shares near
+  52-week highs, near 52-week lows, and their net difference.
+- The EOD action shows deterministic progress across twelve named stages, from
+  0% through 100%, with a compact mobile presentation.
+- Added a dedicated F&O sidebar page and moved futures price/open-interest
+  summaries, safeguards, filters, classifications, and sortable contract detail
+  out of Market Sentiment.
+- Replaced technical investor-facing regime terms with plain language:
+  Positive, Mixed, Negative, Monitoring only, and Score not ready. Future regime
+  labels use Positive market, Cautiously positive, Uncertain market, Weak market,
+  High-risk market, Recovering market, and Not enough reliable data.
 
 ## Next work
 
@@ -41,10 +61,10 @@ silently substitute an ETF or scraped proxy.
 
 ## Resume note
 
-The local server was intentionally not restarted after the Phase 4 backend
-change because the Kite session lives in server memory. On the next session,
-restart the server to activate the new snapshot endpoint, then reconnect Kite
-before running EOD Update.
+The local server was restarted after the history and VIX corrections. Kite
+credentials remain in server memory only, so reconnect Kite whenever the local
+server is restarted. Run EOD Update after reconnecting to advance stale NIFTY 50
+and F&O equity histories; the updater now requests only missing dates.
 
 Do not store API keys, API secrets, request tokens, or access tokens in this
 handoff or in Git.

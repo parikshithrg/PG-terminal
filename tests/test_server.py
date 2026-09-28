@@ -27,6 +27,7 @@ from server import (
     extract_request_token,
     historical_date_ranges,
     historical_lookback_start,
+    incremental_history_ranges,
     is_complete_seasonality_payload,
     normalize_index_snapshot,
     normalize_futures_eod_quotes,
@@ -405,6 +406,24 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
             date(2014, 2, 28),
         )
 
+    def test_incremental_history_sync_requests_only_dates_after_last_stored_session(self):
+        self.assertEqual(
+            incremental_history_ranges(
+                date(2016, 9, 28),
+                date(2026, 9, 28),
+                date(2026, 9, 23),
+            ),
+            [(date(2026, 9, 24), date(2026, 9, 28))],
+        )
+        self.assertEqual(
+            incremental_history_ranges(
+                date(2016, 9, 28),
+                date(2026, 9, 28),
+                date(2026, 9, 28),
+            ),
+            [],
+        )
+
     def test_seasonality_uses_close_returns_and_high_low_ranges(self):
         candles = [
             {"date": date(2024, 12, 31), "open": 98.0, "high": 101.0, "low": 97.0, "close": 100.0},
@@ -545,6 +564,17 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
             }
             for index, candle_date in enumerate(dates)
         ]
+        # A VIX refresh may be newer than the still-aligned cash universe. The
+        # calculation should use the VIX observation matching the cash as-of date.
+        vix_candles.append(
+            {
+                "date": dates[-1] + timedelta(days=1),
+                "open": 16.0,
+                "high": 16.5,
+                "low": 15.5,
+                "close": 16.0,
+            }
+        )
         result = calculate_domestic_sentiment_core(
             candles(1.0),
             {"UP1": candles(1.0), "UP2": candles(0.5), "STALE": candles(0.2, stale=True)},
@@ -561,6 +591,8 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(result["breadth"]["missing_stocks"][0]["reason"], "latest_session_mismatch")
         self.assertEqual(result["breadth"]["above_200dma_pct"], 100.0)
         self.assertEqual(result["price_strength"]["near_52w_high_pct"], 100.0)
+        self.assertEqual(result["price_strength"]["series"][-1]["date"], dates[-1].isoformat())
+        self.assertEqual(len(result["price_strength"]["series"]), 49)
         self.assertEqual(result["available_clusters"], 3)
         self.assertTrue(result["volatility"]["india_vix"]["available"])
         self.assertEqual(result["volatility"]["india_vix"]["level"], 15.98)

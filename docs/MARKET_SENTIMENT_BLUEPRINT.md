@@ -127,22 +127,26 @@ or use an unexplained free-data fallback.
 
 Use two visible dimensions before assigning a label:
 
-1. **Risk appetite:** constructive, mixed, or defensive, derived mainly from
+1. **Market direction:** positive, mixed, or negative, derived mainly from
    cash trend, participation, and flows.
 2. **Stress:** low, elevated, or acute, derived mainly from volatility,
    currency/rates, and the global backdrop.
 
-Candidate lifecycle labels:
+Candidate investor-facing labels:
 
-- **Constructive:** broad trend and participation are healthy; stress is low.
-- **Fragile advance:** headline trend is positive but breadth, flows, or macro
+- **Positive market:** broad trend and participation are healthy; stress is low.
+- **Cautiously positive:** headline trend is positive but breadth, flows, or macro
   confirmation is weak.
-- **Transition:** evidence is mixed or a prior regime is changing.
-- **Orderly risk-off:** trend and participation are weak without acute stress.
-- **Confirmed stress:** several independent clusters are adverse.
-- **Stabilisation:** stress is easing, but constructive participation is not yet
+- **Uncertain market:** evidence is mixed or a prior regime is changing.
+- **Weak market:** trend and participation are weak without unusually high stress.
+- **High-risk market:** several independent clusters are adverse.
+- **Recovering market:** stress is easing, but positive participation is not yet
   restored.
-- **Data quality:** missing or stale inputs prevent a dependable classification.
+- **Not enough reliable data:** missing or stale inputs prevent a dependable classification.
+
+Internal calculation keys may remain `constructive`, `mixed`, and `defensive`
+for compatibility, but the interface must display the plain-language labels
+`Positive`, `Mixed`, and `Negative`.
 
 Count clusters, not raw indicators. One red volatility family should not outweigh
 five calm independent families merely because it contains several related rows.

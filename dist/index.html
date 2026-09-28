@@ -5,6 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="PG-terminal private market workspace">
   <title>PG-terminal</title>
+  <script>
+    (() => {
+      try {
+        const savedTheme = localStorage.getItem('pg-terminal-theme');
+        const theme = savedTheme === 'light' || savedTheme === 'dark'
+          ? savedTheme
+          : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.dataset.theme = theme;
+      } catch (_error) {
+        document.documentElement.dataset.theme = 'light';
+      }
+    })();
+  </script>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230bb4e5'/%3E%3Cpath d='M17 45V19h17c9 0 14 4 14 12s-5 12-14 12h-7v-8h7c3 0 5-1 5-4s-2-4-5-4h-8v18z' fill='white'/%3E%3C/svg%3E">
   <style>
     :root {
@@ -16,6 +29,19 @@
       --panel: #ffffff;
       --sidebar: #fbfbfb;
       --selected: #f0f0f0;
+      --page-bg: #ffffff;
+      --topbar-bg: rgba(255, 255, 255, 0.97);
+      --surface-soft: #fafafa;
+      --surface-hover: #f3f5f7;
+      --control-bg: #ffffff;
+      --heading: #25282d;
+      --text: #303239;
+      --text-soft: #51555c;
+      --small-text: #666666;
+      --chart-grid: #e3e6ea;
+      --chart-label: #7b818a;
+      --chart-zero: #9aa0a8;
+      --shadow: rgba(35, 42, 48, .15);
       --success: #25a95b;
       --warning: #f0a417;
       --danger: #dc4c4c;
@@ -30,7 +56,7 @@
     body {
       margin: 0;
       color: var(--ink);
-      background: #fff;
+      background: var(--page-bg);
       font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 15px;
       line-height: 1.45;
@@ -47,7 +73,7 @@
       align-items: center;
       gap: 14px;
       padding: 0 18px;
-      background: rgba(255, 255, 255, 0.97);
+      background: var(--topbar-bg);
       border-bottom: 1px solid var(--line);
     }
 
@@ -116,6 +142,20 @@
 
     .action-button:hover { background: var(--brand-deep); border-color: var(--brand-deep); }
 
+    .action-button.eod-running {
+      min-width: 154px;
+      background: linear-gradient(
+        90deg,
+        var(--brand-deep) 0,
+        var(--brand-deep) var(--eod-progress, 0%),
+        var(--brand) var(--eod-progress, 0%),
+        var(--brand) 100%
+      );
+      border-color: var(--brand-deep);
+      cursor: wait;
+      font-variant-numeric: tabular-nums;
+    }
+
     .action-button.kite-authenticated {
       border-color: var(--success);
       background: var(--success);
@@ -128,10 +168,27 @@
 
     .action-button.secondary {
       color: var(--brand-deep);
-      background: #fff;
+      background: var(--control-bg);
     }
 
-    .action-button.secondary:hover { background: #edfaff; }
+    .action-button.secondary:hover { background: var(--surface-hover); }
+
+    .theme-toggle {
+      min-width: 92px;
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 7px 11px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      color: var(--ink);
+      background: var(--control-bg);
+      cursor: pointer;
+    }
+    .theme-toggle:hover { background: var(--surface-hover); }
+    .theme-toggle-icon { width: 16px; font-size: 15px; line-height: 1; text-align: center; }
 
     .credential-panel {
       position: absolute;
@@ -141,8 +198,8 @@
       padding: 18px;
       border: 1px solid var(--line);
       border-radius: 6px;
-      background: #fff;
-      box-shadow: 0 14px 34px rgba(35, 42, 48, .15);
+      background: var(--panel);
+      box-shadow: 0 14px 34px var(--shadow);
     }
 
     .credential-panel[hidden] { display: none; }
@@ -168,7 +225,7 @@
       border: 1px solid #d7dadd;
       border-radius: 4px;
       color: var(--ink);
-      background: #fff;
+      background: var(--control-bg);
       outline: none;
     }
 
@@ -207,7 +264,7 @@
       border: 1px solid #d7dadd;
       border-radius: 4px;
       color: #41454b;
-      background: #fff;
+      background: var(--control-bg);
       cursor: pointer;
     }
 
@@ -535,6 +592,9 @@
     .flow-chart-legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 2px; }
     .flow-chart-legend .fii::before { background: #3274d9; }
     .flow-chart-legend .dii::before { background: #e59418; }
+    .flow-chart-legend .near-high::before { background: #25a95b; }
+    .flow-chart-legend .near-low::before { background: #dc4c4c; }
+    .flow-chart-legend .net-strength::before { background: #3274d9; }
     .flow-chart-toolbar label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
     .flow-chart-toolbar select { min-width: 120px; padding: 7px 30px 7px 9px; border: 1px solid var(--line); border-radius: 4px; color: var(--text); background: #fff; }
     .flow-chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -543,6 +603,8 @@
     .flow-chart-panel p { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
     .flow-chart-panel canvas { display: block; width: 100%; height: 230px; }
     .flow-chart-note { margin-top: 10px; color: var(--muted); font-size: 12px; }
+    .price-strength-card { grid-column: 1 / -1; }
+    .price-strength-chart { margin-top: 16px; }
     .futures-table-toolbar { display: flex; align-items: end; justify-content: space-between; gap: 14px; margin: 4px 0 14px; }
     .futures-table-toolbar label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
     .futures-table-toolbar select { min-width: 190px; padding: 8px 30px 8px 9px; border: 1px solid var(--line); border-radius: 4px; color: var(--text); background: #fff; }
@@ -581,6 +643,74 @@
     .notice.show { opacity: 1; transform: translateY(0); }
     .scrim { display: none; }
 
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --ink: #e7eaf0;
+      --text: #e7eaf0;
+      --muted: #9da5b2;
+      --line: #343a44;
+      --panel: #1c2027;
+      --sidebar: #171a20;
+      --selected: #2a3039;
+      --page-bg: #12151a;
+      --topbar-bg: rgba(18, 21, 26, .97);
+      --surface-soft: #20242c;
+      --surface-hover: #2a3039;
+      --control-bg: #20242c;
+      --heading: #f0f2f5;
+      --text-soft: #c3c8d0;
+      --small-text: #aab0ba;
+      --chart-grid: #353c47;
+      --chart-label: #aeb5c0;
+      --chart-zero: #717b89;
+      --shadow: rgba(0, 0, 0, .42);
+    }
+
+    html[data-theme="dark"] .menu-button,
+    html[data-theme="dark"] .nav-button,
+    html[data-theme="dark"] .page-tab { color: #c7ccd4; }
+    html[data-theme="dark"] .nav-button:hover { background: var(--surface-hover); }
+    html[data-theme="dark"] .brand-note,
+    html[data-theme="dark"] .credential-help,
+    html[data-theme="dark"] .kite-login-note { color: var(--small-text); }
+    html[data-theme="dark"] .field label,
+    html[data-theme="dark"] .selector-field label { color: #d4d8de; }
+    html[data-theme="dark"] .field input,
+    html[data-theme="dark"] .selector-field select,
+    html[data-theme="dark"] .flow-chart-toolbar select,
+    html[data-theme="dark"] .futures-table-toolbar select,
+    html[data-theme="dark"] .panel-button { border-color: #444b56; color: var(--ink); background: var(--control-bg); }
+    html[data-theme="dark"] .action-button.secondary { color: #69d6f5; background: var(--control-bg); }
+    html[data-theme="dark"] h1,
+    html[data-theme="dark"] .section-title,
+    html[data-theme="dark"] .leader-result,
+    html[data-theme="dark"] .summary-value,
+    html[data-theme="dark"] .analysis-section h2,
+    html[data-theme="dark"] .evidence-card h2,
+    html[data-theme="dark"] .evidence-value strong { color: var(--heading); }
+    html[data-theme="dark"] .panel-row { color: var(--text-soft); }
+    html[data-theme="dark"] .analysis-status,
+    html[data-theme="dark"] .analysis-note,
+    html[data-theme="dark"] th,
+    html[data-theme="dark"] .source-state { background: var(--surface-soft); }
+    html[data-theme="dark"] th { color: #b6bdc8; }
+    html[data-theme="dark"] .sort-button:hover,
+    html[data-theme="dark"] .sort-button:focus-visible { color: var(--heading); background: var(--surface-hover); }
+    html[data-theme="dark"] .status { color: #b6bdc8; }
+    html[data-theme="dark"] .flow-chart-panel { background: var(--panel); }
+    html[data-theme="dark"] .sentiment-band { color: #c6ccd5; background: #303640; }
+    html[data-theme="dark"] .sentiment-band.constructive,
+    html[data-theme="dark"] .futures-state.long-build-up,
+    html[data-theme="dark"] .futures-state.short-covering { color: #73d59a; background: #173525; }
+    html[data-theme="dark"] .sentiment-band.mixed { color: #f0c56c; background: #423417; }
+    html[data-theme="dark"] .sentiment-band.defensive,
+    html[data-theme="dark"] .futures-state.short-build-up,
+    html[data-theme="dark"] .futures-state.long-unwinding { color: #f08d93; background: #432226; }
+    html[data-theme="dark"] .futures-state.no-clear-signal { color: #c6ccd5; background: #303640; }
+    html[data-theme="dark"] .notice { border-color: #285d6d; color: #9bdff2; background: #15313a; }
+    html[data-theme="dark"] .positive { color: #55c982; }
+    html[data-theme="dark"] .negative { color: #f07171; }
+
     @media (max-width: 900px) {
       .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .evidence-grid, .source-state-grid { grid-template-columns: 1fr; }
@@ -613,7 +743,10 @@
       .summary-grid { grid-template-columns: 1fr; }
       .seasonality-headline-grid { grid-template-columns: 1fr; }
       .action-button { min-height: 32px; padding-inline: 7px; }
+      .action-button.eod-running { min-width: 82px; }
       .top-actions { gap: 5px; }
+      .theme-toggle { min-width: 34px; padding-inline: 8px; }
+      .theme-toggle-text { display: none; }
       .credential-panel { position: fixed; top: 62px; right: 12px; }
     }
   </style>
@@ -628,6 +761,10 @@
       <div class="brand-note">private market workspace</div>
     </div>
     <div class="top-actions">
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch to dark theme" aria-pressed="false" title="Switch to dark theme">
+        <span class="theme-toggle-icon" id="themeToggleIcon" aria-hidden="true">☾</span>
+        <span class="theme-toggle-text" id="themeToggleText">Dark</span>
+      </button>
       <div class="kite-login-wrap">
         <button class="action-button" id="kiteLoginButton" type="button" aria-expanded="false" aria-controls="kiteCredentialPanel">Kite login</button>
         <div class="credential-panel" id="kiteCredentialPanel" role="dialog" aria-labelledby="kiteCredentialTitle" hidden>
@@ -658,7 +795,7 @@
           </form>
         </div>
       </div>
-      <button class="action-button" id="eodUpdateButton" type="button" disabled>EOD update</button>
+      <button class="action-button" id="eodUpdateButton" type="button" aria-live="polite" disabled>EOD update</button>
     </div>
   </header>
 
@@ -669,6 +806,7 @@
         <ul class="nav-list">
           <li><button class="nav-button active" data-page="Dashboard" style="--item-color:#3273dc"><span class="nav-icon"></span><span>Dashboard</span></button></li>
           <li><button class="nav-button" data-page="Market Sentiment" style="--item-color:#c92f34"><span class="nav-icon"></span><span>Market Sentiment</span></button></li>
+          <li><button class="nav-button" data-page="F&amp;O" style="--item-color:#5368d9"><span class="nav-icon"></span><span>F&amp;O</span></button></li>
           <li><button class="nav-button" data-page="Screener" style="--item-color:#24934d"><span class="nav-icon"></span><span>Screener</span></button></li>
           <li><button class="nav-button" data-page="Seasonality Analysis" style="--item-color:#60a625"><span class="nav-icon"></span><span>Seasonality Analysis</span></button></li>
           <li><button class="nav-button" data-page="Earnings Analysis" style="--item-color:#c52d78"><span class="nav-icon"></span><span>Earnings Analysis</span></button></li>
@@ -776,7 +914,7 @@
               <summary>Workspace status</summary>
               <div class="panel-list">
                 <div class="panel-row"><span>Interface</span><span>Frame ready</span></div>
-                <div class="panel-row"><span>Navigation</span><span>8 sections</span></div>
+                <div class="panel-row"><span>Navigation</span><span>9 sections</span></div>
                 <div class="panel-row"><span>External actions</span><span>Disabled</span></div>
               </div>
             </details>
@@ -799,7 +937,7 @@
           <section class="summary-grid sentiment-summary" aria-label="Market regime summary">
             <article class="summary-card">
               <div class="summary-label">Overall regime</div>
-              <div class="summary-value" id="sentimentRegimeValue">Pending</div>
+              <div class="summary-value" id="sentimentRegimeValue">Score not ready</div>
               <div class="summary-meta">Full six-cluster model not active</div>
             </article>
             <article class="summary-card">
@@ -863,13 +1001,26 @@
               </div>
             </article>
 
-            <article class="evidence-card">
+            <article class="evidence-card price-strength-card">
               <div class="evidence-heading"><h2>Price strength</h2><span class="sentiment-band" id="priceStrengthBand">Unavailable</span></div>
               <p class="evidence-reason" id="priceStrengthReason">The balance near 52-week highs and lows has not been evaluated.</p>
               <div class="evidence-values">
                 <div class="evidence-value"><strong id="nearHighValue">—</strong><span>near 52w high</span></div>
                 <div class="evidence-value"><strong id="nearLowValue">—</strong><span>near 52w low</span></div>
                 <div class="evidence-value"><strong id="netStrengthValue">—</strong><span>net strength</span></div>
+              </div>
+              <div class="price-strength-chart">
+                <div class="flow-chart-legend" aria-hidden="true">
+                  <span class="near-high">Near 52-week high</span>
+                  <span class="near-low">Near 52-week low</span>
+                  <span class="net-strength">Net strength</span>
+                </div>
+                <section class="flow-chart-panel">
+                  <h3>Price-strength trend</h3>
+                  <p>Share of the aligned F&amp;O universe near 52-week extremes; net strength is high share minus low share.</p>
+                  <canvas id="priceStrengthChart" aria-label="Historical price strength chart"></canvas>
+                </section>
+                <div class="flow-chart-note" id="priceStrengthChartNote">The chart will appear after aligned stock history is loaded.</div>
               </div>
             </article>
 
@@ -931,6 +1082,58 @@
             </article>
 
             <article class="evidence-card">
+              <div class="evidence-heading"><h2>Currency and sovereign rates</h2><span class="sentiment-band" id="macroContextBand">Unavailable</span></div>
+              <p class="evidence-reason" id="macroContextReason">Official RBI/FBIL data has not been loaded.</p>
+              <div class="evidence-values">
+                <div class="evidence-value"><strong id="usdInrValue">—</strong><span>USD/INR</span></div>
+                <div class="evidence-value"><strong id="eurInrValue">—</strong><span>EUR/INR</span></div>
+                <div class="evidence-value"><strong id="gbpInrValue">—</strong><span>GBP/INR</span></div>
+                <div class="evidence-value"><strong id="jpyInrValue">—</strong><span>INR per 100 JPY</span></div>
+                <div class="evidence-value"><strong id="gsecYieldValue">—</strong><span id="gsecYieldLabel">approx. 10y G-Sec yield</span></div>
+              </div>
+              <div class="coverage-detail" id="macroContextChanges">Changes will appear after 5 and 20 stored sessions.</div>
+            </article>
+
+            <article class="evidence-card">
+              <div class="evidence-heading"><h2>Global risk backdrop</h2><span class="sentiment-band" id="globalRiskBand">Unavailable</span></div>
+              <p class="evidence-reason" id="globalRiskReason">Permitted global EOD series have not been loaded.</p>
+              <div class="evidence-values">
+                <div class="evidence-value"><strong id="sp500Value">—</strong><span>S&amp;P 500</span></div>
+                <div class="evidence-value"><strong id="sp500TrendValue">—</strong><span>vs 200DMA</span></div>
+                <div class="evidence-value"><strong id="usVixValue">—</strong><span>US VIX</span></div>
+                <div class="evidence-value"><strong id="broadUsdValue">—</strong><span>broad USD</span></div>
+                <div class="evidence-value"><strong id="usdJpyValue">—</strong><span>USD/JPY</span></div>
+                <div class="evidence-value"><strong id="brentValue">—</strong><span>Brent USD/bbl</span></div>
+              </div>
+              <div class="coverage-detail" id="globalRiskChanges">Five- and twenty-session changes are descriptive and remain outside regime scoring.</div>
+            </article>
+          </div>
+
+          <div class="source-state-grid" aria-label="Pending sentiment sources">
+            <article class="source-state"><strong>Confirmed institutional flows</strong><span id="confirmedFpiSourceState">NSDL custodian series · run EOD update to load</span></article>
+            <article class="source-state"><strong>Global risk backdrop</strong><span id="globalRiskSourceState">FRED EOD foundation · run EOD update to load</span></article>
+          </div>
+
+          <div class="analysis-note">Portfolio balancing remains a read-only review step. Phase 1 does not prescribe weights or trigger transactions.</div>
+        </section>
+
+        <section id="fnoView" hidden aria-labelledby="fnoTitle">
+          <div class="page-tabs" aria-label="F&O views">
+            <div class="page-tab active">Overview</div>
+          </div>
+
+          <div class="analysis-intro">
+            <div>
+              <h1 id="fnoTitle">F&amp;O</h1>
+              <p class="analysis-caption">Near-month stock futures · completed EOD price and open-interest evidence</p>
+            </div>
+            <button class="panel-button" id="refreshFnoButton" type="button">Refresh local analysis</button>
+          </div>
+
+          <p class="section-note">Directional classifications are descriptive. They remain outside the market-regime score and do not represent trading instructions.</p>
+
+          <div class="evidence-grid">
+            <article class="evidence-card flow-chart-card">
               <div class="evidence-heading"><h2>Futures price and open interest</h2><span class="sentiment-band" id="futuresOiBand">Unavailable</span></div>
               <p class="evidence-reason" id="futuresOiReason">Run EOD update after market close to establish the near-month baseline.</p>
               <div class="evidence-values">
@@ -973,41 +1176,7 @@
                 </table>
               </div>
             </article>
-
-            <article class="evidence-card">
-              <div class="evidence-heading"><h2>Currency and sovereign rates</h2><span class="sentiment-band" id="macroContextBand">Unavailable</span></div>
-              <p class="evidence-reason" id="macroContextReason">Official RBI/FBIL data has not been loaded.</p>
-              <div class="evidence-values">
-                <div class="evidence-value"><strong id="usdInrValue">—</strong><span>USD/INR</span></div>
-                <div class="evidence-value"><strong id="eurInrValue">—</strong><span>EUR/INR</span></div>
-                <div class="evidence-value"><strong id="gbpInrValue">—</strong><span>GBP/INR</span></div>
-                <div class="evidence-value"><strong id="jpyInrValue">—</strong><span>INR per 100 JPY</span></div>
-                <div class="evidence-value"><strong id="gsecYieldValue">—</strong><span id="gsecYieldLabel">approx. 10y G-Sec yield</span></div>
-              </div>
-              <div class="coverage-detail" id="macroContextChanges">Changes will appear after 5 and 20 stored sessions.</div>
-            </article>
-
-            <article class="evidence-card">
-              <div class="evidence-heading"><h2>Global risk backdrop</h2><span class="sentiment-band" id="globalRiskBand">Unavailable</span></div>
-              <p class="evidence-reason" id="globalRiskReason">Permitted global EOD series have not been loaded.</p>
-              <div class="evidence-values">
-                <div class="evidence-value"><strong id="sp500Value">—</strong><span>S&amp;P 500</span></div>
-                <div class="evidence-value"><strong id="sp500TrendValue">—</strong><span>vs 200DMA</span></div>
-                <div class="evidence-value"><strong id="usVixValue">—</strong><span>US VIX</span></div>
-                <div class="evidence-value"><strong id="broadUsdValue">—</strong><span>broad USD</span></div>
-                <div class="evidence-value"><strong id="usdJpyValue">—</strong><span>USD/JPY</span></div>
-                <div class="evidence-value"><strong id="brentValue">—</strong><span>Brent USD/bbl</span></div>
-              </div>
-              <div class="coverage-detail" id="globalRiskChanges">Five- and twenty-session changes are descriptive and remain outside regime scoring.</div>
-            </article>
           </div>
-
-          <div class="source-state-grid" aria-label="Pending sentiment sources">
-            <article class="source-state"><strong>Confirmed institutional flows</strong><span id="confirmedFpiSourceState">NSDL custodian series · run EOD update to load</span></article>
-            <article class="source-state"><strong>Global risk backdrop</strong><span id="globalRiskSourceState">FRED EOD foundation · run EOD update to load</span></article>
-          </div>
-
-          <div class="analysis-note">Portfolio balancing remains a read-only review step. Phase 1 does not prescribe weights or trigger transactions.</div>
         </section>
 
         <section id="seasonalityView" hidden aria-labelledby="seasonalityTitle">
@@ -1185,11 +1354,16 @@
   <script src="reference-universes.js"></script>
   <script>
     const body = document.body;
+    const themeToggle = document.getElementById('themeToggle');
+    const themeToggleIcon = document.getElementById('themeToggleIcon');
+    const themeToggleText = document.getElementById('themeToggleText');
     const menuButton = document.getElementById('menuButton');
     const scrim = document.getElementById('scrim');
     const dashboardView = document.getElementById('dashboardView');
     const marketSentimentView = document.getElementById('marketSentimentView');
     const refreshSentimentButton = document.getElementById('refreshSentimentButton');
+    const fnoView = document.getElementById('fnoView');
+    const refreshFnoButton = document.getElementById('refreshFnoButton');
     const seasonalityView = document.getElementById('seasonalityView');
     const seasonalityIndexSelect = document.getElementById('seasonalityIndexSelect');
     const seasonalityStockSelect = document.getElementById('seasonalityStockSelect');
@@ -1256,8 +1430,33 @@
     let marketBreadthRows = [];
     let marketBreadthSort = { key: 'sector', direction: 'asc' };
     let institutionalFlowSeries = [];
+    let priceStrengthSeries = [];
     let futuresOiRows = [];
     let futuresOiSort = { key: 'underlying', direction: 'asc' };
+
+    function currentTheme() {
+      return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+    }
+
+    function updateThemeControl() {
+      const dark = currentTheme() === 'dark';
+      const nextTheme = dark ? 'light' : 'dark';
+      themeToggleIcon.textContent = dark ? '☀' : '☾';
+      themeToggleText.textContent = dark ? 'Light' : 'Dark';
+      themeToggle.setAttribute('aria-label', `Switch to ${nextTheme} theme`);
+      themeToggle.setAttribute('title', `Switch to ${nextTheme} theme`);
+      themeToggle.setAttribute('aria-pressed', String(dark));
+    }
+
+    function setTheme(theme, persist = true) {
+      document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
+      if (persist) {
+        try { localStorage.setItem('pg-terminal-theme', currentTheme()); } catch (_error) { /* Storage may be disabled. */ }
+      }
+      updateThemeControl();
+      if (institutionalFlowSeries.length) window.requestAnimationFrame(drawInstitutionalFlowCharts);
+      if (priceStrengthSeries.length) window.requestAnimationFrame(drawPriceStrengthChart);
+    }
 
     function appendChoice(parent, value, label) {
       const option = document.createElement('option');
@@ -1413,7 +1612,14 @@
     function setSentimentBand(id, band) {
       const element = document.getElementById(id);
       element.className = `sentiment-band ${band || ''}`.trim();
-      element.textContent = band || 'Unavailable';
+      const labels = {
+        constructive: 'Positive',
+        mixed: 'Mixed',
+        defensive: 'Negative',
+        unranked: 'Monitoring only',
+        confirmed: 'Confirmed data',
+      };
+      element.textContent = labels[band] || band || 'Unavailable';
     }
 
     function selectedInstitutionalFlowSeries() {
@@ -1456,8 +1662,12 @@
       const right = width - 12;
       const top = 12;
       const bottom = height - 28;
-      context.strokeStyle = '#e3e6ea';
-      context.fillStyle = '#7b818a';
+      const rootStyles = getComputedStyle(document.documentElement);
+      const chartGrid = rootStyles.getPropertyValue('--chart-grid').trim() || '#e3e6ea';
+      const chartLabel = rootStyles.getPropertyValue('--chart-label').trim() || '#7b818a';
+      const chartZero = rootStyles.getPropertyValue('--chart-zero').trim() || '#9aa0a8';
+      context.strokeStyle = chartGrid;
+      context.fillStyle = chartLabel;
       context.lineWidth = 1;
       for (let index = 0; index <= 4; index += 1) {
         const value = scale.maximum - ((scale.maximum - scale.minimum) * index / 4);
@@ -1470,13 +1680,13 @@
         context.fillText(`${Math.round(value).toLocaleString('en-IN')}`, left - 7, y + 4);
       }
       const zeroY = scale.y(0);
-      context.strokeStyle = '#9aa0a8';
+      context.strokeStyle = chartZero;
       context.beginPath();
       context.moveTo(left, zeroY);
       context.lineTo(right, zeroY);
       context.stroke();
       if (rows.length) {
-        context.fillStyle = '#7b818a';
+        context.fillStyle = chartLabel;
         context.textAlign = 'left';
         context.fillText(rows[0].date.slice(5), left, height - 8);
         context.textAlign = 'right';
@@ -1556,9 +1766,52 @@
       else note.textContent = `${rows.length} stored provisional sessions shown · values in ₹ crore.`;
     }
 
+    function drawPriceStrengthChart() {
+      const prepared = prepareFlowCanvas('priceStrengthChart');
+      const note = document.getElementById('priceStrengthChartNote');
+      if (!prepared || !priceStrengthSeries.length) {
+        if (note) note.textContent = 'The chart will appear after aligned stock history is loaded.';
+        return;
+      }
+      const { context, width, height } = prepared;
+      const values = priceStrengthSeries.flatMap((row) => [
+        row.near_52w_high_pct,
+        row.near_52w_low_pct,
+        row.net_strength_pct,
+      ]);
+      const scale = flowScale(values, 12, height - 28);
+      const frame = drawFlowFrame(context, width, height, scale, priceStrengthSeries);
+      const x = (index) => priceStrengthSeries.length === 1
+        ? (frame.left + frame.right) / 2
+        : frame.left + ((frame.right - frame.left) * index / (priceStrengthSeries.length - 1));
+      [
+        { key: 'near_52w_high_pct', color: '#25a95b' },
+        { key: 'near_52w_low_pct', color: '#dc4c4c' },
+        { key: 'net_strength_pct', color: '#3274d9' },
+      ].forEach((line) => {
+        context.strokeStyle = line.color;
+        context.lineWidth = line.key === 'net_strength_pct' ? 2.5 : 1.5;
+        context.beginPath();
+        priceStrengthSeries.forEach((row, index) => {
+          const px = x(index);
+          const py = scale.y(row[line.key]);
+          if (index === 0) context.moveTo(px, py);
+          else context.lineTo(px, py);
+        });
+        context.stroke();
+      });
+      note.textContent = `${priceStrengthSeries.length} aligned sessions shown · latest ${priceStrengthSeries[priceStrengthSeries.length - 1].date}.`;
+    }
+
     function renderDomesticSentiment(result) {
-      document.getElementById('sentimentRegimeValue').textContent = result.overall_regime;
-      document.getElementById('sentimentDomesticValue').textContent = result.domestic_tape;
+      const regimeLabels = {
+        'Pending full model': 'Score not ready',
+        Constructive: 'Positive',
+        Mixed: 'Mixed',
+        Defensive: 'Negative',
+      };
+      document.getElementById('sentimentRegimeValue').textContent = regimeLabels[result.overall_regime] || result.overall_regime;
+      document.getElementById('sentimentDomesticValue').textContent = regimeLabels[result.domestic_tape] || result.domestic_tape;
       document.getElementById('sentimentCoverageValue').textContent = `${result.available_clusters} / ${result.total_clusters}`;
       document.getElementById('sentimentConfidenceMeta').textContent = `${result.confidence} confidence · external context pending`;
       document.getElementById('sentimentAsOfValue').textContent = result.as_of_date;
@@ -1609,6 +1862,8 @@
       document.getElementById('nearHighValue').textContent = `${result.price_strength.near_52w_high_pct.toFixed(1)}%`;
       document.getElementById('nearLowValue').textContent = `${result.price_strength.near_52w_low_pct.toFixed(1)}%`;
       document.getElementById('netStrengthValue').textContent = signedPercentage(result.price_strength.net_strength_pct, 1);
+      priceStrengthSeries = Array.isArray(result.price_strength.series) ? result.price_strength.series : [];
+      window.requestAnimationFrame(drawPriceStrengthChart);
 
       setSentimentBand('volatilityBand', result.volatility.band);
       document.getElementById('volatilityReason').textContent = result.volatility.reason;
@@ -1769,6 +2024,8 @@
     async function loadDomesticSentiment(showSuccess = true) {
       refreshSentimentButton.disabled = true;
       refreshSentimentButton.textContent = 'Refreshing…';
+      refreshFnoButton.disabled = true;
+      refreshFnoButton.textContent = 'Refreshing…';
       try {
         const response = await fetch('/api/market-sentiment/domestic-core', { cache: 'no-store' });
         const result = await response.json();
@@ -1785,6 +2042,8 @@
       } finally {
         refreshSentimentButton.disabled = false;
         refreshSentimentButton.textContent = 'Refresh local analysis';
+        refreshFnoButton.disabled = false;
+        refreshFnoButton.textContent = 'Refresh local analysis';
       }
     }
 
@@ -2276,29 +2535,62 @@
         return;
       }
       eodUpdateButton.disabled = true;
-      eodUpdateButton.textContent = 'Updating EOD…';
+      const totalStages = 12;
+      let completedStages = 0;
+      const updateProgress = (stage) => {
+        const percentage = Math.round(completedStages * 100 / totalStages);
+        eodUpdateButton.classList.add('eod-running');
+        eodUpdateButton.style.setProperty('--eod-progress', `${percentage}%`);
+        eodUpdateButton.textContent = window.innerWidth <= 430
+          ? `EOD · ${percentage}%`
+          : `Updating EOD · ${percentage}%`;
+        eodUpdateButton.title = stage;
+        eodUpdateButton.setAttribute('aria-label', `${stage}. ${percentage}% complete`);
+      };
+      const runStage = async (stage, operation) => {
+        updateProgress(stage);
+        const result = await operation();
+        completedStages += 1;
+        updateProgress(`${stage} complete`);
+        return result;
+      };
+      updateProgress('Starting EOD update');
       showNotice('EOD update started. The first full historical ranking may take several minutes.');
       try {
-        const indexUpdated = await loadIndexSnapshot();
-        const eodIndicesUpdated = await loadEodIndexSummary();
-        const institutionalFlowsUpdated = await refreshInstitutionalFlows();
-        const confirmedFpiUpdated = await refreshConfirmedFpi();
-        const macroContextUpdated = await refreshMacroContext();
-        const globalRiskUpdated = await refreshGlobalRisk();
-        const futuresOiUpdated = await refreshFuturesOi();
-        const breadthUpdated = await loadMarketBreadth();
-        const monthlyLeadersUpdated = breadthUpdated ? await loadMonthlyLeaders() : false;
-        const historicalLeadersUpdated = monthlyLeadersUpdated ? await loadHistoricalMonthLeaders() : false;
-        const sentimentUpdated = await loadDomesticSentiment(false);
-        const factorSnapshotSaved = sentimentUpdated ? await saveSentimentFactorSnapshot() : false;
+        const indexUpdated = await runStage('Loading current index snapshot', loadIndexSnapshot);
+        const eodIndicesUpdated = await runStage('Updating completed index candles', loadEodIndexSummary);
+        const institutionalFlowsUpdated = await runStage('Updating provisional institutional flows', refreshInstitutionalFlows);
+        const confirmedFpiUpdated = await runStage('Updating confirmed FPI flows', refreshConfirmedFpi);
+        const macroContextUpdated = await runStage('Updating RBI and currency context', refreshMacroContext);
+        const globalRiskUpdated = await runStage('Updating global risk context', refreshGlobalRisk);
+        const futuresOiUpdated = await runStage('Updating futures and open interest', refreshFuturesOi);
+        const breadthUpdated = await runStage('Updating NIFTY 500 breadth', loadMarketBreadth);
+        const monthlyLeadersUpdated = await runStage(
+          'Calculating current-month leaders',
+          () => breadthUpdated ? loadMonthlyLeaders() : Promise.resolve(false),
+        );
+        // Historical leaders also performs the incremental local candle sync used
+        // by market sentiment. Do not skip it when an unrelated EOD source fails.
+        const historicalLeadersUpdated = await runStage('Synchronising ten-year local history', loadHistoricalMonthLeaders);
+        const sentimentUpdated = await runStage('Calculating market sentiment', () => loadDomesticSentiment(false));
+        const factorSnapshotSaved = await runStage(
+          'Saving the sentiment evidence snapshot',
+          () => sentimentUpdated ? saveSentimentFactorSnapshot() : Promise.resolve(false),
+        );
         if (indexUpdated && eodIndicesUpdated && institutionalFlowsUpdated && confirmedFpiUpdated && macroContextUpdated && globalRiskUpdated && futuresOiUpdated && breadthUpdated && monthlyLeadersUpdated && historicalLeadersUpdated && sentimentUpdated && factorSnapshotSaved) {
           showNotice('EOD update completed. Market summaries and sentiment are ready.');
         } else {
           showNotice('EOD update finished with unavailable data. Review the dashboard and sentiment status.');
         }
       } finally {
-        eodUpdateButton.textContent = 'EOD update';
-        eodUpdateButton.disabled = !kiteLoginButton.classList.contains('kite-authenticated');
+        window.setTimeout(() => {
+          eodUpdateButton.classList.remove('eod-running');
+          eodUpdateButton.style.removeProperty('--eod-progress');
+          eodUpdateButton.textContent = 'EOD update';
+          eodUpdateButton.title = '';
+          eodUpdateButton.setAttribute('aria-label', 'Run EOD update');
+          eodUpdateButton.disabled = !kiteLoginButton.classList.contains('kite-authenticated');
+        }, 900);
       }
     }
 
@@ -2529,11 +2821,14 @@
         kiteValidateButton.textContent = 'Connect to Kite';
       }
     });
+    themeToggle.addEventListener('click', () => setTheme(currentTheme() === 'dark' ? 'light' : 'dark'));
     refreshIndexButton.addEventListener('click', loadIndexSnapshot);
     refreshSentimentButton.addEventListener('click', () => loadDomesticSentiment(true));
+    refreshFnoButton.addEventListener('click', () => loadDomesticSentiment(true));
     document.getElementById('flowChartWindowSelect').addEventListener('change', drawInstitutionalFlowCharts);
     window.addEventListener('resize', () => {
       if (!marketSentimentView.hidden && institutionalFlowSeries.length) drawInstitutionalFlowCharts();
+      if (!marketSentimentView.hidden && priceStrengthSeries.length) drawPriceStrengthChart();
     });
     loadBreadthButton.addEventListener('click', loadMarketBreadth);
     loadSeasonalityButton.addEventListener('click', loadSeasonality);
@@ -2577,16 +2872,21 @@
         button.classList.add('active');
         const isDashboard = button.dataset.page === 'Dashboard';
         const isMarketSentiment = button.dataset.page === 'Market Sentiment';
+        const isFno = button.dataset.page === 'F&O';
         const isSeasonality = button.dataset.page === 'Seasonality Analysis';
         dashboardView.hidden = !isDashboard;
         marketSentimentView.hidden = !isMarketSentiment;
+        fnoView.hidden = !isFno;
         seasonalityView.hidden = !isSeasonality;
-        emptyView.hidden = isDashboard || isMarketSentiment || isSeasonality;
-        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isSeasonality ? '' : button.dataset.page;
-        if (isMarketSentiment && document.getElementById('sentimentAsOfValue').textContent === '—') {
+        emptyView.hidden = isDashboard || isMarketSentiment || isFno || isSeasonality;
+        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isSeasonality ? '' : button.dataset.page;
+        if ((isMarketSentiment || isFno) && document.getElementById('sentimentAsOfValue').textContent === '—') {
           loadDomesticSentiment(false);
         } else if (isMarketSentiment) {
           window.requestAnimationFrame(drawInstitutionalFlowCharts);
+          window.requestAnimationFrame(drawPriceStrengthChart);
+        } else if (isFno) {
+          renderFuturesOiTable();
         }
         if (window.innerWidth <= 700) setNavigation(false);
       });
@@ -2603,6 +2903,7 @@
       }
     });
 
+    updateThemeControl();
     restoreKiteStatus();
   </script>
 </body>

@@ -39,7 +39,7 @@ h3 {
 .summary-meta,
 .section-note,
 .as-of {
-  color: #666;
+  color: var(--small-text, #666);
   font-size: 13px;
   line-height: 1.5;
 }
