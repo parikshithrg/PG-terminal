@@ -54,6 +54,7 @@ FRED_GLOBAL_SERIES = {
     "DTWEXBGS": ("broad_usd", "Index Jan 2006=100", "Broad U.S. dollar index"),
     "DCOILBRENTEU": ("brent_crude", "USD per barrel", "Brent crude spot"),
 }
+SENTIMENT_EVIDENCE_MODEL_VERSION = "market-sentiment-evidence-v1"
 RBI_HOME_URL = "https://www.rbi.org.in/"
 RBI_MACRO_SOURCE = "Reserve Bank of India current rates; FX source FBIL"
 KITE_FUTURES_SOURCE = "Kite Connect NFO completed daily price and open interest"
@@ -2251,34 +2252,67 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
 
     def _send_domestic_sentiment_core(self) -> None:
         try:
-            store = _get_eod_store()
-            index_candles = store.load_candles(kind="index", display_name="Nifty 50")
-            india_vix_candles = store.load_candles(kind="index", display_name="India VIX")
-            institutional_flow_rows = store.load_institutional_flows()
-            confirmed_fpi_rows = store.load_confirmed_fpi_investments()
-            macro_snapshot_rows = store.load_macro_snapshots()
-            global_risk_rows = store.load_global_risk_observations()
-            futures_snapshot_rows = store.load_futures_eod_snapshots()
-            instruments = store.list_instruments(kind="stock")
-            stock_histories = {
-                str(item["display_name"]): store.load_candles(
-                    kind="stock", display_name=str(item["display_name"])
-                )
-                for item in instruments
-            }
-            payload = calculate_domestic_sentiment_core(
-                index_candles,
-                stock_histories,
-                india_vix_candles=india_vix_candles,
-                institutional_flow_rows=institutional_flow_rows,
-                confirmed_fpi_rows=confirmed_fpi_rows,
-                macro_snapshot_rows=macro_snapshot_rows,
-                global_risk_rows=global_risk_rows,
-                futures_snapshot_rows=futures_snapshot_rows,
-            )
+            payload = self._calculate_sentiment_payload()
             self._send_json(HTTPStatus.OK, payload)
         except ValueError as error:
             self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"ok": False, "reason": str(error)})
+
+    @staticmethod
+    def _calculate_sentiment_payload() -> dict[str, object]:
+        store = _get_eod_store()
+        index_candles = store.load_candles(kind="index", display_name="Nifty 50")
+        india_vix_candles = store.load_candles(kind="index", display_name="India VIX")
+        institutional_flow_rows = store.load_institutional_flows()
+        confirmed_fpi_rows = store.load_confirmed_fpi_investments()
+        macro_snapshot_rows = store.load_macro_snapshots()
+        global_risk_rows = store.load_global_risk_observations()
+        futures_snapshot_rows = store.load_futures_eod_snapshots()
+        instruments = store.list_instruments(kind="stock")
+        stock_histories = {
+            str(item["display_name"]): store.load_candles(
+                kind="stock", display_name=str(item["display_name"])
+            )
+            for item in instruments
+        }
+        return calculate_domestic_sentiment_core(
+            index_candles,
+            stock_histories,
+            india_vix_candles=india_vix_candles,
+            institutional_flow_rows=institutional_flow_rows,
+            confirmed_fpi_rows=confirmed_fpi_rows,
+            macro_snapshot_rows=macro_snapshot_rows,
+            global_risk_rows=global_risk_rows,
+            futures_snapshot_rows=futures_snapshot_rows,
+        )
+
+    def _send_sentiment_factor_snapshot(self) -> None:
+        try:
+            payload = self._calculate_sentiment_payload()
+            evidence = json.loads(json.dumps(payload, allow_nan=False))
+            freshness = evidence.get("freshness")
+            if isinstance(freshness, dict):
+                freshness.pop("retrieved_at", None)
+            as_of_date = date.fromisoformat(str(payload["as_of_date"]))
+            write_result = _get_eod_store().append_sentiment_factor_snapshot(
+                as_of_date=as_of_date,
+                model_version=SENTIMENT_EVIDENCE_MODEL_VERSION,
+                evidence=evidence,
+                created_at=datetime.now(timezone.utc).isoformat(),
+            )
+            self._send_json(
+                HTTPStatus.OK,
+                {
+                    "ok": True,
+                    "as_of_date": as_of_date.isoformat(),
+                    "model_version": SENTIMENT_EVIDENCE_MODEL_VERSION,
+                    "write_result": write_result,
+                },
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            self._send_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"ok": False, "reason": str(error) or "sentiment_factor_snapshot_unavailable"},
+            )
 
     def _send_index_snapshot(self) -> None:
         with _SESSION_LOCK:
@@ -3376,6 +3410,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         )
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler name
+        if self.path == "/api/market-sentiment/factor-snapshot":
+            payload = self._read_json_payload()
+            if payload is not None:
+                self._send_sentiment_factor_snapshot()
+            return
+
         if self.path == "/api/market-sentiment/futures-eod/refresh":
             payload = self._read_json_payload()
             if payload is not None:

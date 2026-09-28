@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import math
+import hashlib
+import json
+import re
 import sqlite3
 from contextlib import closing
 from datetime import date, datetime, timezone
@@ -188,6 +191,19 @@ class EODStore:
 
                     CREATE INDEX IF NOT EXISTS global_risk_date_idx
                     ON global_risk_observations(observation_date);
+
+                    CREATE TABLE IF NOT EXISTS sentiment_factor_snapshots (
+                        as_of_date TEXT NOT NULL,
+                        model_version TEXT NOT NULL,
+                        evidence_hash TEXT NOT NULL,
+                        evidence_json TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        schema_version INTEGER NOT NULL,
+                        PRIMARY KEY (as_of_date, model_version, evidence_hash)
+                    );
+
+                    CREATE INDEX IF NOT EXISTS sentiment_factor_snapshot_date_idx
+                    ON sentiment_factor_snapshots(as_of_date, created_at);
                     """
                 )
 
@@ -747,6 +763,92 @@ class EODStore:
                 "source_series": row["source_series"],
                 "source": row["source"],
                 "retrieved_at": row["retrieved_at"],
+            }
+            for row in rows
+        ]
+
+    def append_sentiment_factor_snapshot(
+        self,
+        *,
+        as_of_date: date,
+        model_version: str,
+        evidence: dict[str, object],
+        created_at: str | None = None,
+    ) -> dict[str, object]:
+        if (
+            not isinstance(as_of_date, date)
+            or not isinstance(model_version, str)
+            or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{2,63}", model_version)
+            or not isinstance(evidence, dict)
+        ):
+            raise ValueError("invalid_sentiment_factor_snapshot")
+        try:
+            canonical = json.dumps(
+                evidence,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError("invalid_sentiment_factor_snapshot") from error
+        evidence_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        timestamp = created_at or datetime.now(timezone.utc).isoformat()
+        with closing(self._connect()) as connection:
+            with connection:
+                existing = connection.execute(
+                    """
+                    SELECT 1 FROM sentiment_factor_snapshots
+                    WHERE as_of_date = ? AND model_version = ? AND evidence_hash = ?
+                    """,
+                    (as_of_date.isoformat(), model_version, evidence_hash),
+                ).fetchone()
+                if existing is not None:
+                    return {"inserted": 0, "duplicates": 1, "evidence_hash": evidence_hash}
+                connection.execute(
+                    """
+                    INSERT INTO sentiment_factor_snapshots (
+                        as_of_date, model_version, evidence_hash, evidence_json,
+                        created_at, schema_version
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        as_of_date.isoformat(),
+                        model_version,
+                        evidence_hash,
+                        canonical,
+                        timestamp,
+                        SCHEMA_VERSION,
+                    ),
+                )
+        return {"inserted": 1, "duplicates": 0, "evidence_hash": evidence_hash}
+
+    def load_sentiment_factor_snapshots(
+        self, *, model_version: str | None = None
+    ) -> list[dict[str, object]]:
+        parameters: tuple[object, ...] = ()
+        where = ""
+        if model_version is not None:
+            if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{2,63}", model_version):
+                raise ValueError("invalid_sentiment_factor_snapshot")
+            where = "WHERE model_version = ?"
+            parameters = (model_version,)
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                f"""
+                SELECT as_of_date, model_version, evidence_hash, evidence_json, created_at
+                FROM sentiment_factor_snapshots
+                {where}
+                ORDER BY as_of_date, created_at, evidence_hash
+                """,
+                parameters,
+            ).fetchall()
+        return [
+            {
+                "as_of_date": date.fromisoformat(row["as_of_date"]),
+                "model_version": row["model_version"],
+                "evidence_hash": row["evidence_hash"],
+                "evidence": json.loads(row["evidence_json"]),
+                "created_at": row["created_at"],
             }
             for row in rows
         ]

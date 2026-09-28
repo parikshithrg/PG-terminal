@@ -2290,7 +2290,8 @@
         const monthlyLeadersUpdated = breadthUpdated ? await loadMonthlyLeaders() : false;
         const historicalLeadersUpdated = monthlyLeadersUpdated ? await loadHistoricalMonthLeaders() : false;
         const sentimentUpdated = await loadDomesticSentiment(false);
-        if (indexUpdated && eodIndicesUpdated && institutionalFlowsUpdated && confirmedFpiUpdated && macroContextUpdated && globalRiskUpdated && futuresOiUpdated && breadthUpdated && monthlyLeadersUpdated && historicalLeadersUpdated && sentimentUpdated) {
+        const factorSnapshotSaved = sentimentUpdated ? await saveSentimentFactorSnapshot() : false;
+        if (indexUpdated && eodIndicesUpdated && institutionalFlowsUpdated && confirmedFpiUpdated && macroContextUpdated && globalRiskUpdated && futuresOiUpdated && breadthUpdated && monthlyLeadersUpdated && historicalLeadersUpdated && sentimentUpdated && factorSnapshotSaved) {
           showNotice('EOD update completed. Market summaries and sentiment are ready.');
         } else {
           showNotice('EOD update finished with unavailable data. Review the dashboard and sentiment status.');
@@ -2304,6 +2305,20 @@
     async function refreshInstitutionalFlows() {
       try {
         const response = await fetch('/api/market-sentiment/institutional-flows/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+        const result = await response.json();
+        return response.ok && result.ok === true;
+      } catch (_error) {
+        return false;
+      }
+    }
+
+    async function saveSentimentFactorSnapshot() {
+      try {
+        const response = await fetch('/api/market-sentiment/factor-snapshot', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: '{}',

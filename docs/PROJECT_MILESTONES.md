@@ -107,7 +107,13 @@ Phase 2 remains read-only. No derivative signal, regime score, portfolio change,
 or order action is activated by these data foundations.
 
 Phase 3 next requires observed publication-lag/failure validation and threshold
-testing. A permitted broad emerging-market benchmark also remains to be selected.
+testing. The available FRED Nasdaq Emerging Markets series requires pre-approval
+and was rejected; a permitted broad emerging-market equity benchmark remains open.
+
+Phase 4 has started with immutable, versioned daily evidence snapshots. The EOD
+workflow stores a canonical hash, preserves changed same-day evidence as an
+auditable revision, and does not yet assign a composite regime. The next step is
+to freeze a candidate regime-rule version and define its validation outputs.
 
 1. **Market sentiment and regime foundation** — implement the approved
    [Market Sentiment blueprint](MARKET_SENTIMENT_BLUEPRINT.md) in phases,

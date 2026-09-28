@@ -247,12 +247,19 @@ These are review prompts, not target weights or automated transactions.
   The adapter uses one bounded export request and remains outside regime scoring.
 - [ ] Accumulate observations, confirm normal publication lags and failures, and
   validate thresholds before allowing global context to influence a regime.
-- [ ] Evaluate a permitted broad emerging-market benchmark before adding it;
-  do not substitute an unexplained free-data proxy.
+- [x] Evaluate the FRED-distributed Nasdaq Emerging Markets Index candidate.
+  It is explicitly marked "Copyrighted: Pre-Approval Required," so it is not
+  integrated. Do not substitute an unexplained ETF or scraped proxy.
+- [ ] Obtain documented permission for a broad emerging-market equity benchmark
+  or select another source whose redistribution terms permit this local use.
 
 ### Phase 4 — regime validation
 
-- Store daily factor snapshots and regime versions locally.
+- [x] Store canonical, hashed daily evidence snapshots with an explicit model
+  version. Exact reruns are idempotent; changed same-day evidence is preserved
+  as another immutable revision for audit rather than overwritten.
+- [ ] Define and freeze the first candidate regime rule version separately from
+  the evidence-snapshot version.
 - Run walk-forward and event validation.
 - Publish the evidence table and limitations before activating a composite label.
 

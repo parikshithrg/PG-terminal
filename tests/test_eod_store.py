@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import json
 from datetime import date
 from pathlib import Path
 
@@ -215,6 +216,41 @@ class EODStoreTest(unittest.TestCase):
         changed[0]["value"] = 7744.0
         with self.assertRaises(GlobalRiskConflictError):
             self.store.append_global_risk_observations(changed, source="FRED")
+
+    def test_sentiment_factor_snapshots_are_versioned_and_revision_preserving(self):
+        evidence = {
+            "as_of_date": "2026-09-25",
+            "trend": {"band": "constructive", "close": 25000.0},
+            "global_risk": {"available": False},
+        }
+        first = self.store.append_sentiment_factor_snapshot(
+            as_of_date=date(2026, 9, 25),
+            model_version="market-sentiment-evidence-v1",
+            evidence=evidence,
+            created_at="2026-09-25T12:00:00+00:00",
+        )
+        duplicate = self.store.append_sentiment_factor_snapshot(
+            as_of_date=date(2026, 9, 25),
+            model_version="market-sentiment-evidence-v1",
+            evidence=evidence,
+            created_at="2026-09-25T12:05:00+00:00",
+        )
+        revised = json.loads(json.dumps(evidence))
+        revised["global_risk"] = {"available": True}
+        revision = self.store.append_sentiment_factor_snapshot(
+            as_of_date=date(2026, 9, 25),
+            model_version="market-sentiment-evidence-v1",
+            evidence=revised,
+            created_at="2026-09-25T12:10:00+00:00",
+        )
+        self.assertEqual(first["inserted"], 1)
+        self.assertEqual(duplicate["duplicates"], 1)
+        self.assertEqual(revision["inserted"], 1)
+        loaded = self.store.load_sentiment_factor_snapshots(
+            model_version="market-sentiment-evidence-v1"
+        )
+        self.assertEqual(len(loaded), 2)
+        self.assertNotEqual(loaded[0]["evidence_hash"], loaded[1]["evidence_hash"])
 
     def test_macro_snapshots_are_append_only_and_preserve_instrument_label(self):
         rows = [
