@@ -5,8 +5,10 @@ from pathlib import Path
 
 from eod_store import (
     CandleConflictError,
+    ConfirmedFpiConflictError,
     EODStore,
     FuturesSnapshotConflictError,
+    GlobalRiskConflictError,
     InstitutionalFlowConflictError,
     MacroSnapshotConflictError,
 )
@@ -135,6 +137,84 @@ class EODStoreTest(unittest.TestCase):
         changed[0].update({"buy_crore": 14405.90, "net_crore": 2342.46})
         with self.assertRaises(InstitutionalFlowConflictError):
             self.store.append_institutional_flows(changed, source="NSE official report")
+
+    def test_confirmed_fpi_routes_are_append_only_and_kept_separate(self):
+        rows = [
+            {
+                "date": date(2026, 9, 24),
+                "asset_class": "Equity",
+                "investment_route": "Stock Exchange",
+                "gross_purchases_crore": 100.0,
+                "gross_sales_crore": 120.0,
+                "net_investment_crore": -20.0,
+            },
+            {
+                "date": date(2026, 9, 24),
+                "asset_class": "Equity",
+                "investment_route": "Primary market & others",
+                "gross_purchases_crore": 5.0,
+                "gross_sales_crore": 0.0,
+                "net_investment_crore": 5.0,
+            },
+            {
+                "date": date(2026, 9, 24),
+                "asset_class": "Equity",
+                "investment_route": "Sub-total",
+                "gross_purchases_crore": 105.0,
+                "gross_sales_crore": 120.0,
+                "net_investment_crore": -15.0,
+            },
+        ]
+        self.assertEqual(
+            self.store.append_confirmed_fpi_investments(rows, source="NSDL official report"),
+            {"inserted": 3, "duplicates": 0},
+        )
+        self.assertEqual(
+            self.store.append_confirmed_fpi_investments(rows, source="NSDL official report"),
+            {"inserted": 0, "duplicates": 3},
+        )
+        loaded = self.store.load_confirmed_fpi_investments()
+        self.assertEqual(len(loaded), 3)
+        self.assertEqual(loaded[-1]["investment_route"], "Sub-total")
+        self.assertEqual(loaded[-1]["publication_status"], "confirmed_custodian")
+
+        changed = [dict(row) for row in rows]
+        changed[-1]["net_investment_crore"] = -14.0
+        changed[-1]["gross_purchases_crore"] = 106.0
+        with self.assertRaises(ConfirmedFpiConflictError):
+            self.store.append_confirmed_fpi_investments(changed, source="NSDL official report")
+
+    def test_global_risk_observations_are_append_only(self):
+        rows = [
+            {
+                "date": date(2026, 9, 25),
+                "metric_key": "sp500",
+                "value": 7743.41,
+                "unit": "Index",
+                "source_series": "SP500",
+            },
+            {
+                "date": date(2026, 9, 25),
+                "metric_key": "us_vix",
+                "value": 14.21,
+                "unit": "Index",
+                "source_series": "VIXCLS",
+            },
+        ]
+        self.assertEqual(
+            self.store.append_global_risk_observations(rows, source="FRED"),
+            {"inserted": 2, "duplicates": 0},
+        )
+        self.assertEqual(
+            self.store.append_global_risk_observations(rows, source="FRED"),
+            {"inserted": 0, "duplicates": 2},
+        )
+        self.assertEqual(len(self.store.load_global_risk_observations()), 2)
+
+        changed = [dict(row) for row in rows]
+        changed[0]["value"] = 7744.0
+        with self.assertRaises(GlobalRiskConflictError):
+            self.store.append_global_risk_observations(changed, source="FRED")
 
     def test_macro_snapshots_are_append_only_and_preserve_instrument_label(self):
         rows = [

@@ -1,6 +1,8 @@
 import unittest
 import socket
 import urllib.error
+import io
+import zipfile
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
@@ -17,8 +19,10 @@ from server import (
     calculate_market_breadth,
     calculate_domestic_sentiment_core,
     calculate_institutional_flow_summary,
+    calculate_confirmed_fpi_summary,
     calculate_macro_context_summary,
     calculate_futures_oi_summary,
+    calculate_global_risk_summary,
     discover_sectoral_indices,
     extract_request_token,
     historical_date_ranges,
@@ -32,6 +36,10 @@ from server import (
     parse_equity_tokens,
     parse_nifty500_constituents,
     parse_institutional_flows,
+    parse_nsdl_confirmed_fpi,
+    parse_futures_daily_snapshot,
+    parse_fred_global_csv,
+    parse_fred_global_zip,
     parse_rbi_macro_snapshot,
     parse_near_month_stock_futures,
     parse_seasonality_index_tokens,
@@ -213,17 +221,70 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
                 now=datetime(2026, 9, 24, 12, 0, tzinfo=ZoneInfo("Asia/Kolkata")),
             )
 
+    def test_futures_history_snapshot_uses_latest_completed_candle_with_oi(self):
+        contract = {
+            "underlying": "AAA", "tradingsymbol": "AAA26OCTFUT", "exchange": "NFO",
+            "instrument_token": "101", "expiry": date(2026, 10, 29), "lot_size": 500,
+        }
+        payload = {
+            "status": "success",
+            "data": {
+                "candles": [
+                    ["2026-09-24T00:00:00+0530", 100, 106, 98, 104, 100000, 700000],
+                    ["2026-09-25T00:00:00+0530", 104, 109, 103, 108, 120000, 740000],
+                    ["2026-09-28T00:00:00+0530", 108, 112, 106, 111, 40000, 760000],
+                ]
+            },
+        }
+        snapshot = parse_futures_daily_snapshot(
+            payload, contract, completed_through=date(2026, 9, 25)
+        )
+        self.assertEqual(snapshot["date"], date(2026, 9, 25))
+        self.assertEqual(snapshot["close"], 108.0)
+        self.assertEqual(snapshot["open_interest"], 740000)
+
     def test_futures_oi_summary_does_not_compare_across_rollover(self):
         rows = [
-            {"date": date(2026, 9, 22), "underlying": "AAA", "contract_key": "NFO:AAA26SEPFUT", "expiry": date(2026, 9, 24)},
-            {"date": date(2026, 9, 23), "underlying": "AAA", "contract_key": "NFO:AAA26SEPFUT", "expiry": date(2026, 9, 24)},
-            {"date": date(2026, 9, 22), "underlying": "BBB", "contract_key": "NFO:BBB26SEPFUT", "expiry": date(2026, 9, 24)},
-            {"date": date(2026, 9, 23), "underlying": "BBB", "contract_key": "NFO:BBB26OCTFUT", "expiry": date(2026, 10, 29)},
+            {"date": date(2026, 9, 22), "underlying": "AAA", "tradingsymbol": "AAA26SEPFUT", "contract_key": "NFO:AAA26SEPFUT", "expiry": date(2026, 9, 24), "close": 100.0, "open_interest": 1000, "volume": 500},
+            {"date": date(2026, 9, 23), "underlying": "AAA", "tradingsymbol": "AAA26SEPFUT", "contract_key": "NFO:AAA26SEPFUT", "expiry": date(2026, 9, 24), "close": 102.0, "open_interest": 1100, "volume": 600},
+            {"date": date(2026, 9, 22), "underlying": "BBB", "tradingsymbol": "BBB26SEPFUT", "contract_key": "NFO:BBB26SEPFUT", "expiry": date(2026, 9, 24), "close": 200.0, "open_interest": 2000, "volume": 800},
+            {"date": date(2026, 9, 23), "underlying": "BBB", "tradingsymbol": "BBB26OCTFUT", "contract_key": "NFO:BBB26OCTFUT", "expiry": date(2026, 10, 29), "close": 198.0, "open_interest": 900, "volume": 700},
         ]
         summary = calculate_futures_oi_summary(rows)
         self.assertEqual(summary["comparable_count"], 1)
         self.assertEqual(summary["rollover_baseline_count"], 1)
-        self.assertEqual(summary["classification_status"], "withheld")
+        self.assertEqual(summary["classification_status"], "descriptive_only")
+        self.assertEqual(summary["state_counts"]["long_build_up"], 1)
+        self.assertEqual(summary["states"][0]["price_change_pct"], 2.0)
+        self.assertEqual(summary["states"][0]["oi_change_pct"], 10.0)
+
+    def test_futures_oi_summary_filters_noise_stale_gaps_and_zero_liquidity(self):
+        def row(symbol, day, close, oi, volume=1000):
+            return {
+                "date": day,
+                "underlying": symbol,
+                "tradingsymbol": f"{symbol}26OCTFUT",
+                "contract_key": f"NFO:{symbol}26OCTFUT",
+                "expiry": date(2026, 10, 29),
+                "close": close,
+                "open_interest": oi,
+                "volume": volume,
+            }
+
+        rows = [
+            row("NOISE", date(2026, 9, 24), 100.0, 1000),
+            row("NOISE", date(2026, 9, 25), 100.1, 1020),
+            row("STALE", date(2026, 9, 18), 100.0, 1000),
+            row("STALE", date(2026, 9, 25), 102.0, 1100),
+            row("ZERO", date(2026, 9, 24), 100.0, 1000),
+            row("ZERO", date(2026, 9, 25), 102.0, 1100, volume=0),
+        ]
+        summary = calculate_futures_oi_summary(rows)
+        self.assertEqual(summary["eligible_count"], 1)
+        self.assertEqual(summary["state_counts"]["no_clear_signal"], 1)
+        self.assertEqual(summary["stale_gap_count"], 1)
+        self.assertEqual(summary["liquidity_excluded_count"], 1)
+        self.assertFalse(summary["safeguards"]["regime_score_enabled"])
 
     def test_dashboard_index_tokens_bind_exact_dashboard_indices(self):
         fixture = """instrument_token,tradingsymbol,name,segment,exchange
@@ -543,6 +604,90 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(summary["five_session"]["combined_net_crore"], 75.0)
         self.assertEqual(len(summary["series"]), 5)
         self.assertIsNone(summary["twenty_session"])
+
+    def test_nsdl_confirmed_fpi_parser_preserves_equity_routes_and_parentheses(self):
+        payload = """
+        <div id="rpt"><table>
+          <tr><th colspan="8">Daily Trends in FPI Investments on 25-Sep-2026</th></tr>
+          <tr><th>Reporting Date</th><th>Asset</th><th>Route</th><th>Buy</th><th>Sell</th><th>Net</th></tr>
+          <tr><td rowspan="25">24-Sep-2026</td><td rowspan="3">Equity</td><td>Stock Exchange</td><td>100.00</td><td>120.00</td><td>(20.00)</td></tr>
+          <tr><td>Primary market &amp; others</td><td>5.00</td><td>0.00</td><td>5.00</td></tr>
+          <tr><td>Sub-total</td><td>105.00</td><td>120.00</td><td>(15.00)</td></tr>
+          <tr><td rowspan="3">Debt-General Limit</td><td>Stock Exchange</td><td>1.00</td><td>0.00</td><td>1.00</td></tr>
+        </table><table><tr><th>Daily Trends in FPI Derivative Trades on 25-Sep-2026</th></tr></table></div>
+        """
+        rows = parse_nsdl_confirmed_fpi(payload, today=date(2026, 9, 25))
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0]["investment_route"], "Stock Exchange")
+        self.assertEqual(rows[0]["net_investment_crore"], -20.0)
+        self.assertEqual(rows[2]["net_investment_crore"], -15.0)
+
+        summary = calculate_confirmed_fpi_summary(rows, today=date(2026, 9, 27))
+        self.assertTrue(summary["available"])
+        self.assertEqual(summary["as_of_date"], "2026-09-24")
+        self.assertEqual(summary["reporting_lag_calendar_days"], 3)
+        self.assertEqual(summary["latest"]["subtotal"]["net_investment_crore"], -15.0)
+        self.assertIsNone(summary["five_session_net_crore"])
+
+    def test_fred_global_parser_and_summary_preserve_independent_dates(self):
+        parsed = parse_fred_global_csv(
+            "observation_date,SP500\n2026-09-23,7706.03\n2026-09-24,.\n2026-09-25,7743.41\n",
+            series_id="SP500",
+            today=date(2026, 9, 28),
+            earliest=date(2026, 9, 1),
+        )
+        self.assertEqual(len(parsed), 2)
+        self.assertEqual(parsed[-1]["metric_key"], "sp500")
+        self.assertEqual(parsed[-1]["value"], 7743.41)
+
+        rows = []
+        specs = {
+            "sp500": (7000.0, "Index", "SP500"),
+            "us_vix": (15.0, "Index", "VIXCLS"),
+            "usd_jpy": (150.0, "JPY per USD", "DEXJPUS"),
+            "broad_usd": (115.0, "Index Jan 2006=100", "DTWEXBGS"),
+            "brent_crude": (80.0, "USD per barrel", "DCOILBRENTEU"),
+        }
+        for offset in range(221):
+            observation_date = date(2025, 12, 1) + timedelta(days=offset)
+            for key, (base, unit, series_id) in specs.items():
+                rows.append(
+                    {
+                        "date": observation_date,
+                        "metric_key": key,
+                        "value": base + offset,
+                        "unit": unit,
+                        "source_series": series_id,
+                    }
+                )
+        summary = calculate_global_risk_summary(rows)
+        self.assertTrue(summary["available"])
+        self.assertEqual(summary["band"], "unranked")
+        self.assertIsNotNone(summary["metrics"]["sp500"]["vs_200dma_pct"])
+        self.assertEqual(summary["metrics"]["us_vix"]["one_year_percentile"], 100.0)
+        self.assertFalse(summary["scoring_enabled"])
+
+    def test_fred_global_zip_accepts_frequency_grouped_series(self):
+        archive_bytes = io.BytesIO()
+        with zipfile.ZipFile(archive_bytes, "w") as archive:
+            archive.writestr(
+                "daily,_close.csv",
+                "observation_date,SP500,VIXCLS\n2026-09-25,7743.41,14.21\n",
+            )
+            archive.writestr(
+                "daily.csv",
+                "observation_date,DEXJPUS,DTWEXBGS,DCOILBRENTEU\n"
+                "2026-09-25,156.87,119.51,114.89\n",
+            )
+        rows = parse_fred_global_zip(
+            archive_bytes.getvalue(),
+            today=date(2026, 9, 28),
+            earliest=date(2026, 9, 1),
+        )
+        self.assertEqual(len(rows), 5)
+        self.assertEqual({row["metric_key"] for row in rows}, {
+            "sp500", "us_vix", "usd_jpy", "broad_usd", "brent_crude"
+        })
 
     def test_rbi_macro_parser_preserves_units_and_selects_nearest_ten_year_security(self):
         fixture = """

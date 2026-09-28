@@ -543,6 +543,17 @@
     .flow-chart-panel p { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
     .flow-chart-panel canvas { display: block; width: 100%; height: 230px; }
     .flow-chart-note { margin-top: 10px; color: var(--muted); font-size: 12px; }
+    .futures-table-toolbar { display: flex; align-items: end; justify-content: space-between; gap: 14px; margin: 4px 0 14px; }
+    .futures-table-toolbar label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
+    .futures-table-toolbar select { min-width: 190px; padding: 8px 30px 8px 9px; border: 1px solid var(--line); border-radius: 4px; color: var(--text); background: #fff; }
+    .futures-table-toolbar .coverage-detail { max-width: 680px; padding-top: 0; border-top: 0; text-align: right; }
+    .futures-table { min-width: 1120px; }
+    .futures-sortable-heading { padding: 0; }
+    .futures-sortable-heading:not(:first-child) .sort-button { justify-content: flex-end; }
+    .futures-state { display: inline-flex; padding: 3px 7px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .futures-state.long-build-up, .futures-state.short-covering { color: #187a42; background: #e8f7ee; }
+    .futures-state.short-build-up, .futures-state.long-unwinding { color: #a42f35; background: #fdebec; }
+    .futures-state.no-clear-signal { color: #666b73; background: #f0f2f3; }
 
     @media (max-width: 1100px) {
       .sentiment-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -908,6 +919,18 @@
             </article>
 
             <article class="evidence-card">
+              <div class="evidence-heading"><h2>Confirmed FPI investment</h2><span class="sentiment-band" id="confirmedFpiBand">Unavailable</span></div>
+              <p class="evidence-reason" id="confirmedFpiReason">Official NSDL custodian-confirmed equity data has not been loaded.</p>
+              <div class="evidence-values">
+                <div class="evidence-value"><strong id="confirmedFpiSubtotal">—</strong><span>equity subtotal</span></div>
+                <div class="evidence-value"><strong id="confirmedFpiExchange">—</strong><span>stock exchange</span></div>
+                <div class="evidence-value"><strong id="confirmedFpiPrimary">—</strong><span>primary &amp; others</span></div>
+                <div class="evidence-value"><strong id="confirmedFpiFiveSession">—</strong><span>5-session subtotal</span></div>
+              </div>
+              <div class="coverage-detail" id="confirmedFpiCoverage">This series is kept separate from NSE provisional flows because timing and coverage differ.</div>
+            </article>
+
+            <article class="evidence-card">
               <div class="evidence-heading"><h2>Futures price and open interest</h2><span class="sentiment-band" id="futuresOiBand">Unavailable</span></div>
               <p class="evidence-reason" id="futuresOiReason">Run EOD update after market close to establish the near-month baseline.</p>
               <div class="evidence-values">
@@ -915,7 +938,40 @@
                 <div class="evidence-value"><strong id="futuresOiComparable">—</strong><span>same-contract comparisons</span></div>
                 <div class="evidence-value"><strong id="futuresOiRollovers">—</strong><span>rollover baselines</span></div>
               </div>
-              <div class="coverage-detail">Build-up, unwinding and short-covering labels remain withheld until contract continuity is validated.</div>
+              <div class="coverage-detail" id="futuresOiStateSummary">Directional states will appear after a second observation of the same contract.</div>
+            </article>
+
+            <article class="evidence-card flow-chart-card">
+              <div class="evidence-heading"><h2>Futures positioning detail</h2><span class="sentiment-band">Descriptive only</span></div>
+              <p class="evidence-reason" id="futuresOiTableNote">Two observations of the same contract are required. These states do not affect the regime score.</p>
+              <div class="futures-table-toolbar">
+                <label for="futuresOiStateFilter">Classification
+                  <select id="futuresOiStateFilter">
+                    <option value="all">All eligible observations</option>
+                    <option value="long_build_up">Long build-up</option>
+                    <option value="short_build_up">Short build-up</option>
+                    <option value="long_unwinding">Long unwinding</option>
+                    <option value="short_covering">Short covering</option>
+                    <option value="no_clear_signal">No clear signal</option>
+                  </select>
+                </label>
+                <div class="coverage-detail" id="futuresOiSafeguards">Noise and coverage safeguards will appear with data.</div>
+              </div>
+              <div class="table-wrap">
+                <table class="futures-table">
+                  <thead><tr>
+                    <th class="futures-sortable-heading" data-futures-sort-key="underlying" aria-sort="ascending"><button class="sort-button" type="button">Stock <span class="sort-indicator">▲</span></button></th>
+                    <th class="futures-sortable-heading" data-futures-sort-key="state" aria-sort="none"><button class="sort-button" type="button">State <span class="sort-indicator"></span></button></th>
+                    <th class="futures-sortable-heading" data-futures-sort-key="price_change_pct" aria-sort="none"><button class="sort-button" type="button">Price % <span class="sort-indicator"></span></button></th>
+                    <th class="futures-sortable-heading" data-futures-sort-key="oi_change_pct" aria-sort="none"><button class="sort-button" type="button">OI % <span class="sort-indicator"></span></button></th>
+                    <th class="futures-sortable-heading" data-futures-sort-key="volume" aria-sort="none"><button class="sort-button" type="button">Volume <span class="sort-indicator"></span></button></th>
+                    <th class="futures-sortable-heading" data-futures-sort-key="open_interest" aria-sort="none"><button class="sort-button" type="button">Open interest <span class="sort-indicator"></span></button></th>
+                    <th class="futures-sortable-heading" data-futures-sort-key="expiry" aria-sort="none"><button class="sort-button" type="button">Expiry <span class="sort-indicator"></span></button></th>
+                    <th>Contract</th><th>Comparison</th>
+                  </tr></thead>
+                  <tbody id="futuresOiTableBody"><tr><td colspan="9">Run EOD update twice on the same contract to populate this table.</td></tr></tbody>
+                </table>
+              </div>
             </article>
 
             <article class="evidence-card">
@@ -930,11 +986,25 @@
               </div>
               <div class="coverage-detail" id="macroContextChanges">Changes will appear after 5 and 20 stored sessions.</div>
             </article>
+
+            <article class="evidence-card">
+              <div class="evidence-heading"><h2>Global risk backdrop</h2><span class="sentiment-band" id="globalRiskBand">Unavailable</span></div>
+              <p class="evidence-reason" id="globalRiskReason">Permitted global EOD series have not been loaded.</p>
+              <div class="evidence-values">
+                <div class="evidence-value"><strong id="sp500Value">—</strong><span>S&amp;P 500</span></div>
+                <div class="evidence-value"><strong id="sp500TrendValue">—</strong><span>vs 200DMA</span></div>
+                <div class="evidence-value"><strong id="usVixValue">—</strong><span>US VIX</span></div>
+                <div class="evidence-value"><strong id="broadUsdValue">—</strong><span>broad USD</span></div>
+                <div class="evidence-value"><strong id="usdJpyValue">—</strong><span>USD/JPY</span></div>
+                <div class="evidence-value"><strong id="brentValue">—</strong><span>Brent USD/bbl</span></div>
+              </div>
+              <div class="coverage-detail" id="globalRiskChanges">Five- and twenty-session changes are descriptive and remain outside regime scoring.</div>
+            </article>
           </div>
 
           <div class="source-state-grid" aria-label="Pending sentiment sources">
-            <article class="source-state"><strong>Confirmed institutional flows</strong><span>Pending · current NSE cash activity is provisional; NSDL reconciliation remains separate</span></article>
-            <article class="source-state"><strong>Global risk backdrop</strong><span>Unavailable · permitted provider not selected</span></article>
+            <article class="source-state"><strong>Confirmed institutional flows</strong><span id="confirmedFpiSourceState">NSDL custodian series · run EOD update to load</span></article>
+            <article class="source-state"><strong>Global risk backdrop</strong><span id="globalRiskSourceState">FRED EOD foundation · run EOD update to load</span></article>
           </div>
 
           <div class="analysis-note">Portfolio balancing remains a read-only review step. Phase 1 does not prescribe weights or trigger transactions.</div>
@@ -1186,6 +1256,8 @@
     let marketBreadthRows = [];
     let marketBreadthSort = { key: 'sector', direction: 'asc' };
     let institutionalFlowSeries = [];
+    let futuresOiRows = [];
+    let futuresOiSort = { key: 'underlying', direction: 'asc' };
 
     function appendChoice(parent, value, label) {
       const option = document.createElement('option');
@@ -1290,6 +1362,52 @@
       if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
       const numeric = Number(value);
       return `${numeric > 0 ? '+' : numeric < 0 ? '−' : ''}₹${Math.abs(numeric).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Cr`;
+    }
+
+    const futuresStateLabels = {
+      long_build_up: 'Long build-up',
+      short_build_up: 'Short build-up',
+      long_unwinding: 'Long unwinding',
+      short_covering: 'Short covering',
+      no_clear_signal: 'No clear signal',
+    };
+
+    function renderFuturesOiTable() {
+      const filter = document.getElementById('futuresOiStateFilter').value;
+      const rows = futuresOiRows.filter((row) => filter === 'all' || row.state === filter);
+      const { key, direction } = futuresOiSort;
+      const multiplier = direction === 'asc' ? 1 : -1;
+      rows.sort((left, right) => {
+        const leftValue = left[key];
+        const rightValue = right[key];
+        if (typeof leftValue === 'number' && typeof rightValue === 'number') {
+          return (leftValue - rightValue) * multiplier;
+        }
+        return String(leftValue).localeCompare(String(rightValue)) * multiplier;
+      });
+      document.querySelectorAll('.futures-sortable-heading').forEach((heading) => {
+        const active = heading.dataset.futuresSortKey === key;
+        heading.setAttribute('aria-sort', active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none');
+        heading.querySelector('.sort-indicator').textContent = active ? (direction === 'asc' ? '▲' : '▼') : '';
+      });
+      const body = document.getElementById('futuresOiTableBody');
+      if (!rows.length) {
+        body.innerHTML = `<tr><td colspan="9">${futuresOiRows.length ? 'No observations match this classification.' : 'Run EOD update twice on the same contract to populate this table.'}</td></tr>`;
+        return;
+      }
+      body.innerHTML = rows.map((row) => `
+        <tr>
+          <td>${row.underlying}</td>
+          <td><span class="futures-state ${row.state.replaceAll('_', '-')}">${futuresStateLabels[row.state] || row.state}</span></td>
+          <td>${signedPercentage(row.price_change_pct)}</td>
+          <td>${signedPercentage(row.oi_change_pct)}</td>
+          <td>${row.volume.toLocaleString('en-IN')}</td>
+          <td>${row.open_interest.toLocaleString('en-IN')}</td>
+          <td>${row.expiry}</td>
+          <td>${row.tradingsymbol}</td>
+          <td>${row.from_date} → ${row.to_date}</td>
+        </tr>
+      `).join('');
     }
 
     function setSentimentBand(id, band) {
@@ -1528,6 +1646,28 @@
         window.requestAnimationFrame(drawInstitutionalFlowCharts);
       }
 
+      const confirmedFpi = result.confirmed_fpi;
+      if (confirmedFpi && confirmedFpi.available) {
+        setSentimentBand('confirmedFpiBand', 'confirmed');
+        document.getElementById('confirmedFpiReason').textContent = `Custodian-confirmed equity investment · reporting date ${confirmedFpi.as_of_date} · ${confirmedFpi.reporting_lag_calendar_days} calendar-day publication lag.`;
+        document.getElementById('confirmedFpiSubtotal').textContent = signedCrore(confirmedFpi.latest.subtotal.net_investment_crore);
+        document.getElementById('confirmedFpiExchange').textContent = signedCrore(confirmedFpi.latest.stock_exchange.net_investment_crore);
+        document.getElementById('confirmedFpiPrimary').textContent = signedCrore(confirmedFpi.latest.primary_market_and_others.net_investment_crore);
+        document.getElementById('confirmedFpiFiveSession').textContent = confirmedFpi.five_session_net_crore === null
+          ? 'Building history'
+          : signedCrore(confirmedFpi.five_session_net_crore);
+        document.getElementById('confirmedFpiCoverage').textContent = `${confirmedFpi.session_count} confirmed reporting dates stored. ${confirmedFpi.comparison_note}`;
+        document.getElementById('confirmedFpiSourceState').textContent = `NSDL confirmed equity · ${confirmedFpi.as_of_date} · separate from NSE provisional flows`;
+      } else {
+        setSentimentBand('confirmedFpiBand', '');
+        document.getElementById('confirmedFpiReason').textContent = confirmedFpi
+          ? confirmedFpi.reason
+          : 'Official NSDL custodian-confirmed equity data has not been loaded.';
+        ['confirmedFpiSubtotal', 'confirmedFpiExchange', 'confirmedFpiPrimary', 'confirmedFpiFiveSession'].forEach((id) => { document.getElementById(id).textContent = '—'; });
+        document.getElementById('confirmedFpiCoverage').textContent = 'This series is kept separate from NSE provisional flows because timing and coverage differ.';
+        document.getElementById('confirmedFpiSourceState').textContent = 'NSDL custodian series · run EOD update to load';
+      }
+
       const macro = result.macro_context;
       if (macro && macro.available) {
         setSentimentBand('macroContextBand', macro.band);
@@ -1554,6 +1694,36 @@
         document.getElementById('macroContextChanges').textContent = 'Changes will appear after 5 and 20 stored sessions.';
       }
 
+      const globalRisk = result.global_risk;
+      if (globalRisk && globalRisk.available) {
+        setSentimentBand('globalRiskBand', globalRisk.band);
+        document.getElementById('globalRiskReason').textContent = `${globalRisk.reason} Components span ${globalRisk.oldest_component_date} to ${globalRisk.as_of_date}.`;
+        const sp500 = globalRisk.metrics.sp500;
+        const usVix = globalRisk.metrics.us_vix;
+        const broadUsd = globalRisk.metrics.broad_usd;
+        const usdJpy = globalRisk.metrics.usd_jpy;
+        const brent = globalRisk.metrics.brent_crude;
+        document.getElementById('sp500Value').textContent = formatPrice(sp500.level);
+        document.getElementById('sp500TrendValue').textContent = sp500.vs_200dma_pct === null ? 'Building history' : signedPercentage(sp500.vs_200dma_pct);
+        document.getElementById('usVixValue').textContent = `${usVix.level.toFixed(2)} · ${usVix.one_year_percentile.toFixed(0)}th pct`;
+        document.getElementById('broadUsdValue').textContent = broadUsd.level.toFixed(2);
+        document.getElementById('usdJpyValue').textContent = usdJpy.level.toFixed(2);
+        document.getElementById('brentValue').textContent = brent.level.toFixed(2);
+        const globalParts = [];
+        if (sp500.twenty_session_change_pct !== null) globalParts.push(`S&P 20-session ${signedPercentage(sp500.twenty_session_change_pct)}`);
+        if (broadUsd.twenty_session_change_pct !== null) globalParts.push(`broad USD ${signedPercentage(broadUsd.twenty_session_change_pct)}`);
+        if (usdJpy.twenty_session_change_pct !== null) globalParts.push(`USD/JPY ${signedPercentage(usdJpy.twenty_session_change_pct)}`);
+        if (brent.twenty_session_change_pct !== null) globalParts.push(`Brent ${signedPercentage(brent.twenty_session_change_pct)}`);
+        document.getElementById('globalRiskChanges').textContent = `${globalParts.join(' · ')} · descriptive only; regime scoring off.`;
+        document.getElementById('globalRiskSourceState').textContent = `FRED EOD series · latest component ${globalRisk.as_of_date} · scoring off`;
+      } else {
+        setSentimentBand('globalRiskBand', '');
+        document.getElementById('globalRiskReason').textContent = globalRisk ? globalRisk.reason : 'Permitted global EOD series have not been loaded.';
+        ['sp500Value', 'sp500TrendValue', 'usVixValue', 'broadUsdValue', 'usdJpyValue', 'brentValue'].forEach((id) => { document.getElementById(id).textContent = '—'; });
+        document.getElementById('globalRiskChanges').textContent = 'Five- and twenty-session changes are descriptive and remain outside regime scoring.';
+        document.getElementById('globalRiskSourceState').textContent = 'FRED EOD foundation · run EOD update to load';
+      }
+
       const futuresOi = result.futures_oi;
       if (futuresOi && futuresOi.available) {
         setSentimentBand('futuresOiBand', 'unranked');
@@ -1561,10 +1731,38 @@
         document.getElementById('futuresOiCoverage').textContent = futuresOi.latest_coverage.toLocaleString('en-IN');
         document.getElementById('futuresOiComparable').textContent = futuresOi.comparable_count.toLocaleString('en-IN');
         document.getElementById('futuresOiRollovers').textContent = futuresOi.rollover_baseline_count.toLocaleString('en-IN');
+        const counts = futuresOi.state_counts || {
+          long_build_up: 0,
+          short_build_up: 0,
+          long_unwinding: 0,
+          short_covering: 0,
+          no_clear_signal: 0,
+        };
+        document.getElementById('futuresOiStateSummary').textContent = futuresOi.comparable_count
+          ? `Descriptive only · long build-up ${counts.long_build_up} · short build-up ${counts.short_build_up} · long unwinding ${counts.long_unwinding} · short covering ${counts.short_covering} · no clear signal ${counts.no_clear_signal}.`
+          : 'Directional states will appear after a second observation of the same contract.';
+        futuresOiRows = Array.isArray(futuresOi.states) ? [...futuresOi.states] : [];
+        const expectedUniverse = futuresOi.expected_universe || 210;
+        const coveragePct = Number.isFinite(futuresOi.latest_coverage_pct)
+          ? futuresOi.latest_coverage_pct
+          : 100 * futuresOi.latest_coverage / expectedUniverse;
+        const safeguards = futuresOi.safeguards || {
+          minimum_absolute_price_change_pct: 0.25,
+          minimum_absolute_oi_change_pct: 1.0,
+          maximum_calendar_gap_days: 4,
+        };
+        document.getElementById('futuresOiTableNote').textContent = `${futuresOi.latest_coverage}/${expectedUniverse} contracts (${coveragePct.toFixed(1)}%) · ${futuresOi.latest_missing_count ?? Math.max(0, expectedUniverse - futuresOi.latest_coverage)} missing · ${futuresOi.stale_gap_count || 0} stale gaps · ${futuresOi.liquidity_excluded_count || 0} excluded for zero volume/OI.`;
+        document.getElementById('futuresOiSafeguards').textContent = `Noise floor: |price| ≥ ${safeguards.minimum_absolute_price_change_pct.toFixed(2)}%, |OI| ≥ ${safeguards.minimum_absolute_oi_change_pct.toFixed(2)}% · maximum gap ${safeguards.maximum_calendar_gap_days} days · regime scoring off.`;
+        renderFuturesOiTable();
       } else {
         setSentimentBand('futuresOiBand', '');
         document.getElementById('futuresOiReason').textContent = futuresOi ? futuresOi.reason : 'Futures EOD data has not been loaded.';
         ['futuresOiCoverage', 'futuresOiComparable', 'futuresOiRollovers'].forEach((id) => { document.getElementById(id).textContent = '—'; });
+        document.getElementById('futuresOiStateSummary').textContent = 'Directional states will appear after a second observation of the same contract.';
+        futuresOiRows = [];
+        document.getElementById('futuresOiTableNote').textContent = 'Two observations of the same contract are required. These states do not affect the regime score.';
+        document.getElementById('futuresOiSafeguards').textContent = 'Noise and coverage safeguards will appear with data.';
+        renderFuturesOiTable();
       }
     }
 
@@ -2084,13 +2282,15 @@
         const indexUpdated = await loadIndexSnapshot();
         const eodIndicesUpdated = await loadEodIndexSummary();
         const institutionalFlowsUpdated = await refreshInstitutionalFlows();
+        const confirmedFpiUpdated = await refreshConfirmedFpi();
         const macroContextUpdated = await refreshMacroContext();
+        const globalRiskUpdated = await refreshGlobalRisk();
         const futuresOiUpdated = await refreshFuturesOi();
         const breadthUpdated = await loadMarketBreadth();
         const monthlyLeadersUpdated = breadthUpdated ? await loadMonthlyLeaders() : false;
         const historicalLeadersUpdated = monthlyLeadersUpdated ? await loadHistoricalMonthLeaders() : false;
         const sentimentUpdated = await loadDomesticSentiment(false);
-        if (indexUpdated && eodIndicesUpdated && institutionalFlowsUpdated && macroContextUpdated && futuresOiUpdated && breadthUpdated && monthlyLeadersUpdated && historicalLeadersUpdated && sentimentUpdated) {
+        if (indexUpdated && eodIndicesUpdated && institutionalFlowsUpdated && confirmedFpiUpdated && macroContextUpdated && globalRiskUpdated && futuresOiUpdated && breadthUpdated && monthlyLeadersUpdated && historicalLeadersUpdated && sentimentUpdated) {
           showNotice('EOD update completed. Market summaries and sentiment are ready.');
         } else {
           showNotice('EOD update finished with unavailable data. Review the dashboard and sentiment status.');
@@ -2115,9 +2315,37 @@
       }
     }
 
+    async function refreshConfirmedFpi() {
+      try {
+        const response = await fetch('/api/market-sentiment/confirmed-fpi/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+        const result = await response.json();
+        return response.ok && result.ok === true;
+      } catch (_error) {
+        return false;
+      }
+    }
+
     async function refreshMacroContext() {
       try {
         const response = await fetch('/api/market-sentiment/macro-context/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+        const result = await response.json();
+        return response.ok && result.ok === true;
+      } catch (_error) {
+        return false;
+      }
+    }
+
+    async function refreshGlobalRisk() {
+      try {
+        const response = await fetch('/api/market-sentiment/global-risk/refresh', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: '{}',
@@ -2307,6 +2535,18 @@
         }
         if (marketBreadthRows.length) renderMarketBreadthRows();
         else updateMarketBreadthSortHeaders();
+      });
+    });
+    document.getElementById('futuresOiStateFilter').addEventListener('change', renderFuturesOiTable);
+    document.querySelectorAll('.futures-sortable-heading').forEach((heading) => {
+      heading.querySelector('.sort-button').addEventListener('click', () => {
+        const key = heading.dataset.futuresSortKey;
+        if (futuresOiSort.key === key) {
+          futuresOiSort.direction = futuresOiSort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+          futuresOiSort = { key, direction: ['underlying', 'state', 'expiry'].includes(key) ? 'asc' : 'desc' };
+        }
+        renderFuturesOiTable();
       });
     });
 

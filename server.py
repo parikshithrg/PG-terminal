@@ -16,6 +16,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -24,8 +25,10 @@ from zoneinfo import ZoneInfo
 
 from eod_store import (
     CandleConflictError,
+    ConfirmedFpiConflictError,
     EODStore,
     FuturesSnapshotConflictError,
+    GlobalRiskConflictError,
     InstitutionalFlowConflictError,
     MacroSnapshotConflictError,
 )
@@ -40,9 +43,20 @@ FULL_QUOTE_URL = "https://api.kite.trade/quote"
 NIFTY500_CONSTITUENTS_URL = "https://www.niftyindices.com/IndexConstituent/ind_nifty500list.csv"
 NSE_FII_DII_URL = "https://www.nseindia.com/api/fiidiiTradeReact"
 NSE_FII_DII_SOURCE = "NSE FII/FPI & DII combined-exchange cash-market report"
+NSDL_FPI_MONTHLY_URL = "https://www.fpi.nsdl.co.in/web/Reports/Monthly.aspx"
+NSDL_FPI_SOURCE = "NSDL custodian-confirmed daily FPI investment report"
+FRED_GRAPH_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv"
+FRED_GLOBAL_SOURCE = "Federal Reserve Bank of St. Louis FRED daily series"
+FRED_GLOBAL_SERIES = {
+    "SP500": ("sp500", "Index", "S&P 500"),
+    "VIXCLS": ("us_vix", "Index", "CBOE VIX"),
+    "DEXJPUS": ("usd_jpy", "JPY per USD", "USD/JPY"),
+    "DTWEXBGS": ("broad_usd", "Index Jan 2006=100", "Broad U.S. dollar index"),
+    "DCOILBRENTEU": ("brent_crude", "USD per barrel", "Brent crude spot"),
+}
 RBI_HOME_URL = "https://www.rbi.org.in/"
 RBI_MACRO_SOURCE = "Reserve Bank of India current rates; FX source FBIL"
-KITE_FUTURES_SOURCE = "Kite Connect NFO near-month full quote after market close"
+KITE_FUTURES_SOURCE = "Kite Connect NFO completed daily price and open interest"
 NIFTY_INDICES_PUBLIC_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
@@ -98,6 +112,8 @@ INDEX_NAME_ALIASES = {
 }
 MAX_REQUEST_BYTES = 16 * 1024
 MAX_RESPONSE_BYTES = 64 * 1024
+NSDL_MAX_RESPONSE_BYTES = 512 * 1024
+FRED_MAX_RESPONSE_BYTES = 512 * 1024
 RBI_MAX_RESPONSE_BYTES = 1024 * 1024
 MAX_HISTORICAL_RESPONSE_BYTES = 512 * 1024
 MAX_INSTRUMENT_BYTES = 8 * 1024 * 1024
@@ -111,6 +127,10 @@ HISTORICAL_LOOKBACK_DAYS = 420
 SEASONALITY_LOOKBACK_YEARS = 10
 SEASONALITY_HISTORY_CHUNK_DAYS = 1800
 HISTORICAL_REQUEST_INTERVAL_SECONDS = 0.36
+FNO_UNIVERSE_EXPECTED = 210
+FUTURES_PRICE_NOISE_PCT = 0.25
+FUTURES_OI_NOISE_PCT = 1.0
+FUTURES_MAX_COMPARISON_GAP_DAYS = 4
 INDIA_TIMEZONE = ZoneInfo("Asia/Kolkata")
 
 SEASONALITY_INDICES = (
@@ -370,6 +390,65 @@ def normalize_futures_eod_quotes(
     return snapshots, missing
 
 
+def parse_futures_daily_snapshot(
+    provider_payload: dict[str, object],
+    contract: dict[str, object],
+    *,
+    completed_through: date,
+) -> dict[str, object] | None:
+    data = provider_payload.get("data")
+    candles = data.get("candles") if isinstance(data, dict) else None
+    if provider_payload.get("status") != "success" or not isinstance(candles, list):
+        raise ValueError("invalid_futures_history_response")
+    parsed: list[dict[str, object]] = []
+    for candle in candles:
+        if not isinstance(candle, list) or len(candle) < 7 or not isinstance(candle[0], str):
+            raise ValueError("invalid_futures_history_response")
+        try:
+            session_date = datetime.fromisoformat(candle[0].replace("Z", "+00:00")).date()
+        except ValueError as error:
+            raise ValueError("invalid_futures_history_response") from error
+        if session_date > completed_through:
+            continue
+        raw_prices = candle[1:5]
+        volume = candle[5]
+        open_interest = candle[6]
+        if (
+            not all(
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and math.isfinite(float(value))
+                and float(value) > 0
+                for value in raw_prices
+            )
+            or not isinstance(volume, (int, float))
+            or isinstance(volume, bool)
+            or float(volume) != int(volume)
+            or int(volume) < 0
+            or not isinstance(open_interest, (int, float))
+            or isinstance(open_interest, bool)
+            or float(open_interest) != int(open_interest)
+            or int(open_interest) < 0
+        ):
+            raise ValueError("invalid_futures_history_response")
+        open_price, high, low, close = (float(value) for value in raw_prices)
+        if high < max(open_price, low, close) or low > min(open_price, high, close):
+            raise ValueError("invalid_futures_history_response")
+        parsed.append(
+            {
+                "contract_key": f"NFO:{contract['tradingsymbol']}",
+                "date": session_date,
+                "open": open_price,
+                "high": high,
+                "low": low,
+                "close": close,
+                "volume": int(volume),
+                "open_interest": int(open_interest),
+            }
+        )
+    return max(parsed, key=lambda item: item["date"]) if parsed else None
+
+
 def calculate_futures_oi_summary(rows: list[dict[str, object]]) -> dict[str, object]:
     if not rows:
         return {
@@ -384,6 +463,17 @@ def calculate_futures_oi_summary(rows: list[dict[str, object]]) -> dict[str, obj
     baseline_only = 0
     rollover_baseline = 0
     latest_rows = 0
+    eligible = 0
+    stale_gap_count = 0
+    liquidity_excluded_count = 0
+    states: list[dict[str, object]] = []
+    state_counts = {
+        "long_build_up": 0,
+        "short_build_up": 0,
+        "long_unwinding": 0,
+        "short_covering": 0,
+        "no_clear_signal": 0,
+    }
     for underlying_rows in grouped.values():
         ordered = sorted(underlying_rows, key=lambda item: (item["date"], item["expiry"]))
         latest = ordered[-1]
@@ -397,16 +487,79 @@ def calculate_futures_oi_summary(rows: list[dict[str, object]]) -> dict[str, obj
             rollover_baseline += 1
         else:
             comparable += 1
+            prior_close = float(prior["close"])
+            prior_oi = int(prior["open_interest"])
+            current_close = float(latest["close"])
+            current_oi = int(latest["open_interest"])
+            gap_days = (latest["date"] - prior["date"]).days
+            if gap_days > FUTURES_MAX_COMPARISON_GAP_DAYS:
+                stale_gap_count += 1
+                continue
+            if prior_oi <= 0 or current_oi <= 0 or int(latest["volume"]) <= 0:
+                liquidity_excluded_count += 1
+                continue
+            eligible += 1
+            price_change = (current_close / prior_close - 1) * 100
+            oi_change = (current_oi / prior_oi - 1) * 100
+            if abs(price_change) < FUTURES_PRICE_NOISE_PCT or abs(oi_change) < FUTURES_OI_NOISE_PCT:
+                state = "no_clear_signal"
+            elif price_change > 0 and oi_change > 0:
+                state = "long_build_up"
+            elif price_change < 0 and oi_change > 0:
+                state = "short_build_up"
+            elif price_change < 0 and oi_change < 0:
+                state = "long_unwinding"
+            elif price_change > 0 and oi_change < 0:
+                state = "short_covering"
+            else:
+                state = "no_clear_signal"
+            state_counts[state] += 1
+            states.append(
+                {
+                    "underlying": latest["underlying"],
+                    "tradingsymbol": latest["tradingsymbol"],
+                    "expiry": latest["expiry"].isoformat(),
+                    "from_date": prior["date"].isoformat(),
+                    "to_date": latest["date"].isoformat(),
+                    "calendar_gap_days": gap_days,
+                    "price_change_pct": round(price_change, 2),
+                    "oi_change_pct": round(oi_change, 2),
+                    "volume": int(latest["volume"]),
+                    "open_interest": current_oi,
+                    "state": state,
+                }
+            )
+    states.sort(key=lambda item: (-abs(float(item["oi_change_pct"])), str(item["underlying"])))
     return {
         "available": True,
         "as_of_date": latest_date.isoformat(),
         "stored_underlyings": len(grouped),
+        "expected_universe": FNO_UNIVERSE_EXPECTED,
         "latest_coverage": latest_rows,
+        "latest_coverage_pct": round(100 * latest_rows / FNO_UNIVERSE_EXPECTED, 1),
+        "latest_missing_count": max(0, FNO_UNIVERSE_EXPECTED - latest_rows),
         "comparable_count": comparable,
+        "eligible_count": eligible,
         "baseline_only_count": baseline_only,
         "rollover_baseline_count": rollover_baseline,
-        "classification_status": "withheld",
-        "reason": "Contract-specific price and OI are stored; build-up labels remain withheld pending continuity validation.",
+        "stale_gap_count": stale_gap_count,
+        "liquidity_excluded_count": liquidity_excluded_count,
+        "classification_status": "descriptive_only" if eligible else "withheld",
+        "state_counts": state_counts,
+        "states": states,
+        "safeguards": {
+            "minimum_absolute_price_change_pct": FUTURES_PRICE_NOISE_PCT,
+            "minimum_absolute_oi_change_pct": FUTURES_OI_NOISE_PCT,
+            "maximum_calendar_gap_days": FUTURES_MAX_COMPARISON_GAP_DAYS,
+            "requires_positive_volume_and_oi": True,
+            "regime_score_enabled": False,
+        },
+        "definition": "Price and OI direction between two eligible stored observations of the same contract; descriptive only.",
+        "reason": (
+            "Same-contract price/OI quadrants are visible as descriptive evidence and do not affect the regime score."
+            if eligible
+            else "Contract-specific price and OI are stored; a second same-contract observation is required."
+        ),
     }
 
 
@@ -1233,6 +1386,168 @@ def calculate_institutional_flow_summary(
     }
 
 
+def parse_nsdl_confirmed_fpi(html_payload: str, *, today: date) -> list[dict[str, object]]:
+    """Extract confirmed equity investment routes from NSDL's current-month report."""
+    if not isinstance(html_payload, str) or not html_payload.strip():
+        raise ValueError("invalid_confirmed_fpi_response")
+    investment_start = html_payload.find("Daily Trends in FPI Investments")
+    derivative_start = html_payload.find("Daily Trends in FPI Derivative Trades")
+    if investment_start < 0 or derivative_start <= investment_start:
+        raise ValueError("invalid_confirmed_fpi_response")
+    section = html_payload[investment_start:derivative_start]
+
+    import html as html_module
+
+    def cell_text(value: str) -> str:
+        without_tags = re.sub(r"<[^>]+>", " ", value)
+        return re.sub(r"\s+", " ", html_module.unescape(without_tags).replace("\xa0", " ")).strip()
+
+    def number(value: str) -> float:
+        cleaned = value.replace(",", "").strip()
+        negative = cleaned.startswith("(") and cleaned.endswith(")")
+        if negative:
+            cleaned = cleaned[1:-1].strip()
+        try:
+            parsed = float(cleaned)
+        except ValueError as error:
+            raise ValueError("invalid_confirmed_fpi_response") from error
+        if not math.isfinite(parsed):
+            raise ValueError("invalid_confirmed_fpi_response")
+        return -parsed if negative else parsed
+
+    routes = {"Stock Exchange", "Primary market & others", "Sub-total"}
+    parsed_rows: list[dict[str, object]] = []
+    current_date: date | None = None
+    current_asset = ""
+    for raw_row in re.findall(r"<tr\b[^>]*>(.*?)</tr>", section, flags=re.IGNORECASE | re.DOTALL):
+        cells = [
+            cell_text(cell)
+            for cell in re.findall(r"<t[dh]\b[^>]*>(.*?)</t[dh]>", raw_row, flags=re.IGNORECASE | re.DOTALL)
+        ]
+        if not cells:
+            continue
+        try:
+            row_date = datetime.strptime(cells[0], "%d-%b-%Y").date()
+        except ValueError:
+            row_date = None
+        if row_date is not None:
+            if len(cells) < 6 or row_date > today:
+                raise ValueError("invalid_confirmed_fpi_response")
+            current_date = row_date
+            current_asset = cells[1]
+            route = cells[2]
+            values = cells[3:6]
+        elif cells[0] in routes:
+            route = cells[0]
+            values = cells[1:4]
+        else:
+            if len(cells) < 5:
+                continue
+            current_asset = cells[0]
+            route = cells[1]
+            values = cells[2:5]
+        if current_date is None or current_asset != "Equity" or route not in routes:
+            continue
+        if len(values) != 3:
+            raise ValueError("invalid_confirmed_fpi_response")
+        purchases, sales, net = (number(value) for value in values)
+        if purchases < 0 or sales < 0 or abs((purchases - sales) - net) > 0.11:
+            raise ValueError("invalid_confirmed_fpi_response")
+        parsed_rows.append(
+            {
+                "date": current_date,
+                "asset_class": "Equity",
+                "investment_route": route,
+                "gross_purchases_crore": purchases,
+                "gross_sales_crore": sales,
+                "net_investment_crore": net,
+            }
+        )
+    routes_by_date: dict[date, set[str]] = {}
+    for row in parsed_rows:
+        routes_by_date.setdefault(row["date"], set()).add(str(row["investment_route"]))
+    if not parsed_rows or any(found != routes for found in routes_by_date.values()):
+        raise ValueError("invalid_confirmed_fpi_response")
+    return parsed_rows
+
+
+def calculate_confirmed_fpi_summary(
+    rows: list[dict[str, object]], *, today: date | None = None
+) -> dict[str, object]:
+    """Summarise custodian-confirmed FPI equity data without blending NSE provisional flows."""
+    sessions: dict[date, dict[str, dict[str, object]]] = {}
+    required_routes = {"Stock Exchange", "Primary market & others", "Sub-total"}
+    for row in rows:
+        reporting_date = row.get("date")
+        route = row.get("investment_route")
+        if isinstance(reporting_date, date) and route in required_routes:
+            sessions.setdefault(reporting_date, {})[str(route)] = row
+    complete_dates = sorted(
+        reporting_date
+        for reporting_date, route_rows in sessions.items()
+        if set(route_rows) == required_routes
+    )
+    if not complete_dates:
+        return {
+            "available": False,
+            "publication_status": "confirmed_custodian",
+            "reason": "Run EOD update to retrieve the official NSDL custodian-confirmed FPI report.",
+        }
+
+    latest_date = complete_dates[-1]
+    latest_routes = sessions[latest_date]
+
+    def values(route: str) -> dict[str, float]:
+        row = latest_routes[route]
+        return {
+            "gross_purchases_crore": round(float(row["gross_purchases_crore"]), 2),
+            "gross_sales_crore": round(float(row["gross_sales_crore"]), 2),
+            "net_investment_crore": round(float(row["net_investment_crore"]), 2),
+        }
+
+    def cumulative(window: int) -> float | None:
+        if len(complete_dates) < window:
+            return None
+        return round(
+            sum(
+                float(sessions[item]["Sub-total"]["net_investment_crore"])
+                for item in complete_dates[-window:]
+            ),
+            2,
+        )
+
+    reference_date = today or datetime.now(INDIA_TIMEZONE).date()
+    return {
+        "available": True,
+        "as_of_date": latest_date.isoformat(),
+        "publication_status": "confirmed_custodian",
+        "asset_class": "Equity",
+        "source": NSDL_FPI_SOURCE,
+        "session_count": len(complete_dates),
+        "reporting_lag_calendar_days": max(0, (reference_date - latest_date).days),
+        "latest": {
+            "stock_exchange": values("Stock Exchange"),
+            "primary_market_and_others": values("Primary market & others"),
+            "subtotal": values("Sub-total"),
+        },
+        "five_session_net_crore": cumulative(5),
+        "twenty_session_net_crore": cumulative(20),
+        "series": [
+            {
+                "date": reporting_date.isoformat(),
+                "net_investment_crore": round(
+                    float(sessions[reporting_date]["Sub-total"]["net_investment_crore"]), 2
+                ),
+            }
+            for reporting_date in complete_dates
+        ],
+        "comparison_note": (
+            "Custodian-confirmed FPI investment is shown separately from NSE provisional "
+            "FII/FPI cash activity because publication timing and coverage differ."
+        ),
+    }
+
+
 def parse_rbi_macro_snapshot(html_payload: str) -> list[dict[str, object]]:
     """Extract the current official FBIL FX references and approximate 10-year G-Sec."""
     if not isinstance(html_payload, str) or not html_payload.strip():
@@ -1392,13 +1707,176 @@ def calculate_macro_context_summary(rows: list[dict[str, object]]) -> dict[str, 
     }
 
 
+def parse_fred_global_csv(
+    csv_payload: str, *, series_id: str, today: date, earliest: date
+) -> list[dict[str, object]]:
+    if series_id not in FRED_GLOBAL_SERIES or not isinstance(csv_payload, str):
+        raise ValueError("invalid_fred_global_response")
+    metric_key, unit, _label = FRED_GLOBAL_SERIES[series_id]
+    reader = csv.DictReader(io.StringIO(csv_payload))
+    if reader.fieldnames != ["observation_date", series_id]:
+        raise ValueError("invalid_fred_global_response")
+    rows: list[dict[str, object]] = []
+    seen: set[date] = set()
+    for raw in reader:
+        raw_date = str(raw.get("observation_date", "")).strip()
+        raw_value = str(raw.get(series_id, "")).strip()
+        if raw_value in {"", "."}:
+            continue
+        try:
+            observation_date = date.fromisoformat(raw_date)
+            value = float(raw_value)
+        except ValueError as error:
+            raise ValueError("invalid_fred_global_response") from error
+        if observation_date < earliest:
+            continue
+        if (
+            observation_date > today
+            or observation_date in seen
+            or not math.isfinite(value)
+            or value <= 0
+        ):
+            raise ValueError("invalid_fred_global_response")
+        seen.add(observation_date)
+        rows.append(
+            {
+                "date": observation_date,
+                "metric_key": metric_key,
+                "value": value,
+                "unit": unit,
+                "source_series": series_id,
+            }
+        )
+    if not rows:
+        raise ValueError("invalid_fred_global_response")
+    return rows
+
+
+def parse_fred_global_zip(
+    zip_payload: bytes, *, today: date, earliest: date
+) -> list[dict[str, object]]:
+    if not isinstance(zip_payload, bytes) or not zip_payload.startswith(b"PK"):
+        raise ValueError("invalid_fred_global_response")
+    collected: list[dict[str, object]] = []
+    found_series: set[str] = set()
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_payload)) as archive:
+            for name in archive.namelist():
+                if not name.lower().endswith(".csv"):
+                    continue
+                text = archive.read(name).decode("utf-8-sig")
+                reader = csv.DictReader(io.StringIO(text))
+                fieldnames = reader.fieldnames or []
+                if not fieldnames or fieldnames[0] != "observation_date":
+                    raise ValueError("invalid_fred_global_response")
+                series_ids = [item for item in fieldnames[1:] if item in FRED_GLOBAL_SERIES]
+                if not series_ids:
+                    continue
+                table_rows = list(reader)
+                for series_id in series_ids:
+                    single_csv = io.StringIO()
+                    writer = csv.writer(single_csv, lineterminator="\n")
+                    writer.writerow(["observation_date", series_id])
+                    writer.writerows(
+                        [raw.get("observation_date", ""), raw.get(series_id, "")]
+                        for raw in table_rows
+                    )
+                    parsed = parse_fred_global_csv(
+                        single_csv.getvalue(),
+                        series_id=series_id,
+                        today=today,
+                        earliest=earliest,
+                    )
+                    collected.extend(parsed)
+                    found_series.add(series_id)
+    except (OSError, UnicodeDecodeError, zipfile.BadZipFile) as error:
+        raise ValueError("invalid_fred_global_response") from error
+    if found_series != set(FRED_GLOBAL_SERIES):
+        raise ValueError("invalid_fred_global_response")
+    return collected
+
+
+def calculate_global_risk_summary(rows: list[dict[str, object]]) -> dict[str, object]:
+    series_specs = {
+        metric_key: {"series_id": series_id, "label": label}
+        for series_id, (metric_key, _unit, label) in FRED_GLOBAL_SERIES.items()
+    }
+    grouped: dict[str, list[dict[str, object]]] = {key: [] for key in series_specs}
+    for row in rows:
+        key = row.get("metric_key")
+        if key in grouped and isinstance(row.get("date"), date):
+            grouped[str(key)].append(row)
+    if any(not values for values in grouped.values()):
+        return {
+            "available": False,
+            "band": "unavailable",
+            "reason": "Run EOD update to retrieve the permitted FRED global-risk series.",
+        }
+
+    def percent_change(values: list[dict[str, object]], sessions: int) -> float | None:
+        if len(values) <= sessions:
+            return None
+        current = float(values[-1]["value"])
+        previous = float(values[-(sessions + 1)]["value"])
+        return round((current / previous - 1) * 100, 2)
+
+    metrics: dict[str, dict[str, object]] = {}
+    for key, values in grouped.items():
+        ordered = sorted(values, key=lambda item: item["date"])
+        latest = ordered[-1]
+        metrics[key] = {
+            "label": series_specs[key]["label"],
+            "source_series": series_specs[key]["series_id"],
+            "level": round(float(latest["value"]), 4),
+            "unit": latest["unit"],
+            "as_of_date": latest["date"].isoformat(),
+            "five_session_change_pct": percent_change(ordered, 5),
+            "twenty_session_change_pct": percent_change(ordered, 20),
+            "stored_observations": len(ordered),
+        }
+
+    sp_values = sorted(grouped["sp500"], key=lambda item: item["date"])
+    sp_latest = float(sp_values[-1]["value"])
+    for window in (20, 50, 200):
+        moving_average = (
+            sum(float(item["value"]) for item in sp_values[-window:]) / window
+            if len(sp_values) >= window
+            else None
+        )
+        metrics["sp500"][f"vs_{window}dma_pct"] = (
+            round((sp_latest / moving_average - 1) * 100, 2)
+            if moving_average is not None
+            else None
+        )
+
+    vix_values = sorted(grouped["us_vix"], key=lambda item: item["date"])[-252:]
+    vix_latest = float(vix_values[-1]["value"])
+    metrics["us_vix"]["one_year_percentile"] = round(
+        100 * sum(float(item["value"]) <= vix_latest for item in vix_values) / len(vix_values),
+        1,
+    )
+    latest_dates = [date.fromisoformat(metric["as_of_date"]) for metric in metrics.values()]
+    return {
+        "available": True,
+        "band": "unranked",
+        "reason": "Global EOD context is visible; regime thresholds are not yet validated.",
+        "source": FRED_GLOBAL_SOURCE,
+        "as_of_date": max(latest_dates).isoformat(),
+        "oldest_component_date": min(latest_dates).isoformat(),
+        "metrics": metrics,
+        "scoring_enabled": False,
+    }
+
+
 def calculate_domestic_sentiment_core(
     index_candles: list[dict[str, object]],
     stock_histories: dict[str, list[dict[str, object]]],
     *,
     india_vix_candles: list[dict[str, object]] | None = None,
     institutional_flow_rows: list[dict[str, object]] | None = None,
+    confirmed_fpi_rows: list[dict[str, object]] | None = None,
     macro_snapshot_rows: list[dict[str, object]] | None = None,
+    global_risk_rows: list[dict[str, object]] | None = None,
     futures_snapshot_rows: list[dict[str, object]] | None = None,
     retrieved_at: datetime | None = None,
 ) -> dict[str, object]:
@@ -1577,7 +2055,9 @@ def calculate_domestic_sentiment_core(
     universe_total = len(stock_histories)
     coverage_pct = 100 * len(eligible) / universe_total if universe_total else 0.0
     institutional_flows = calculate_institutional_flow_summary(institutional_flow_rows or [])
+    confirmed_fpi = calculate_confirmed_fpi_summary(confirmed_fpi_rows or [])
     macro_context = calculate_macro_context_summary(macro_snapshot_rows or [])
+    global_risk = calculate_global_risk_summary(global_risk_rows or [])
     futures_oi = calculate_futures_oi_summary(futures_snapshot_rows or [])
 
     return {
@@ -1586,7 +2066,12 @@ def calculate_domestic_sentiment_core(
         "overall_regime": "Pending full model",
         "domestic_tape": domestic_tape,
         "confidence": "Partial",
-        "available_clusters": 3 + int(institutional_flows["available"]) + int(macro_context["available"]),
+        "available_clusters": (
+            3
+            + int(institutional_flows["available"])
+            + int(macro_context["available"])
+            + int(global_risk["available"])
+        ),
         "total_clusters": 6,
         "trend": {
             "band": trend_band,
@@ -1632,7 +2117,9 @@ def calculate_domestic_sentiment_core(
             "india_vix": india_vix,
         },
         "institutional_flows": institutional_flows,
+        "confirmed_fpi": confirmed_fpi,
         "macro_context": macro_context,
+        "global_risk": global_risk,
         "futures_oi": futures_oi,
         "source": "Validated local Kite EOD candles",
         "freshness": {
@@ -1768,7 +2255,9 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             index_candles = store.load_candles(kind="index", display_name="Nifty 50")
             india_vix_candles = store.load_candles(kind="index", display_name="India VIX")
             institutional_flow_rows = store.load_institutional_flows()
+            confirmed_fpi_rows = store.load_confirmed_fpi_investments()
             macro_snapshot_rows = store.load_macro_snapshots()
+            global_risk_rows = store.load_global_risk_observations()
             futures_snapshot_rows = store.load_futures_eod_snapshots()
             instruments = store.list_instruments(kind="stock")
             stock_histories = {
@@ -1782,7 +2271,9 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 stock_histories,
                 india_vix_candles=india_vix_candles,
                 institutional_flow_rows=institutional_flow_rows,
+                confirmed_fpi_rows=confirmed_fpi_rows,
                 macro_snapshot_rows=macro_snapshot_rows,
+                global_risk_rows=global_risk_rows,
                 futures_snapshot_rows=futures_snapshot_rows,
             )
             self._send_json(HTTPStatus.OK, payload)
@@ -1804,7 +2295,10 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         try:
             targets, inventory_missing = self._current_index_targets(api_key, access_token)
         except ValueError as error:
-            self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": str(error)})
+            reason = str(error)
+            if reason in {"access_token_invalid_or_expired", "authentication_failed"}:
+                self._clear_session()
+            self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": reason})
             return
 
         query = urllib.parse.urlencode([("i", instrument) for _, instrument, _ in targets])
@@ -2594,6 +3088,49 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             {"ok": True, **summary, "write_result": write_result},
         )
 
+    def _send_confirmed_fpi_refresh(self) -> None:
+        request = urllib.request.Request(
+            NSDL_FPI_MONTHLY_URL,
+            headers={
+                "Accept": "text/html,application/xhtml+xml",
+                "Referer": "https://www.fpi.nsdl.co.in/",
+                "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+            },
+            method="GET",
+        )
+        text_payload, reason = self._request_provider_text(request, NSDL_MAX_RESPONSE_BYTES)
+        if reason is not None:
+            self._send_json(
+                HTTPStatus.BAD_GATEWAY,
+                {"ok": False, "reason": "confirmed_fpi_source_unavailable"},
+            )
+            return
+        try:
+            now = datetime.now(INDIA_TIMEZONE)
+            rows = parse_nsdl_confirmed_fpi(text_payload or "", today=now.date())
+            store = _get_eod_store()
+            write_result = store.append_confirmed_fpi_investments(
+                rows,
+                source=NSDL_FPI_SOURCE,
+                retrieved_at=datetime.now(timezone.utc).isoformat(),
+            )
+            summary = calculate_confirmed_fpi_summary(
+                store.load_confirmed_fpi_investments(), today=now.date()
+            )
+        except ConfirmedFpiConflictError:
+            self._send_json(
+                HTTPStatus.CONFLICT,
+                {"ok": False, "reason": "stored_confirmed_fpi_conflict"},
+            )
+            return
+        except ValueError:
+            self._send_json(
+                HTTPStatus.BAD_GATEWAY,
+                {"ok": False, "reason": "invalid_confirmed_fpi_response"},
+            )
+            return
+        self._send_json(HTTPStatus.OK, {"ok": True, **summary, "write_result": write_result})
+
     def _send_macro_context_refresh(self) -> None:
         request = urllib.request.Request(
             RBI_HOME_URL,
@@ -2633,6 +3170,50 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             return
         self._send_json(HTTPStatus.OK, {"ok": True, **summary, "write_result": write_result})
 
+    def _send_global_risk_refresh(self) -> None:
+        today = datetime.now(INDIA_TIMEZONE).date()
+        earliest = today - timedelta(days=460)
+        query = urllib.parse.urlencode(
+            {"id": ",".join(FRED_GLOBAL_SERIES), "cosd": earliest.isoformat()}
+        )
+        request = urllib.request.Request(
+            f"{FRED_GRAPH_CSV_URL}?{query}",
+            headers={
+                "Accept": "application/zip,text/csv,*/*",
+                "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+            },
+            method="GET",
+        )
+        zip_payload, reason = self._request_fred_export(request)
+        if reason is not None:
+            self._send_json(
+                HTTPStatus.BAD_GATEWAY,
+                {"ok": False, "reason": "global_risk_source_unavailable"},
+            )
+            return
+        try:
+            rows = parse_fred_global_zip(zip_payload or b"", today=today, earliest=earliest)
+            store = _get_eod_store()
+            write_result = store.append_global_risk_observations(
+                rows,
+                source=FRED_GLOBAL_SOURCE,
+                retrieved_at=datetime.now(timezone.utc).isoformat(),
+            )
+            summary = calculate_global_risk_summary(store.load_global_risk_observations())
+        except GlobalRiskConflictError:
+            self._send_json(
+                HTTPStatus.CONFLICT,
+                {"ok": False, "reason": "stored_global_risk_conflict"},
+            )
+            return
+        except ValueError:
+            self._send_json(
+                HTTPStatus.BAD_GATEWAY,
+                {"ok": False, "reason": "invalid_fred_global_response"},
+            )
+            return
+        self._send_json(HTTPStatus.OK, {"ok": True, **summary, "write_result": write_result})
+
     def _send_futures_eod_refresh(self, payload: dict[str, object]) -> None:
         raw_symbols = payload.get("symbols")
         if (
@@ -2659,9 +3240,9 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             self._send_json(HTTPStatus.UNAUTHORIZED, {"ok": False, "reason": "kite_not_connected"})
             return
         now = datetime.now(INDIA_TIMEZONE)
-        if now.time().replace(tzinfo=None) < datetime_time(15, 40):
-            self._send_json(HTTPStatus.CONFLICT, {"ok": False, "reason": "futures_eod_not_due"})
-            return
+        completed_through = completed_history_date(now)
+        while completed_through.weekday() >= 5:
+            completed_through -= timedelta(days=1)
         instrument_request = urllib.request.Request(
             NFO_INSTRUMENTS_URL,
             headers={
@@ -2689,31 +3270,73 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         if not contracts:
             self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": "futures_contracts_unavailable"})
             return
-        quote_query = urllib.parse.urlencode(
-            [("i", f"NFO:{contract['tradingsymbol']}") for contract in contracts]
-        )
-        quote_request = urllib.request.Request(
-            f"{FULL_QUOTE_URL}?{quote_query}",
-            headers={
-                "Authorization": f"token {api_key}:{access_token}",
-                "X-Kite-Version": "3",
-                "Accept": "application/json",
-                "User-Agent": "PG-terminal-local/0.1",
-            },
-            method="GET",
-        )
-        provider_payload, reason = self._request_provider_json(
-            quote_request, exchange=False, maximum_bytes=MAX_QUOTE_RESPONSE_BYTES
-        )
-        if reason is not None:
-            if reason in {"access_token_invalid_or_expired", "authentication_failed"}:
-                self._clear_session()
-            self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": reason})
-            return
         try:
-            snapshots, quote_missing = normalize_futures_eod_quotes(
-                provider_payload or {}, contracts, now=now
-            )
+            if now.time().replace(tzinfo=None) >= datetime_time(15, 40):
+                quote_query = urllib.parse.urlencode(
+                    [("i", f"NFO:{contract['tradingsymbol']}") for contract in contracts]
+                )
+                quote_request = urllib.request.Request(
+                    f"{FULL_QUOTE_URL}?{quote_query}",
+                    headers={
+                        "Authorization": f"token {api_key}:{access_token}",
+                        "X-Kite-Version": "3",
+                        "Accept": "application/json",
+                        "User-Agent": "PG-terminal-local/0.1",
+                    },
+                    method="GET",
+                )
+                provider_payload, reason = self._request_provider_json(
+                    quote_request, exchange=False, maximum_bytes=MAX_QUOTE_RESPONSE_BYTES
+                )
+                if reason is not None:
+                    raise ValueError(reason)
+                snapshots, quote_missing = normalize_futures_eod_quotes(
+                    provider_payload or {}, contracts, now=now
+                )
+                retrieval_mode = "post_close_bulk_quote"
+            else:
+                snapshots = []
+                quote_missing = []
+                history_start = completed_through - timedelta(days=10)
+                for index, contract in enumerate(contracts):
+                    if index:
+                        time.sleep(HISTORICAL_REQUEST_INTERVAL_SECONDS)
+                    history_query = urllib.parse.urlencode(
+                        {
+                            "from": history_start.isoformat(),
+                            "to": completed_through.isoformat(),
+                            "continuous": "0",
+                            "oi": "1",
+                        }
+                    )
+                    history_request = urllib.request.Request(
+                        f"{HISTORICAL_URL_TEMPLATE.format(instrument_token=contract['instrument_token'])}?{history_query}",
+                        headers={
+                            "Authorization": f"token {api_key}:{access_token}",
+                            "X-Kite-Version": "3",
+                            "Accept": "application/json",
+                            "User-Agent": "PG-terminal-local/0.1",
+                        },
+                        method="GET",
+                    )
+                    history_payload, reason = self._request_provider_json(
+                        history_request,
+                        exchange=False,
+                        maximum_bytes=MAX_HISTORICAL_RESPONSE_BYTES,
+                    )
+                    if reason is not None:
+                        if reason in {"access_token_invalid_or_expired", "authentication_failed"}:
+                            raise ValueError(reason)
+                        quote_missing.append(str(contract["underlying"]))
+                        continue
+                    snapshot = parse_futures_daily_snapshot(
+                        history_payload or {}, contract, completed_through=completed_through
+                    )
+                    if snapshot is None:
+                        quote_missing.append(str(contract["underlying"]))
+                    else:
+                        snapshots.append(snapshot)
+                retrieval_mode = "latest_completed_history"
             if not snapshots:
                 raise ValueError("futures_eod_data_unavailable")
             store = _get_eod_store()
@@ -2731,7 +3354,10 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             )
             return
         except ValueError as error:
-            self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": str(error)})
+            reason = str(error)
+            if reason in {"access_token_invalid_or_expired", "authentication_failed"}:
+                self._clear_session()
+            self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": reason})
             return
         self._send_json(
             HTTPStatus.OK,
@@ -2743,6 +3369,8 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 "snapshot_count": len(snapshots),
                 "inventory_missing": inventory_missing,
                 "quote_missing": quote_missing,
+                "retrieval_mode": retrieval_mode,
+                "completed_through": completed_through.isoformat(),
                 "write_result": write_result,
             },
         )
@@ -2760,10 +3388,22 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 self._send_macro_context_refresh()
             return
 
+        if self.path == "/api/market-sentiment/global-risk/refresh":
+            payload = self._read_json_payload()
+            if payload is not None:
+                self._send_global_risk_refresh()
+            return
+
         if self.path == "/api/market-sentiment/institutional-flows/refresh":
             payload = self._read_json_payload()
             if payload is not None:
                 self._send_institutional_flow_refresh()
+            return
+
+        if self.path == "/api/market-sentiment/confirmed-fpi/refresh":
+            payload = self._read_json_payload()
+            if payload is not None:
+                self._send_confirmed_fpi_refresh()
             return
 
         if self.path == "/api/kite/historical-month-leaders":
@@ -2996,6 +3636,29 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             return None, classify_network_error(error)
         except (UnicodeDecodeError, ValueError):
             return None, "invalid_provider_response"
+
+    def _request_fred_export(
+        self, request: urllib.request.Request
+    ) -> tuple[bytes | None, str | None]:
+        """Fetch the fixed public FRED export, allowing its standard HTTPS redirect handling."""
+        last_error: BaseException | None = None
+        for attempt in range(3):
+            try:
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    final_host = (urllib.parse.urlsplit(response.geturl()).hostname or "").lower()
+                    if final_host != "fred.stlouisfed.org" or response.status != HTTPStatus.OK:
+                        return None, "invalid_provider_response"
+                    body = response.read(FRED_MAX_RESPONSE_BYTES + 1)
+                    if len(body) > FRED_MAX_RESPONSE_BYTES:
+                        return None, "provider_response_too_large"
+                    return body, None
+            except urllib.error.HTTPError as error:
+                return None, self._classify_provider_error(error, exchange=False)
+            except (urllib.error.URLError, socket.timeout, TimeoutError, OSError) as error:
+                last_error = error
+                if attempt < 2:
+                    time.sleep(0.5 * (attempt + 1))
+        return None, classify_network_error(last_error or OSError("fred_request_failed"))
 
     @staticmethod
     def _classify_provider_error(error: urllib.error.HTTPError, *, exchange: bool) -> str:

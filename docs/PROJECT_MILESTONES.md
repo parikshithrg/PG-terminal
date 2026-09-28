@@ -65,13 +65,17 @@ Completion criteria:
 
 ## Subsequent milestones
 
-### Active milestone status — Market Sentiment Phase 2
+### Active milestone status — Market Sentiment Phases 2–3
 
 Completed and available in the local EOD workflow:
 
 - India VIX history and implied-versus-realised volatility context.
 - Official provisional NSE FII/FPI and DII cash-flow snapshots, summaries, and
   daily/cumulative charts.
+- Official NSDL custodian-confirmed FPI equity investment, preserved as separate
+  stock-exchange, primary-market-and-others, and subtotal routes. Reporting lag,
+  latest values, and 5-/20-session totals are explicit; the series is never
+  blended with NSE provisional cash activity.
 - Official RBI/FBIL USD, GBP, EUR, and JPY reference rates plus the RBI-listed
   government security nearest ten-year maturity. Exact security identity is
   retained and 5-/20-session changes appear only after enough observations.
@@ -80,22 +84,30 @@ Completed and available in the local EOD workflow:
   Contract rollover creates a new baseline rather than a false OI comparison.
 - Data freshness, coverage, missing-stock details, and explicit unavailable or
   unranked states. The main EOD update triggers every completed Phase 2 adapter.
+- A Phase 3 global-risk foundation using one FRED EOD export: S&P 500 trend,
+  CBOE VIX, broad U.S. dollar, USD/JPY, and Brent. Each series retains its own
+  observation date and source ID. The cluster is descriptive and unscored.
 
 Next Phase 2 steps, in order:
 
 1. Accumulate and inspect same-contract futures observations across normal days
    and at least one expiry rollover.
-2. Define transparent price/OI states only after continuity checks: long
-   build-up, short build-up, long unwinding, and short covering.
+2. Validate the implemented descriptive price/OI quadrants after continuity
+   checks: long build-up, short build-up, long unwinding, and short covering.
+   A sortable/filterable detail table and explicit exploratory noise, liquidity,
+   gap, missing-coverage, and rollover safeguards are implemented but unscored.
 3. Validate minimum volume/OI coverage, missing-contract handling, thresholds,
    and persistence before those states influence sentiment.
-4. Add confirmed NSDL FPI reconciliation as a separate series without replacing
-   or blending the provisional NSE report.
+4. Accumulate NSDL and NSE observations, document their date/coverage
+   differences, and validate any future side-by-side reconciliation measure.
 5. Accumulate RBI/FBIL history, calculate 5-/20-session changes, and validate
    currency/rate thresholds before scoring the macro cluster.
 
 Phase 2 remains read-only. No derivative signal, regime score, portfolio change,
 or order action is activated by these data foundations.
+
+Phase 3 next requires observed publication-lag/failure validation and threshold
+testing. A permitted broad emerging-market benchmark also remains to be selected.
 
 1. **Market sentiment and regime foundation** — implement the approved
    [Market Sentiment blueprint](MARKET_SENTIMENT_BLUEPRINT.md) in phases,
@@ -106,8 +118,10 @@ or order action is activated by these data foundations.
    NSE F&O equities. The 210-stock liquid universe is the intended permanent
    breadth scope. Phase 1 is complete. Phase 2 has started with persisted India
    VIX history, transparent implied-versus-realised volatility context, and an
-   append-only official NSE provisional FII/FPI-DII cash-flow series. Confirmed
-   NSDL reconciliation and validated futures-positioning labels remain pending.
+   append-only official NSE provisional FII/FPI-DII cash-flow series. The
+   separately stored NSDL custodian-confirmed FPI equity series is implemented;
+   a validated cross-series reconciliation measure and futures-positioning
+   labels remain pending.
    Contract-keyed near-month futures price/open-interest baselines are now stored
    without comparing across rollovers. The domestic context block stores official RBI/FBIL
    FX references and the RBI-listed government security nearest ten-year maturity;

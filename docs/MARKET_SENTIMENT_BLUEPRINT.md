@@ -211,8 +211,13 @@ These are review prompts, not target weights or automated transactions.
 - [x] Add append-only ingestion of the official NSE combined-exchange FII/FPI
   and DII cash-market report, explicitly labelled provisional, with latest,
   five-session, and twenty-session summaries as local history accumulates.
-- [ ] Add confirmed NSDL FPI reconciliation as a separately labelled series;
-  never silently replace or mix it with provisional exchange activity.
+- [x] Add confirmed NSDL FPI investment as a separately labelled append-only
+  series, preserving stock-exchange, primary-market-and-others, and subtotal
+  routes with reporting-date lag. It never silently replaces or mixes with
+  provisional exchange activity.
+- [ ] After enough overlapping observations accumulate, validate any
+  side-by-side NSDL/NSE reconciliation measure against their different timing
+  and coverage definitions before presenting a numerical difference.
 - [x] Add append-only RBI/FBIL currency references (USD, GBP, EUR and JPY) and
   the RBI-listed government security nearest ten-year maturity, preserving the
   exact security label and leaving the cluster unranked until thresholds are validated.
@@ -223,13 +228,27 @@ These are review prompts, not target weights or automated transactions.
   trading symbol, expiry, lot size, and provider token; never compare OI across
   a contract rollover.
 - [ ] Accumulate same-contract observations, validate coverage and rollover
-  behaviour, then define and test build-up, unwinding, and short-covering labels.
+  behaviour, then validate the descriptive long build-up, short build-up, long
+  unwinding, and short-covering quadrants before allowing them to influence sentiment.
+  The interface now provides sortable/filterable contract detail, a 0.25% price
+  and 1.0% OI exploratory noise floor, positive volume/OI requirements, and a
+  maximum four-calendar-day comparison gap. These safeguards are visible and
+  remain excluded from regime scoring pending observed-data validation.
 
 ### Phase 3 — global source decision
 
-- Select providers only after checking permissions, EOD timing, symbols,
-  historical coverage, and failure behaviour.
-- Add global inputs as their own cluster, never as required hidden dependencies.
+- [x] Select the Federal Reserve Bank of St. Louis FRED EOD export as the first
+  global-context adapter. Preserve the originating series IDs, citations,
+  component dates, and provider failure state. S&P 500 and VIX are
+  citation-required series; Federal Reserve USD/JPY and broad-dollar series and
+  EIA Brent are public-domain/citation-requested series distributed by FRED.
+- [x] Add S&P 500 trend, CBOE VIX level/one-year percentile, broad U.S. dollar,
+  USD/JPY, and Brent spot as their own append-only, descriptive global cluster.
+  The adapter uses one bounded export request and remains outside regime scoring.
+- [ ] Accumulate observations, confirm normal publication lags and failures, and
+  validate thresholds before allowing global context to influence a regime.
+- [ ] Evaluate a permitted broad emerging-market benchmark before adding it;
+  do not substitute an unexplained free-data proxy.
 
 ### Phase 4 — regime validation
 
@@ -249,5 +268,10 @@ These are review prompts, not target weights or automated transactions.
 - [NSE India VIX methodology](https://www.nseindia.com/static/products-services/indices-indiavix-index)
 - [NSE FII/FPI and DII reports](https://www.nseindia.com/reports/fii-dii)
 - [RBI data releases](https://statistics.rbi.org.in/)
+- [FRED S&P 500](https://fred.stlouisfed.org/series/SP500)
+- [FRED CBOE VIX](https://fred.stlouisfed.org/series/VIXCLS)
+- [FRED broad U.S. dollar index](https://fred.stlouisfed.org/series/DTWEXBGS)
+- [FRED USD/JPY](https://fred.stlouisfed.org/series/DEXJPUS)
+- [FRED Brent crude](https://fred.stlouisfed.org/series/DCOILBRENTEU)
 - [Canary regime dashboard contract](https://github.com/osauer/canary/blob/main/docs/docs/internals/regime-dashboard.md)
 - [5 Stars market dashboard](https://github.com/lssee003/trading-dashboard)

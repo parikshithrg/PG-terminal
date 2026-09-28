@@ -21,12 +21,20 @@ class InstitutionalFlowConflictError(ValueError):
     """Raised when a published institutional-flow row changes after storage."""
 
 
+class ConfirmedFpiConflictError(ValueError):
+    """Raised when a custodian-confirmed FPI row changes after storage."""
+
+
 class MacroSnapshotConflictError(ValueError):
     """Raised when an official macro observation changes after storage."""
 
 
 class FuturesSnapshotConflictError(ValueError):
     """Raised when a stored contract/session snapshot changes."""
+
+
+class GlobalRiskConflictError(ValueError):
+    """Raised when a stored global-risk observation changes."""
 
 
 class EODStore:
@@ -92,6 +100,24 @@ class EODStore:
                     CREATE INDEX IF NOT EXISTS institutional_flows_date_idx
                     ON institutional_flows(session_date);
 
+                    CREATE TABLE IF NOT EXISTS confirmed_fpi_investments (
+                        reporting_date TEXT NOT NULL,
+                        asset_class TEXT NOT NULL CHECK (asset_class = 'Equity'),
+                        investment_route TEXT NOT NULL CHECK (investment_route IN (
+                            'Stock Exchange', 'Primary market & others', 'Sub-total'
+                        )),
+                        gross_purchases_crore REAL NOT NULL,
+                        gross_sales_crore REAL NOT NULL,
+                        net_investment_crore REAL NOT NULL,
+                        source TEXT NOT NULL,
+                        retrieved_at TEXT NOT NULL,
+                        schema_version INTEGER NOT NULL,
+                        PRIMARY KEY (reporting_date, asset_class, investment_route)
+                    );
+
+                    CREATE INDEX IF NOT EXISTS confirmed_fpi_date_idx
+                    ON confirmed_fpi_investments(reporting_date);
+
                     CREATE TABLE IF NOT EXISTS macro_snapshots (
                         observation_date TEXT NOT NULL,
                         metric_key TEXT NOT NULL CHECK (metric_key IN (
@@ -145,6 +171,23 @@ class EODStore:
 
                     CREATE INDEX IF NOT EXISTS futures_contract_underlying_idx
                     ON futures_contracts(underlying, expiry_date);
+
+                    CREATE TABLE IF NOT EXISTS global_risk_observations (
+                        observation_date TEXT NOT NULL,
+                        metric_key TEXT NOT NULL CHECK (metric_key IN (
+                            'sp500', 'us_vix', 'usd_jpy', 'broad_usd', 'brent_crude'
+                        )),
+                        value REAL NOT NULL,
+                        unit TEXT NOT NULL,
+                        source_series TEXT NOT NULL,
+                        source TEXT NOT NULL,
+                        retrieved_at TEXT NOT NULL,
+                        schema_version INTEGER NOT NULL,
+                        PRIMARY KEY (observation_date, metric_key)
+                    );
+
+                    CREATE INDEX IF NOT EXISTS global_risk_date_idx
+                    ON global_risk_observations(observation_date);
                     """
                 )
 
@@ -464,6 +507,246 @@ class EODStore:
                 "retrieved_at": row["retrieved_at"],
                 "market_scope": market_scope,
                 "publication_status": publication_status,
+            }
+            for row in rows
+        ]
+
+    def append_confirmed_fpi_investments(
+        self,
+        rows: list[dict[str, object]],
+        *,
+        source: str,
+        retrieved_at: str | None = None,
+    ) -> dict[str, int]:
+        allowed_routes = {"Stock Exchange", "Primary market & others", "Sub-total"}
+        if not source:
+            raise ValueError("invalid_confirmed_fpi_investment")
+        timestamp = retrieved_at or datetime.now(timezone.utc).isoformat()
+        validated: list[tuple[str, str, str, float, float, float]] = []
+        seen: set[tuple[str, str, str]] = set()
+        routes_by_date: dict[str, set[str]] = {}
+        for row in rows:
+            reporting_date = row.get("date")
+            asset_class = row.get("asset_class")
+            investment_route = row.get("investment_route")
+            raw_values = (
+                row.get("gross_purchases_crore"),
+                row.get("gross_sales_crore"),
+                row.get("net_investment_crore"),
+            )
+            if (
+                not isinstance(reporting_date, date)
+                or asset_class != "Equity"
+                or investment_route not in allowed_routes
+                or not all(
+                    isinstance(value, (int, float))
+                    and not isinstance(value, bool)
+                    and math.isfinite(float(value))
+                    for value in raw_values
+                )
+            ):
+                raise ValueError("invalid_confirmed_fpi_investment")
+            purchases, sales, net = (float(value) for value in raw_values)
+            if purchases < 0 or sales < 0 or abs((purchases - sales) - net) > 0.11:
+                raise ValueError("invalid_confirmed_fpi_investment")
+            identity = (reporting_date.isoformat(), str(asset_class), str(investment_route))
+            if identity in seen:
+                raise ValueError("invalid_confirmed_fpi_investment")
+            seen.add(identity)
+            routes_by_date.setdefault(identity[0], set()).add(identity[2])
+            validated.append((identity[0], identity[1], identity[2], purchases, sales, net))
+        if not validated or any(routes != allowed_routes for routes in routes_by_date.values()):
+            raise ValueError("invalid_confirmed_fpi_investment")
+
+        inserted = 0
+        duplicates = 0
+        with closing(self._connect()) as connection:
+            with connection:
+                for reporting_date, asset_class, route, purchases, sales, net in validated:
+                    existing = connection.execute(
+                        """
+                        SELECT gross_purchases_crore, gross_sales_crore, net_investment_crore
+                        FROM confirmed_fpi_investments
+                        WHERE reporting_date = ? AND asset_class = ? AND investment_route = ?
+                        """,
+                        (reporting_date, asset_class, route),
+                    ).fetchone()
+                    values = (purchases, sales, net)
+                    if existing is not None:
+                        stored = tuple(
+                            float(existing[key])
+                            for key in (
+                                "gross_purchases_crore",
+                                "gross_sales_crore",
+                                "net_investment_crore",
+                            )
+                        )
+                        if stored != values:
+                            raise ConfirmedFpiConflictError(
+                                f"stored_confirmed_fpi_conflict:{reporting_date}:{route}"
+                            )
+                        duplicates += 1
+                        continue
+                    connection.execute(
+                        """
+                        INSERT INTO confirmed_fpi_investments (
+                            reporting_date, asset_class, investment_route,
+                            gross_purchases_crore, gross_sales_crore, net_investment_crore,
+                            source, retrieved_at, schema_version
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            reporting_date,
+                            asset_class,
+                            route,
+                            purchases,
+                            sales,
+                            net,
+                            source,
+                            timestamp,
+                            SCHEMA_VERSION,
+                        ),
+                    )
+                    inserted += 1
+        return {"inserted": inserted, "duplicates": duplicates}
+
+    def load_confirmed_fpi_investments(self) -> list[dict[str, object]]:
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                """
+                SELECT reporting_date, asset_class, investment_route,
+                       gross_purchases_crore, gross_sales_crore, net_investment_crore,
+                       source, retrieved_at
+                FROM confirmed_fpi_investments
+                ORDER BY reporting_date,
+                         CASE investment_route
+                           WHEN 'Stock Exchange' THEN 1
+                           WHEN 'Primary market & others' THEN 2
+                           ELSE 3
+                         END
+                """
+            ).fetchall()
+        return [
+            {
+                "date": date.fromisoformat(row["reporting_date"]),
+                "asset_class": row["asset_class"],
+                "investment_route": row["investment_route"],
+                "gross_purchases_crore": float(row["gross_purchases_crore"]),
+                "gross_sales_crore": float(row["gross_sales_crore"]),
+                "net_investment_crore": float(row["net_investment_crore"]),
+                "source": row["source"],
+                "retrieved_at": row["retrieved_at"],
+                "publication_status": "confirmed_custodian",
+            }
+            for row in rows
+        ]
+
+    def append_global_risk_observations(
+        self,
+        rows: list[dict[str, object]],
+        *,
+        source: str,
+        retrieved_at: str | None = None,
+    ) -> dict[str, int]:
+        allowed = {"sp500", "us_vix", "usd_jpy", "broad_usd", "brent_crude"}
+        if not source:
+            raise ValueError("invalid_global_risk_observation")
+        timestamp = retrieved_at or datetime.now(timezone.utc).isoformat()
+        validated: list[tuple[str, str, float, str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for row in rows:
+            observation_date = row.get("date")
+            metric_key = row.get("metric_key")
+            value = row.get("value")
+            unit = row.get("unit")
+            source_series = row.get("source_series")
+            if (
+                not isinstance(observation_date, date)
+                or metric_key not in allowed
+                or not isinstance(value, (int, float))
+                or isinstance(value, bool)
+                or not math.isfinite(float(value))
+                or float(value) <= 0
+                or not isinstance(unit, str)
+                or not unit.strip()
+                or not isinstance(source_series, str)
+                or not source_series.strip()
+            ):
+                raise ValueError("invalid_global_risk_observation")
+            identity = (observation_date.isoformat(), str(metric_key))
+            if identity in seen:
+                raise ValueError("invalid_global_risk_observation")
+            seen.add(identity)
+            validated.append((identity[0], identity[1], float(value), unit, source_series))
+        if not validated:
+            raise ValueError("invalid_global_risk_observation")
+
+        inserted = 0
+        duplicates = 0
+        with closing(self._connect()) as connection:
+            with connection:
+                for observation_date, metric_key, value, unit, source_series in validated:
+                    existing = connection.execute(
+                        """
+                        SELECT value, unit, source_series
+                        FROM global_risk_observations
+                        WHERE observation_date = ? AND metric_key = ?
+                        """,
+                        (observation_date, metric_key),
+                    ).fetchone()
+                    values = (value, unit, source_series)
+                    if existing is not None:
+                        stored = (
+                            float(existing["value"]),
+                            existing["unit"],
+                            existing["source_series"],
+                        )
+                        if stored != values:
+                            raise GlobalRiskConflictError(
+                                f"stored_global_risk_conflict:{observation_date}:{metric_key}"
+                            )
+                        duplicates += 1
+                        continue
+                    connection.execute(
+                        """
+                        INSERT INTO global_risk_observations (
+                            observation_date, metric_key, value, unit, source_series,
+                            source, retrieved_at, schema_version
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            observation_date,
+                            metric_key,
+                            value,
+                            unit,
+                            source_series,
+                            source,
+                            timestamp,
+                            SCHEMA_VERSION,
+                        ),
+                    )
+                    inserted += 1
+        return {"inserted": inserted, "duplicates": duplicates}
+
+    def load_global_risk_observations(self) -> list[dict[str, object]]:
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                """
+                SELECT observation_date, metric_key, value, unit, source_series,
+                       source, retrieved_at
+                FROM global_risk_observations
+                ORDER BY observation_date, metric_key
+                """
+            ).fetchall()
+        return [
+            {
+                "date": date.fromisoformat(row["observation_date"]),
+                "metric_key": row["metric_key"],
+                "value": float(row["value"]),
+                "unit": row["unit"],
+                "source_series": row["source_series"],
+                "source": row["source"],
+                "retrieved_at": row["retrieved_at"],
             }
             for row in rows
         ]
