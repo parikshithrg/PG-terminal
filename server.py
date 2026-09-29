@@ -17,10 +17,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
+from collections import defaultdict, deque
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from datetime import date, datetime, time as datetime_time, timedelta, timezone
+from statistics import median
 from zoneinfo import ZoneInfo
 
 from eod_store import (
@@ -55,6 +57,26 @@ FRED_GLOBAL_SERIES = {
     "DCOILBRENTEU": ("brent_crude", "USD per barrel", "Brent crude spot"),
 }
 SENTIMENT_EVIDENCE_MODEL_VERSION = "market-sentiment-evidence-v1"
+REGIME_RULE_VERSION = "market-regime-candidate-v1"
+REGIME_BAND_VALUES = {"constructive": 1.0, "mixed": 0.0, "defensive": -1.0}
+REGIME_CLUSTER_WEIGHTS = {
+    "domestic_trend": 0.25,
+    "participation_and_strength": 0.20,
+    "volatility_and_stress": 0.15,
+    "institutional_flows": 0.15,
+    "currency_and_rates": 0.10,
+    "global_risk": 0.15,
+}
+REGIME_MINIMUM_AVAILABLE_WEIGHT = 0.60
+REGIME_MINIMUM_STOCK_COVERAGE_PCT = 80.0
+REGIME_VALIDATION_TRAILING_SESSIONS = 252
+REGIME_VALIDATION_DEFAULT_HORIZONS = (5, 20, 60)
+REGIME_LABEL_THRESHOLDS = {
+    "positive_market": 0.55,
+    "cautiously_positive": 0.20,
+    "weak_market": -0.20,
+    "high_risk_market": -0.55,
+}
 RBI_HOME_URL = "https://www.rbi.org.in/"
 RBI_MACRO_SOURCE = "Reserve Bank of India current rates; FX source FBIL"
 KITE_FUTURES_SOURCE = "Kite Connect NFO completed daily price and open interest"
@@ -168,9 +190,11 @@ _SEASONALITY_CACHE: dict[tuple[str, str], dict[str, object]] = {}
 _MONTHLY_EQUITY_RETURNS_CACHE: dict[str, object] = {}
 _MONTHLY_LEADERS_CACHE: dict[str, object] = {}
 _HISTORICAL_MONTH_LEADERS_CACHE: dict[str, object] = {}
+_REGIME_VALIDATION_CACHE: dict[str, object] = {}
 _SESSION_LOCK = threading.Lock()
 _BREADTH_BUILD_LOCK = threading.Lock()
 _HISTORICAL_MONTH_LEADERS_LOCK = threading.Lock()
+_REGIME_VALIDATION_LOCK = threading.Lock()
 _EOD_STORE: EODStore | None = None
 
 
@@ -179,6 +203,36 @@ def _get_eod_store() -> EODStore:
     if _EOD_STORE is None:
         _EOD_STORE = EODStore(Path(__file__).resolve().parent / "data" / "pg_terminal_eod.sqlite3")
     return _EOD_STORE
+
+
+def load_index_constituent_snapshot() -> dict[str, object]:
+    path = Path(__file__).resolve().parent / "data" / "index_constituents.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError("index_constituent_snapshot_unavailable") from error
+    indices = payload.get("indices") if isinstance(payload, dict) else None
+    if not isinstance(indices, dict):
+        raise ValueError("index_constituent_snapshot_unavailable")
+    normalized: dict[str, list[str]] = {}
+    for index_name, symbols in indices.items():
+        if index_name not in SEASONALITY_INDICES or not isinstance(symbols, list):
+            continue
+        clean_symbols = sorted(
+            {
+                str(symbol).strip()
+                for symbol in symbols
+                if isinstance(symbol, str) and str(symbol).strip()
+            }
+        )
+        if clean_symbols:
+            normalized[str(index_name)] = clean_symbols
+    return {
+        "as_of": payload.get("as_of"),
+        "source": payload.get("source"),
+        "membership_type": payload.get("membership_type"),
+        "indices": normalized,
+    }
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -1870,6 +1924,674 @@ def calculate_global_risk_summary(rows: list[dict[str, object]]) -> dict[str, ob
     }
 
 
+def calculate_candidate_regime(evidence: dict[str, object]) -> dict[str, object]:
+    """Apply the frozen validation-only regime rule to one EOD evidence snapshot."""
+
+    def band_value(candidate: object) -> float | None:
+        if not isinstance(candidate, dict):
+            return None
+        band = candidate.get("band")
+        return REGIME_BAND_VALUES.get(str(band))
+
+    trend_score = band_value(evidence.get("trend"))
+    breadth_score = band_value(evidence.get("breadth"))
+    price_strength_score = band_value(evidence.get("price_strength"))
+    participation_parts = [
+        score for score in (breadth_score, price_strength_score) if score is not None
+    ]
+    participation_score = (
+        sum(participation_parts) / len(participation_parts)
+        if len(participation_parts) == 2
+        else None
+    )
+
+    volatility = evidence.get("volatility")
+    realised_volatility_score = band_value(volatility)
+    india_vix_score = None
+    if isinstance(volatility, dict):
+        india_vix = volatility.get("india_vix")
+        if isinstance(india_vix, dict) and india_vix.get("available") is True:
+            india_vix_score = band_value(india_vix)
+    volatility_parts = [
+        score for score in (realised_volatility_score, india_vix_score) if score is not None
+    ]
+    volatility_score = (
+        sum(volatility_parts) / len(volatility_parts) if volatility_parts else None
+    )
+
+    cluster_scores = {
+        "domestic_trend": trend_score,
+        "participation_and_strength": participation_score,
+        "volatility_and_stress": volatility_score,
+        "institutional_flows": band_value(evidence.get("institutional_flows")),
+        "currency_and_rates": band_value(evidence.get("macro_context")),
+        "global_risk": band_value(evidence.get("global_risk")),
+    }
+    clusters = {
+        key: {
+            "weight": weight,
+            "available": cluster_scores[key] is not None,
+            "score": cluster_scores[key],
+        }
+        for key, weight in REGIME_CLUSTER_WEIGHTS.items()
+    }
+    available_weight = sum(
+        REGIME_CLUSTER_WEIGHTS[key]
+        for key, score in cluster_scores.items()
+        if score is not None
+    )
+    weighted_total = sum(
+        REGIME_CLUSTER_WEIGHTS[key] * float(score)
+        for key, score in cluster_scores.items()
+        if score is not None
+    )
+    normalized_score = weighted_total / available_weight if available_weight else None
+
+    freshness = evidence.get("freshness")
+    freshness_state = freshness.get("state") if isinstance(freshness, dict) else None
+    breadth = evidence.get("breadth")
+    raw_coverage = breadth.get("coverage_pct") if isinstance(breadth, dict) else None
+    stock_coverage_pct = (
+        float(raw_coverage)
+        if isinstance(raw_coverage, (int, float)) and not isinstance(raw_coverage, bool)
+        else 0.0
+    )
+    gate_failures: list[str] = []
+    if freshness_state != "fresh":
+        gate_failures.append("fresh_eod_data_required")
+    if stock_coverage_pct < REGIME_MINIMUM_STOCK_COVERAGE_PCT:
+        gate_failures.append("stock_coverage_below_80_pct")
+    if available_weight < REGIME_MINIMUM_AVAILABLE_WEIGHT:
+        gate_failures.append("weighted_evidence_below_60_pct")
+
+    classification_eligible = not gate_failures and normalized_score is not None
+    if not classification_eligible:
+        label_key = "not_enough_reliable_data"
+        confidence = "insufficient"
+    else:
+        if available_weight >= 0.90 and stock_coverage_pct >= 95.0:
+            confidence = "high"
+        elif available_weight >= 0.75 and stock_coverage_pct >= 90.0:
+            confidence = "medium"
+        else:
+            confidence = "low"
+        if normalized_score >= REGIME_LABEL_THRESHOLDS["positive_market"]:
+            label_key = "positive_market"
+        elif normalized_score >= REGIME_LABEL_THRESHOLDS["cautiously_positive"]:
+            label_key = "cautiously_positive"
+        elif normalized_score > REGIME_LABEL_THRESHOLDS["weak_market"]:
+            label_key = "uncertain_market"
+        elif normalized_score > REGIME_LABEL_THRESHOLDS["high_risk_market"]:
+            label_key = "weak_market"
+        else:
+            label_key = "high_risk_market"
+
+    investor_labels = {
+        "positive_market": "Positive market",
+        "cautiously_positive": "Cautiously positive",
+        "uncertain_market": "Uncertain market",
+        "weak_market": "Weak market",
+        "high_risk_market": "High-risk market",
+        "not_enough_reliable_data": "Not enough reliable data",
+    }
+    return {
+        "rule_version": REGIME_RULE_VERSION,
+        "validation_status": "candidate_unvalidated",
+        "classification_eligible": classification_eligible,
+        "label_key": label_key,
+        "label": investor_labels[label_key],
+        "score": round(normalized_score * 100, 1) if normalized_score is not None else None,
+        "confidence": confidence,
+        "available_weight_pct": round(available_weight * 100, 1),
+        "stock_coverage_pct": round(stock_coverage_pct, 1),
+        "freshness_state": freshness_state or "unavailable",
+        "gate_failures": gate_failures,
+        "missing_clusters": [
+            key for key, score in cluster_scores.items() if score is None
+        ],
+        "clusters": clusters,
+        "contract": {
+            "band_values": dict(REGIME_BAND_VALUES),
+            "cluster_weights": dict(REGIME_CLUSTER_WEIGHTS),
+            "minimum_available_weight_pct": REGIME_MINIMUM_AVAILABLE_WEIGHT * 100,
+            "minimum_stock_coverage_pct": REGIME_MINIMUM_STOCK_COVERAGE_PCT,
+            "label_thresholds": dict(REGIME_LABEL_THRESHOLDS),
+            "confirmation_sessions": 2,
+            "recovering_label_requires_transition_history": True,
+            "missing_evidence_policy": "exclude_and_reduce_confidence",
+        },
+    }
+
+
+def build_regime_validation_universe(
+    instruments: list[dict[str, object]],
+    *,
+    stock_names: set[str] | None = None,
+    constituent_snapshot: dict[str, object] | None = None,
+    supported_indices: tuple[str, ...] = SEASONALITY_INDICES,
+    trailing_sessions: int = REGIME_VALIDATION_TRAILING_SESSIONS,
+    maximum_horizon: int = max(REGIME_VALIDATION_DEFAULT_HORIZONS),
+) -> dict[str, object]:
+    """Describe validation readiness without treating short history as an error."""
+    by_name = {
+        str(item["display_name"]): item
+        for item in instruments
+        if item.get("display_name") in supported_indices
+    }
+    rows: list[dict[str, object]] = []
+    constituent_indices = (
+        constituent_snapshot.get("indices", {})
+        if isinstance(constituent_snapshot, dict) else {}
+    )
+    for display_name in supported_indices:
+        item = by_name.get(display_name, {})
+        session_count = int(item.get("session_count") or 0)
+        current_regime_ready = session_count >= trailing_sessions
+        walk_forward_ready = session_count >= trailing_sessions + maximum_horizon
+        symbols = constituent_indices.get(display_name, []) if isinstance(constituent_indices, dict) else []
+        official_constituent_count = len(symbols) if isinstance(symbols, list) else 0
+        fno_constituent_count = (
+            len(set(symbols) & stock_names)
+            if isinstance(symbols, list) and stock_names is not None else None
+        )
+        constituent_breadth_ready = (
+            fno_constituent_count >= 5
+            if fno_constituent_count is not None else True
+        )
+        rows.append(
+            {
+                "display_name": display_name,
+                "session_count": session_count,
+                "first_session": (
+                    item["first_session"].isoformat()
+                    if isinstance(item.get("first_session"), date)
+                    else None
+                ),
+                "last_session": (
+                    item["last_session"].isoformat()
+                    if isinstance(item.get("last_session"), date)
+                    else None
+                ),
+                "current_regime_ready": current_regime_ready,
+                "walk_forward_ready": walk_forward_ready,
+                "constituent_breadth_ready": constituent_breadth_ready,
+                "validation_ready": walk_forward_ready and constituent_breadth_ready,
+                "official_constituent_count": official_constituent_count or None,
+                "fno_constituent_count": fno_constituent_count,
+                "sessions_until_current_regime": max(0, trailing_sessions - session_count),
+                "sessions_until_walk_forward": max(
+                    0, trailing_sessions + maximum_horizon - session_count
+                ),
+            }
+        )
+    return {
+        "ok": True,
+        "trailing_sessions_required": trailing_sessions,
+        "maximum_forward_horizon": maximum_horizon,
+        "walk_forward_sessions_required": trailing_sessions + maximum_horizon,
+        "benchmark": "Nifty 50",
+        "constituent_snapshot_as_of": (
+            constituent_snapshot.get("as_of")
+            if isinstance(constituent_snapshot, dict) else None
+        ),
+        "indices": rows,
+    }
+
+
+def calculate_regime_walk_forward_validation(
+    index_candles: list[dict[str, object]],
+    stock_histories: dict[str, list[dict[str, object]]],
+    *,
+    india_vix_candles: list[dict[str, object]] | None = None,
+    target_index: str = "Nifty 50",
+    benchmark_candles: list[dict[str, object]] | None = None,
+    benchmark_index: str | None = None,
+    constituent_symbols: list[str] | None = None,
+    constituent_snapshot_as_of: str | None = None,
+    horizons: tuple[int, ...] = REGIME_VALIDATION_DEFAULT_HORIZONS,
+) -> dict[str, object]:
+    """Evaluate the frozen candidate using only evidence known at each historical EOD."""
+    if not horizons or any(not isinstance(item, int) or item <= 0 for item in horizons):
+        raise ValueError("invalid_regime_validation_horizons")
+    ordered_index = sorted(index_candles, key=lambda item: item["date"])
+    maximum_horizon = max(horizons)
+    if len(ordered_index) < 252 + maximum_horizon:
+        raise ValueError("regime_validation_history_unavailable")
+    index_dates = [item["date"] for item in ordered_index]
+    index_closes = [float(item["close"]) for item in ordered_index]
+    benchmark_by_date = {
+        item["date"]: float(item["close"])
+        for item in sorted(benchmark_candles or [], key=lambda item: item["date"])
+    }
+    use_benchmark = bool(
+        benchmark_index
+        and benchmark_index != target_index
+        and benchmark_by_date
+    )
+    index_prefix = [0.0]
+    for close in index_closes:
+        index_prefix.append(index_prefix[-1] + close)
+
+    def window_average(prefix: list[float], end: int, length: int) -> float:
+        return (prefix[end + 1] - prefix[end + 1 - length]) / length
+
+    daily_log_returns = [
+        math.log(current / previous)
+        for previous, current in zip(index_closes, index_closes[1:])
+    ]
+    realised_volatility: list[float | None] = [None] * len(index_closes)
+    for position in range(20, len(index_closes)):
+        variance = _sample_variance(daily_log_returns[position - 20 : position])
+        if variance is not None:
+            realised_volatility[position] = math.sqrt(variance * 252) * 100
+
+    vix_bands: dict[date, str] = {}
+    ordered_vix = sorted(india_vix_candles or [], key=lambda item: item["date"])
+    vix_closes = [float(item["close"]) for item in ordered_vix]
+    for position in range(251, len(ordered_vix)):
+        current = vix_closes[position]
+        window = vix_closes[position - 251 : position + 1]
+        percentile = 100 * sum(value <= current for value in window) / len(window)
+        vix_bands[ordered_vix[position]["date"]] = (
+            "defensive" if percentile >= 85 else "mixed" if percentile >= 60 else "constructive"
+        )
+
+    official_constituents = sorted(set(constituent_symbols or []))
+    selected_stock_histories = (
+        {
+            symbol: stock_histories[symbol]
+            for symbol in official_constituents
+            if symbol in stock_histories
+        }
+        if official_constituents else stock_histories
+    )
+    if len(selected_stock_histories) < 5:
+        raise ValueError("regime_validation_constituent_coverage_unavailable")
+
+    metrics_by_date: defaultdict[date, list[tuple[bool, bool, bool, int, bool, bool]]] = defaultdict(list)
+    for history in selected_stock_histories.values():
+        ordered = sorted(history, key=lambda item: item["date"])
+        if len(ordered) < 252:
+            continue
+        closes = [float(item["close"]) for item in ordered]
+        prefix = [0.0]
+        for close in closes:
+            prefix.append(prefix[-1] + close)
+        maximums: deque[int] = deque()
+        minimums: deque[int] = deque()
+        for position, close in enumerate(closes):
+            while maximums and closes[maximums[-1]] <= close:
+                maximums.pop()
+            maximums.append(position)
+            while minimums and closes[minimums[-1]] >= close:
+                minimums.pop()
+            minimums.append(position)
+            cutoff = position - 251
+            while maximums and maximums[0] < cutoff:
+                maximums.popleft()
+            while minimums and minimums[0] < cutoff:
+                minimums.popleft()
+            if position < 251:
+                continue
+            advance_state = 1 if close > closes[position - 1] else -1 if close < closes[position - 1] else 0
+            metrics_by_date[ordered[position]["date"]].append(
+                (
+                    close > window_average(prefix, position, 20),
+                    close > window_average(prefix, position, 50),
+                    close > window_average(prefix, position, 200),
+                    advance_state,
+                    close >= closes[maximums[0]] * 0.95,
+                    close <= closes[minimums[0]] * 1.05,
+                )
+            )
+
+    universe_total = len(selected_stock_histories)
+    if universe_total == 0:
+        raise ValueError("regime_validation_stock_history_unavailable")
+
+    observations: list[dict[str, object]] = []
+    skipped_for_coverage = 0
+    for position in range(251, len(index_closes) - maximum_horizon):
+        session_date = index_dates[position]
+        stock_metrics = metrics_by_date.get(session_date, [])
+        coverage_pct = 100 * len(stock_metrics) / universe_total
+        if coverage_pct < REGIME_MINIMUM_STOCK_COVERAGE_PCT:
+            skipped_for_coverage += 1
+            continue
+
+        close = index_closes[position]
+        sma50 = window_average(index_prefix, position, 50)
+        sma200 = window_average(index_prefix, position, 200)
+        prior_sma50 = (
+            index_prefix[position - 19] - index_prefix[position - 69]
+        ) / 50
+        sma50_slope = (sma50 / prior_sma50 - 1) * 100
+        if close > sma50 > sma200 and sma50_slope > 0:
+            trend_band = "constructive"
+        elif close < sma50 < sma200 and sma50_slope < 0:
+            trend_band = "defensive"
+        else:
+            trend_band = "mixed"
+
+        evaluated = len(stock_metrics)
+        above50 = 100 * sum(item[1] for item in stock_metrics) / evaluated
+        above200 = 100 * sum(item[2] for item in stock_metrics) / evaluated
+        advances = sum(item[3] > 0 for item in stock_metrics)
+        declines = sum(item[3] < 0 for item in stock_metrics)
+        if above50 >= 55 and above200 >= 55 and advances > declines:
+            breadth_band = "constructive"
+        elif (above50 < 40 and above200 < 40) or (declines and advances / declines < 0.67):
+            breadth_band = "defensive"
+        else:
+            breadth_band = "mixed"
+
+        near_high_pct = 100 * sum(item[4] for item in stock_metrics) / evaluated
+        near_low_pct = 100 * sum(item[5] for item in stock_metrics) / evaluated
+        net_strength = near_high_pct - near_low_pct
+        price_strength_band = (
+            "constructive" if net_strength >= 10 else "defensive" if net_strength <= -10 else "mixed"
+        )
+
+        current_volatility = realised_volatility[position]
+        historical_volatility = [
+            value
+            for value in realised_volatility[max(20, position - 251) : position + 1]
+            if value is not None
+        ]
+        if current_volatility is None or not historical_volatility:
+            continue
+        volatility_percentile = (
+            100
+            * sum(value <= current_volatility for value in historical_volatility)
+            / len(historical_volatility)
+        )
+        volatility_band = (
+            "defensive"
+            if volatility_percentile >= 85
+            else "mixed"
+            if volatility_percentile >= 60
+            else "constructive"
+        )
+        vix_band = vix_bands.get(session_date)
+        evidence = {
+            "trend": {"band": trend_band},
+            "breadth": {"band": breadth_band, "coverage_pct": coverage_pct},
+            "price_strength": {"band": price_strength_band},
+            "volatility": {
+                "band": volatility_band,
+                "india_vix": {
+                    "available": vix_band is not None,
+                    "band": vix_band or "unranked",
+                },
+            },
+            "institutional_flows": {"band": "unranked"},
+            "macro_context": {"band": "unranked"},
+            "global_risk": {"band": "unranked"},
+            "freshness": {"state": "fresh"},
+        }
+        candidate = calculate_candidate_regime(evidence)
+        if not candidate["classification_eligible"]:
+            continue
+
+        forward_returns: dict[str, float] = {}
+        forward_drawdowns: dict[str, float] = {}
+        forward_excess_returns: dict[str, float | None] = {}
+        forward_relative_drawdowns: dict[str, float | None] = {}
+        for horizon in horizons:
+            future_path = index_closes[position : position + horizon + 1]
+            forward_returns[str(horizon)] = (future_path[-1] / close - 1) * 100
+            peak = future_path[0]
+            worst_drawdown = 0.0
+            for future_close in future_path[1:]:
+                peak = max(peak, future_close)
+                worst_drawdown = min(worst_drawdown, (future_close / peak - 1) * 100)
+            forward_drawdowns[str(horizon)] = worst_drawdown
+            benchmark_path = [benchmark_by_date.get(item) for item in index_dates[position : position + horizon + 1]]
+            if use_benchmark and all(value is not None for value in benchmark_path):
+                aligned_benchmark = [float(value) for value in benchmark_path if value is not None]
+                benchmark_return = (aligned_benchmark[-1] / aligned_benchmark[0] - 1) * 100
+                forward_excess_returns[str(horizon)] = forward_returns[str(horizon)] - benchmark_return
+                relative_path = [
+                    (target_value / future_path[0]) / (benchmark_value / aligned_benchmark[0])
+                    for target_value, benchmark_value in zip(future_path, aligned_benchmark)
+                ]
+                relative_peak = relative_path[0]
+                relative_drawdown = 0.0
+                for relative_value in relative_path[1:]:
+                    relative_peak = max(relative_peak, relative_value)
+                    relative_drawdown = min(
+                        relative_drawdown,
+                        (relative_value / relative_peak - 1) * 100,
+                    )
+                forward_relative_drawdowns[str(horizon)] = relative_drawdown
+            else:
+                forward_excess_returns[str(horizon)] = None
+                forward_relative_drawdowns[str(horizon)] = None
+        observations.append(
+            {
+                "date": session_date,
+                "raw_label_key": candidate["label_key"],
+                "score": float(candidate["score"]),
+                "coverage_pct": coverage_pct,
+                "baseline_key": "above_200dma" if close > sma200 else "below_200dma",
+                "forward_returns_pct": forward_returns,
+                "forward_drawdowns_pct": forward_drawdowns,
+                "forward_excess_returns_pct": forward_excess_returns,
+                "forward_relative_drawdowns_pct": forward_relative_drawdowns,
+            }
+        )
+
+    if len(observations) < 2:
+        raise ValueError("regime_validation_coverage_unavailable")
+
+    pending_label: str | None = None
+    pending_count = 0
+    confirmed_label: str | None = None
+    for observation in observations:
+        raw_label = str(observation["raw_label_key"])
+        if raw_label == pending_label:
+            pending_count += 1
+        else:
+            pending_label = raw_label
+            pending_count = 1
+        if pending_count >= 2:
+            confirmed_label = raw_label
+        observation["confirmed_label_key"] = confirmed_label
+
+    def aggregate(group: list[dict[str, object]]) -> dict[str, object]:
+        summary: dict[str, object] = {
+            "sessions": len(group),
+            "average_score": round(sum(float(item["score"]) for item in group) / len(group), 1),
+            "average_stock_coverage_pct": round(
+                sum(float(item["coverage_pct"]) for item in group) / len(group), 1
+            ),
+            "horizons": {},
+        }
+        for horizon in horizons:
+            key = str(horizon)
+            returns = [float(item["forward_returns_pct"][key]) for item in group]
+            drawdowns = [float(item["forward_drawdowns_pct"][key]) for item in group]
+            variance = _sample_variance(returns)
+            summary["horizons"][key] = {
+                "mean_return_pct": round(sum(returns) / len(returns), 2),
+                "median_return_pct": round(median(returns), 2),
+                "positive_rate_pct": round(100 * sum(value > 0 for value in returns) / len(returns), 1),
+                "return_stddev_pct": round(math.sqrt(variance), 2) if variance is not None else 0.0,
+                "worst_return_pct": round(min(returns), 2),
+                "mean_max_drawdown_pct": round(sum(drawdowns) / len(drawdowns), 2),
+                "worst_max_drawdown_pct": round(min(drawdowns), 2),
+            }
+            excess_returns = [
+                float(value)
+                for item in group
+                if (value := item["forward_excess_returns_pct"][key]) is not None
+            ]
+            relative_drawdowns = [
+                float(value)
+                for item in group
+                if (value := item["forward_relative_drawdowns_pct"][key]) is not None
+            ]
+            summary["horizons"][key].update(
+                {
+                    "benchmark_observations": len(excess_returns),
+                    "mean_excess_return_pct": (
+                        round(sum(excess_returns) / len(excess_returns), 2)
+                        if excess_returns else None
+                    ),
+                    "median_excess_return_pct": (
+                        round(median(excess_returns), 2) if excess_returns else None
+                    ),
+                    "outperformance_rate_pct": (
+                        round(
+                            100 * sum(value > 0 for value in excess_returns) / len(excess_returns),
+                            1,
+                        )
+                        if excess_returns else None
+                    ),
+                    "worst_relative_drawdown_pct": (
+                        round(min(relative_drawdowns), 2) if relative_drawdowns else None
+                    ),
+                }
+            )
+        return summary
+
+    label_names = {
+        "positive_market": "Positive market",
+        "cautiously_positive": "Cautiously positive",
+        "uncertain_market": "Uncertain market",
+        "weak_market": "Weak market",
+        "high_risk_market": "High-risk market",
+    }
+    grouped: defaultdict[str, list[dict[str, object]]] = defaultdict(list)
+    baseline_grouped: defaultdict[str, list[dict[str, object]]] = defaultdict(list)
+    for observation in observations:
+        confirmed = observation.get("confirmed_label_key")
+        if isinstance(confirmed, str):
+            grouped[confirmed].append(observation)
+        baseline_grouped[str(observation["baseline_key"])].append(observation)
+
+    ordered_labels = [
+        "positive_market",
+        "cautiously_positive",
+        "uncertain_market",
+        "weak_market",
+        "high_risk_market",
+    ]
+    by_regime = [
+        {"label_key": key, "label": label_names[key], **aggregate(grouped[key])}
+        for key in ordered_labels
+        if grouped[key]
+    ]
+    baseline_names = {
+        "above_200dma": f"{target_index} above 200DMA",
+        "below_200dma": f"{target_index} at or below 200DMA",
+    }
+    baseline = [
+        {"baseline_key": key, "label": baseline_names[key], **aggregate(baseline_grouped[key])}
+        for key in ("above_200dma", "below_200dma")
+        if baseline_grouped[key]
+    ]
+
+    confirmed_sequence = [
+        str(item["confirmed_label_key"])
+        for item in observations
+        if isinstance(item.get("confirmed_label_key"), str)
+    ]
+    raw_transitions = sum(
+        current != previous
+        for previous, current in zip(
+            [str(item["raw_label_key"]) for item in observations],
+            [str(item["raw_label_key"]) for item in observations][1:],
+        )
+    )
+    confirmed_transitions = sum(
+        current != previous
+        for previous, current in zip(confirmed_sequence, confirmed_sequence[1:])
+    )
+    durations: defaultdict[str, list[int]] = defaultdict(list)
+    if confirmed_sequence:
+        run_label = confirmed_sequence[0]
+        run_length = 1
+        for label in confirmed_sequence[1:]:
+            if label == run_label:
+                run_length += 1
+            else:
+                durations[run_label].append(run_length)
+                run_label = label
+                run_length = 1
+        durations[run_label].append(run_length)
+    duration_summary = [
+        {
+            "label_key": key,
+            "label": label_names[key],
+            "episodes": len(values),
+            "average_sessions": round(sum(values) / len(values), 1),
+            "median_sessions": round(float(median(values)), 1),
+            "maximum_sessions": max(values),
+        }
+        for key in ordered_labels
+        if (values := durations.get(key))
+    ]
+
+    return {
+        "ok": True,
+        "target_index": target_index,
+        "benchmark_index": benchmark_index if use_benchmark else None,
+        "evidence_scope": {
+            "target_specific": [
+                "trend",
+                "realised_volatility",
+                "forward_outcomes",
+                "current-constituent F&O breadth",
+                "current-constituent F&O price strength",
+            ],
+            "broad_market_context": ["main Market Sentiment regime remains separate"],
+        },
+        "rule_version": REGIME_RULE_VERSION,
+        "validation_status": "historical_walk_forward_exploratory",
+        "method": "Each session uses trailing data only; outcomes begin after classification.",
+        "confirmation_sessions": 2,
+        "evaluation_start": observations[0]["date"].isoformat(),
+        "evaluation_end": observations[-1]["date"].isoformat(),
+        "index_history_start": index_dates[0].isoformat(),
+        "index_history_end": index_dates[-1].isoformat(),
+        "sessions_evaluated": len(observations),
+        "sessions_skipped_for_coverage": skipped_for_coverage,
+        "stock_universe_size": universe_total,
+        "breadth_universe": {
+            "method": (
+                "current_index_constituents_intersected_with_fno_universe"
+                if official_constituents else "broad_fno_universe"
+            ),
+            "constituent_snapshot_as_of": constituent_snapshot_as_of,
+            "official_constituent_count": (
+                len(official_constituents) if official_constituents else None
+            ),
+            "fno_constituent_count": universe_total,
+            "constituents_outside_fno_universe": (
+                [symbol for symbol in official_constituents if symbol not in stock_histories]
+                if official_constituents else []
+            ),
+        },
+        "horizons": list(horizons),
+        "raw_transitions": raw_transitions,
+        "confirmed_transitions": confirmed_transitions,
+        "transition_reduction_pct": round(
+            100 * (raw_transitions - confirmed_transitions) / raw_transitions, 1
+        ) if raw_transitions else 0.0,
+        "by_regime": by_regime,
+        "duration_summary": duration_summary,
+        "baseline": baseline,
+        "limitations": [
+            "Historical breadth uses today’s index constituents intersected with the current F&O universe and is subject to survivorship and membership bias.",
+            "Constituent stocks enter only after 252 stored sessions; each evaluated date must meet the 80% coverage gate.",
+            "Institutional-flow, currency/rates, and global-risk clusters remain unranked, leaving 60% candidate weight available.",
+            "Thresholds were frozen before this report but have not been statistically fitted or approved for decisions.",
+            "Overlapping forward-return windows are descriptive and not independent observations.",
+        ],
+    }
+
+
 def calculate_domestic_sentiment_core(
     index_candles: list[dict[str, object]],
     stock_histories: dict[str, list[dict[str, object]]],
@@ -2100,7 +2822,7 @@ def calculate_domestic_sentiment_core(
     global_risk = calculate_global_risk_summary(global_risk_rows or [])
     futures_oi = calculate_futures_oi_summary(futures_snapshot_rows or [])
 
-    return {
+    payload = {
         "ok": True,
         "as_of_date": as_of.isoformat(),
         "overall_regime": "Pending full model",
@@ -2172,6 +2894,8 @@ def calculate_domestic_sentiment_core(
             "retrieved_at": retrieved_at.isoformat(timespec="seconds"),
         },
     }
+    payload["candidate_regime"] = calculate_candidate_regime(payload)
+    return payload
 
 
 def normalize_index_name(value: str) -> str:
@@ -2289,6 +3013,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         if path == "/api/market-sentiment/domestic-core":
             self._send_domestic_sentiment_core()
             return
+        if path == "/api/market-sentiment/regime-validation":
+            self._send_regime_validation(urllib.parse.urlsplit(self.path).query)
+            return
+        if path == "/api/market-sentiment/regime-validation-universe":
+            self._send_regime_validation_universe()
+            return
         super().do_GET()
 
     def _send_domestic_sentiment_core(self) -> None:
@@ -2297,6 +3027,110 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             self._send_json(HTTPStatus.OK, payload)
         except ValueError as error:
             self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"ok": False, "reason": str(error)})
+
+    def _send_regime_validation(self, query: str) -> None:
+        try:
+            parameters = urllib.parse.parse_qs(query, keep_blank_values=True)
+            target_index = parameters.get("index", ["Nifty 50"])[0]
+            benchmark_value = parameters.get("benchmark", ["Nifty 50"])[0]
+            if target_index not in SEASONALITY_INDICES or benchmark_value not in {"Nifty 50", "none"}:
+                self._send_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"ok": False, "reason": "invalid_regime_validation_selection"},
+                )
+                return
+            benchmark_index = None if benchmark_value == "none" or benchmark_value == target_index else benchmark_value
+            payload = self._calculate_regime_validation_payload(
+                target_index=target_index,
+                benchmark_index=benchmark_index,
+            )
+            self._send_json(HTTPStatus.OK, payload)
+        except ValueError as error:
+            self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"ok": False, "reason": str(error)})
+
+    def _send_regime_validation_universe(self) -> None:
+        store = _get_eod_store()
+        stock_names = {
+            str(item["display_name"])
+            for item in store.list_instruments(kind="stock")
+        }
+        payload = build_regime_validation_universe(
+            store.list_instruments(kind="index"),
+            stock_names=stock_names,
+            constituent_snapshot=load_index_constituent_snapshot(),
+        )
+        self._send_json(HTTPStatus.OK, payload)
+
+    @staticmethod
+    def _calculate_regime_validation_payload(
+        *,
+        target_index: str = "Nifty 50",
+        benchmark_index: str | None = None,
+    ) -> dict[str, object]:
+        store = _get_eod_store()
+        index_candles = store.load_candles(kind="index", display_name=target_index)
+        benchmark_candles = (
+            store.load_candles(kind="index", display_name=benchmark_index)
+            if benchmark_index else []
+        )
+        india_vix_candles = store.load_candles(kind="index", display_name="India VIX")
+        instruments = store.list_instruments(kind="stock")
+        stock_histories = {
+            str(item["display_name"]): store.load_candles(
+                kind="stock", display_name=str(item["display_name"])
+            )
+            for item in instruments
+        }
+        constituent_snapshot = load_index_constituent_snapshot()
+        constituent_indices = constituent_snapshot["indices"]
+        constituent_symbols = constituent_indices.get(target_index, [])
+        if not constituent_symbols:
+            raise ValueError("index_constituent_snapshot_unavailable")
+        cache_contract = {
+            "rule_version": REGIME_RULE_VERSION,
+            "target_index": target_index,
+            "benchmark_index": benchmark_index,
+            "index_sessions": len(index_candles),
+            "index_latest": index_candles[-1]["date"].isoformat() if index_candles else None,
+            "vix_sessions": len(india_vix_candles),
+            "vix_latest": india_vix_candles[-1]["date"].isoformat() if india_vix_candles else None,
+            "benchmark_sessions": len(benchmark_candles),
+            "benchmark_latest": benchmark_candles[-1]["date"].isoformat() if benchmark_candles else None,
+            "constituent_snapshot_as_of": constituent_snapshot.get("as_of"),
+            "constituent_symbols": constituent_symbols,
+            "stocks": [
+                (
+                    name,
+                    len(history),
+                    history[-1]["date"].isoformat() if history else None,
+                )
+                for name, history in sorted(stock_histories.items())
+            ],
+        }
+        cache_key = hashlib.sha256(
+            json.dumps(cache_contract, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        with _REGIME_VALIDATION_LOCK:
+            if _REGIME_VALIDATION_CACHE.get("key") == cache_key:
+                cached = _REGIME_VALIDATION_CACHE.get("payload")
+                if isinstance(cached, dict):
+                    payload = json.loads(json.dumps(cached))
+                    payload["cache_hit"] = True
+                    return payload
+            payload = calculate_regime_walk_forward_validation(
+                index_candles,
+                stock_histories,
+                india_vix_candles=india_vix_candles,
+                target_index=target_index,
+                benchmark_candles=benchmark_candles,
+                benchmark_index=benchmark_index,
+                constituent_symbols=constituent_symbols,
+                constituent_snapshot_as_of=str(constituent_snapshot.get("as_of") or ""),
+            )
+            payload["cache_hit"] = False
+            _REGIME_VALIDATION_CACHE.clear()
+            _REGIME_VALIDATION_CACHE.update({"key": cache_key, "payload": payload})
+            return payload
 
     @staticmethod
     def _calculate_sentiment_payload() -> dict[str, object]:
@@ -2330,6 +3164,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         try:
             payload = self._calculate_sentiment_payload()
             evidence = json.loads(json.dumps(payload, allow_nan=False))
+            candidate_regime = evidence.pop("candidate_regime", None)
             freshness = evidence.get("freshness")
             if isinstance(freshness, dict):
                 freshness.pop("retrieved_at", None)
@@ -2346,6 +3181,11 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                     "ok": True,
                     "as_of_date": as_of_date.isoformat(),
                     "model_version": SENTIMENT_EVIDENCE_MODEL_VERSION,
+                    "candidate_rule_version": (
+                        candidate_regime.get("rule_version")
+                        if isinstance(candidate_regime, dict)
+                        else REGIME_RULE_VERSION
+                    ),
                     "write_result": write_result,
                 },
             )
@@ -3536,6 +4376,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 _MONTHLY_EQUITY_RETURNS_CACHE.clear()
                 _MONTHLY_LEADERS_CACHE.clear()
                 _HISTORICAL_MONTH_LEADERS_CACHE.clear()
+                _REGIME_VALIDATION_CACHE.clear()
                 _KITE_DIAGNOSTICS["last_error"] = None
             print("Kite session state: disconnected", flush=True)
             self._send_json(HTTPStatus.OK, {"ok": True, "connected": False})
@@ -3637,6 +4478,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             _MONTHLY_EQUITY_RETURNS_CACHE.clear()
             _MONTHLY_LEADERS_CACHE.clear()
             _HISTORICAL_MONTH_LEADERS_CACHE.clear()
+            _REGIME_VALIDATION_CACHE.clear()
             _KITE_DIAGNOSTICS["last_error"] = None
         print("Kite session state: authenticated", flush=True)
         self._send_json(HTTPStatus.OK, {"ok": True, "connected": True})
@@ -3671,6 +4513,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             _MONTHLY_EQUITY_RETURNS_CACHE.clear()
             _MONTHLY_LEADERS_CACHE.clear()
             _HISTORICAL_MONTH_LEADERS_CACHE.clear()
+            _REGIME_VALIDATION_CACHE.clear()
             _KITE_DIAGNOSTICS["last_error"] = None
         print("Kite session state: authenticated", flush=True)
         self._send_json(HTTPStatus.OK, {"ok": True, "connected": True})
@@ -3837,6 +4680,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             _MONTHLY_EQUITY_RETURNS_CACHE.clear()
             _MONTHLY_LEADERS_CACHE.clear()
             _HISTORICAL_MONTH_LEADERS_CACHE.clear()
+            _REGIME_VALIDATION_CACHE.clear()
 
     @staticmethod
     def _set_last_error(reason: str) -> None:

@@ -1,13 +1,13 @@
 # Session handoff
 
-Updated: 2026-09-28
+Updated: 2026-09-29
 
 ## Saved state
 
 - Branch: `main`
-- Latest pushed commit before this handoff: `90a62d1` — Improve sentiment workflow and add F&O workspace
+- Baseline pushed commit before this session: `90a62d1` — Improve sentiment workflow and add F&O workspace
 - Phase 4 foundation commit: `d7fcb23` — Start versioned sentiment validation snapshots
-- Verification at handoff: 55 automated tests passed; Python and embedded browser JavaScript syntax checks passed.
+- Verification at handoff: 64 automated tests passed; Python and embedded browser JavaScript syntax checks passed.
 
 ## Current milestone
 
@@ -19,8 +19,33 @@ preserved as a separate immutable revision for audit.
 The evidence snapshot is not yet a market-regime score, trading signal, or
 portfolio instruction.
 
+`market-regime-candidate-v1` is now frozen separately from the evidence model.
+It defines six cluster weights, validation-only score boundaries, fresh-data and
+coverage gates, explicit missing-data behavior, and low/medium/high confidence
+requirements. Its label and score remain hidden from the main regime card. The
+first walk-forward report is now reviewable on Market Sentiment but remains
+exploratory and is not approved for decisions.
+
 ## Latest implementation
 
+- Added the first candidate-v1 walk-forward engine and Market Sentiment report.
+  Every classification uses trailing data only, applies the 80% breadth coverage
+  gate and two-session confirmation, and reports 5-, 20-, and 60-session return
+  and maximum-drawdown outcomes alongside a Nifty 200DMA baseline. The report
+  surfaces its current-universe survivorship bias and remains exploratory.
+- Started the multi-index extension with target-index and Nifty 50 benchmark
+  selectors plus live stored-history readiness. Indices with fewer than 252
+  sessions remain selectable and visibly marked insufficient; full 60-session
+  walk-forward evaluation requires 312 stored sessions.
+- Wired the selector into the trailing-only engine for all mature supported
+  indices. Reports now add median excess return, Nifty 50 outperformance rate,
+  and worst benchmark-relative drawdown at each horizon. Target-index trend and
+  volatility remain separate from the main broad-market sentiment regime.
+- Added an official current-constituent snapshot for all 19 supported indices.
+  Historical index breadth now uses only current members also present in the
+  liquid F&O universe, exposes official/eligible counts, and withholds indices
+  with fewer than five eligible members. This improves relevance but does not
+  remove current-membership survivorship bias.
 - Added a persistent site-wide light/dark theme switcher, including dark-aware
   tables, dialogs, notices, forms, and canvas charts.
 - Corrected the incremental EOD history path so NIFTY 50 and the 210-stock F&O
@@ -52,13 +77,14 @@ portfolio instruction.
 
 ## Next work
 
-1. Define and freeze the first candidate regime-rule version separately from
-   the evidence model version.
-2. Specify transparent factor weights, thresholds, missing-data behavior, and
-   confidence/coverage requirements.
-3. Produce validation outputs for walk-forward periods and major market events.
-4. Compare the candidate regime with forward returns, drawdowns, volatility,
-   breadth, institutional flows, macro context, global risk, and futures/OI.
+1. Add the cross-index comparison table, retaining explicit membership-bias
+   warnings and excluding indices that fail history or liquid-breadth gates.
+2. Add named major-event validation and point-in-time F&O membership where source
+   history permits it.
+3. Extend historical coverage to institutional flows, macro context, global risk,
+   and futures/OI so more than 60% of candidate weight can be tested.
+4. Test transition behavior and define the recovering label without fitting to
+   the displayed outcome sample.
 5. Display a composite regime label only after its evidence and limitations are
    reviewable in the interface.
 

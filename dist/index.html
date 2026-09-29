@@ -483,6 +483,7 @@
     .universe-action-status { color: var(--muted); font-size: 12px; text-align: right; }
     .analysis-section { margin-top: 28px; }
     .analysis-section h2 { margin: 0 0 4px; color: #2b2e33; font-size: 17px; }
+    .analysis-section .section-subtitle { margin: 22px 0 8px; color: var(--text); font-size: 15px; }
     .analysis-note {
       margin-top: 12px;
       padding: 11px 13px;
@@ -992,6 +993,8 @@
                 <div class="score-guide-item"><strong class="negative">Negative</strong>Multiple inputs point to market stress. Review exposure and risk controls; this is not an automatic sell signal.</div>
               </div>
               <p class="score-guide-note"><strong>Reliability:</strong> fresher data, broader stock coverage and more available evidence clusters make the reading more useful. “Score not ready” means the six-cluster composite is still under development; the domestic reading is provisional.</p>
+              <p class="score-guide-note"><strong>Candidate v1 weights:</strong> cash trend 25% · participation and price strength 20% · volatility 15% · institutional flows 15% · currency and rates 10% · global risk 15%.</p>
+              <p class="score-guide-note"><strong>Candidate validation:</strong> <span id="candidateRuleMeta">Run the local analysis to evaluate evidence coverage. The candidate label and score remain hidden until validation is complete.</span></p>
             </div>
           </details>
 
@@ -1029,6 +1032,69 @@
               <div class="coverage-detail" id="sentimentMissingStocks">Missing-stock details will appear after the EOD update.</div>
             </div>
           </details>
+
+          <section class="analysis-section" aria-labelledby="regimeValidationTitle">
+            <div class="section-heading-row">
+              <div>
+                <h2 id="regimeValidationTitle">Candidate v1 walk-forward validation</h2>
+                <p class="section-note" id="regimeValidationMethodNote">Each historical session is classified from trailing data only. The table then measures Nifty 50 outcomes after 5, 20 and 60 completed sessions.</p>
+              </div>
+            </div>
+            <div class="universe-controls" aria-label="Walk-forward validation index selection">
+              <div class="selector-field">
+                <label for="regimeValidationIndexSelect">Target index</label>
+                <select id="regimeValidationIndexSelect"><option value="Nifty 50">Nifty 50</option></select>
+              </div>
+              <div class="selector-field">
+                <label for="regimeValidationBenchmarkSelect">Performance benchmark</label>
+                <select id="regimeValidationBenchmarkSelect">
+                  <option value="Nifty 50">Nifty 50</option>
+                  <option value="none">No relative benchmark</option>
+                </select>
+              </div>
+              <div class="universe-action-row">
+                <button class="panel-button" id="refreshRegimeValidationButton" type="button">Run validation</button>
+                <span class="universe-action-status" id="regimeValidationReadiness">Checking stored index history…</span>
+              </div>
+              <p class="universe-source" id="regimeValidationSelectionNote">Current-regime analysis needs 252 completed sessions. A complete 60-session walk-forward outcome first becomes available after 312 sessions.</p>
+            </div>
+            <section class="summary-grid sentiment-summary" aria-label="Walk-forward validation summary">
+              <article class="summary-card">
+                <div class="summary-label">Evaluation period</div>
+                <div class="summary-value" id="regimeValidationRange">—</div>
+                <div class="summary-meta">Trailing-only historical evidence</div>
+              </article>
+              <article class="summary-card">
+                <div class="summary-label">Sessions evaluated</div>
+                <div class="summary-value" id="regimeValidationSessions">—</div>
+                <div class="summary-meta" id="regimeValidationCoverage">80% stock-coverage gate</div>
+              </article>
+              <article class="summary-card">
+                <div class="summary-label">One-day noise removed</div>
+                <div class="summary-value" id="regimeValidationTransitions">—</div>
+                <div class="summary-meta">Two-session confirmation</div>
+              </article>
+              <article class="summary-card">
+                <div class="summary-label">Validation status</div>
+                <div class="summary-value">Exploratory</div>
+                <div class="summary-meta" id="regimeValidationStatus">Not run</div>
+              </article>
+            </section>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Regime</th><th>Sessions</th><th>5d median</th><th>20d median</th><th>20d positive</th><th>20d excess vs benchmark</th><th>20d outperform rate</th><th>Worst 20d relative drawdown</th><th>60d median</th><th>Worst 20d drawdown</th></tr></thead>
+                <tbody id="regimeValidationBody"><tr><td colspan="10">Run validation to inspect historical outcomes.</td></tr></tbody>
+              </table>
+            </div>
+            <h3 class="section-subtitle">Simple trend baseline</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Baseline state</th><th>Sessions</th><th>20d median</th><th>20d positive</th><th>20d excess</th><th>20d outperform rate</th><th>60d median</th><th>Worst 20d drawdown</th></tr></thead>
+                <tbody id="regimeBaselineBody"><tr><td colspan="8">The baseline will appear with the validation report.</td></tr></tbody>
+              </table>
+            </div>
+            <div class="analysis-note" id="regimeValidationNote">This is a risk-state test, not a direction forecast. A high-risk reading can be followed by a sharp rebound while still containing the worst drawdowns.</div>
+          </section>
 
           <div class="section-heading-row">
             <h2 class="section-title">Domestic evidence</h2>
@@ -1423,6 +1489,9 @@
     const dashboardView = document.getElementById('dashboardView');
     const marketSentimentView = document.getElementById('marketSentimentView');
     const refreshSentimentButton = document.getElementById('refreshSentimentButton');
+    const regimeValidationIndexSelect = document.getElementById('regimeValidationIndexSelect');
+    const regimeValidationBenchmarkSelect = document.getElementById('regimeValidationBenchmarkSelect');
+    const refreshRegimeValidationButton = document.getElementById('refreshRegimeValidationButton');
     const fnoView = document.getElementById('fnoView');
     const refreshFnoButton = document.getElementById('refreshFnoButton');
     const seasonalityView = document.getElementById('seasonalityView');
@@ -1494,6 +1563,7 @@
     let priceStrengthSeries = [];
     let futuresOiRows = [];
     let futuresOiSort = { key: 'underlying', direction: 'asc' };
+    let regimeValidationUniverse = [];
     const displayMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     function currentTheme() {
@@ -1902,6 +1972,19 @@
         `${interpretationLead} Data is ${String(freshnessLabels[freshness.state] || freshness.state).toLowerCase()}, `
         + `stock coverage is ${breadthCoverage.coverage_pct.toFixed(1)}%, and ${result.available_clusters} of ${result.total_clusters} evidence clusters are available. `
         + 'Use the reading as portfolio context and confirm it against the individual evidence cards.';
+      const candidate = result.candidate_regime;
+      if (candidate) {
+        const gateLabels = {
+          fresh_eod_data_required: 'fresh EOD data required',
+          stock_coverage_below_80_pct: 'stock coverage below 80%',
+          weighted_evidence_below_60_pct: 'weighted evidence below 60%',
+        };
+        const candidateState = candidate.classification_eligible
+          ? `${candidate.confidence} confidence with ${candidate.available_weight_pct.toFixed(1)}% weighted evidence available`
+          : `not classifiable: ${candidate.gate_failures.map((reason) => gateLabels[reason] || reason).join(', ')}`;
+        document.getElementById('candidateRuleMeta').textContent =
+          `${candidate.rule_version} · ${candidateState}. The validation-only label and score are not used as the displayed market regime.`;
+      }
       const missingStocks = breadthCoverage.missing_stocks;
       const missingElement = document.getElementById('sentimentMissingStocks');
       if (!missingStocks.length) {
@@ -2120,6 +2203,179 @@
         refreshSentimentButton.textContent = 'Refresh local analysis';
         refreshFnoButton.disabled = false;
         refreshFnoButton.textContent = 'Refresh local analysis';
+      }
+    }
+
+    function validationMetric(row, horizon, key) {
+      const metrics = row && row.horizons ? row.horizons[String(horizon)] : null;
+      return metrics ? metrics[key] : null;
+    }
+
+    function validationPercent(value, signed = false) {
+      if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
+      const number = Number(value);
+      return `${signed && number > 0 ? '+' : ''}${number.toFixed(2)}%`;
+    }
+
+    function renderRegimeValidation(result) {
+      document.getElementById('regimeValidationRange').textContent =
+        `${formatDisplayDate(result.evaluation_start)} to ${formatDisplayDate(result.evaluation_end)}`;
+      document.getElementById('regimeValidationSessions').textContent =
+        Number(result.sessions_evaluated).toLocaleString('en-IN');
+      const breadthUniverse = result.breadth_universe || {};
+      const officialCount = breadthUniverse.official_constituent_count;
+      const breadthLabel = Number.isFinite(Number(officialCount))
+        ? `${breadthUniverse.fno_constituent_count}/${officialCount} current constituents in F&O`
+        : `${result.stock_universe_size} F&O stocks`;
+      document.getElementById('regimeValidationCoverage').textContent =
+        `${breadthLabel} · ${result.sessions_skipped_for_coverage} sessions skipped`;
+      document.getElementById('regimeValidationTransitions').textContent =
+        `${Number(result.transition_reduction_pct).toFixed(1)}%`;
+      document.getElementById('regimeValidationStatus').textContent =
+        `${result.target_index} · ${result.rule_version} · ${result.cache_hit ? 'cached result' : 'fresh calculation'}`;
+
+      document.getElementById('regimeValidationBody').innerHTML = result.by_regime.map((row) => `<tr>
+        <td>${escapeHtml(row.label)}</td>
+        <td>${Number(row.sessions).toLocaleString('en-IN')}</td>
+        <td>${validationPercent(validationMetric(row, 5, 'median_return_pct'), true)}</td>
+        <td>${validationPercent(validationMetric(row, 20, 'median_return_pct'), true)}</td>
+        <td>${validationPercent(validationMetric(row, 20, 'positive_rate_pct'))}</td>
+        <td>${validationPercent(validationMetric(row, 20, 'median_excess_return_pct'), true)}</td>
+        <td>${validationPercent(validationMetric(row, 20, 'outperformance_rate_pct'))}</td>
+        <td>${validationPercent(validationMetric(row, 20, 'worst_relative_drawdown_pct'), true)}</td>
+        <td>${validationPercent(validationMetric(row, 60, 'median_return_pct'), true)}</td>
+        <td>${validationPercent(validationMetric(row, 20, 'worst_max_drawdown_pct'), true)}</td>
+      </tr>`).join('');
+
+      document.getElementById('regimeBaselineBody').innerHTML = result.baseline.map((row) => `<tr>
+        <td>${escapeHtml(row.label)}</td>
+        <td>${Number(row.sessions).toLocaleString('en-IN')}</td>
+        <td>${validationPercent(validationMetric(row, 20, 'median_return_pct'), true)}</td>
+        <td>${validationPercent(validationMetric(row, 20, 'positive_rate_pct'))}</td>
+        <td>${validationPercent(validationMetric(row, 20, 'median_excess_return_pct'), true)}</td>
+        <td>${validationPercent(validationMetric(row, 20, 'outperformance_rate_pct'))}</td>
+        <td>${validationPercent(validationMetric(row, 60, 'median_return_pct'), true)}</td>
+        <td>${validationPercent(validationMetric(row, 20, 'worst_max_drawdown_pct'), true)}</td>
+      </tr>`).join('');
+
+      const firstLimitation = Array.isArray(result.limitations) && result.limitations.length
+        ? result.limitations[0]
+        : 'Historical results remain exploratory.';
+      const benchmarkText = result.benchmark_index
+        ? ` Excess return and outperformance use ${result.benchmark_index}; relative drawdown measures deterioration in the target-to-benchmark ratio.`
+        : ' No relative benchmark is applied to this result.';
+      const membershipText = breadthUniverse.constituent_snapshot_as_of
+        ? ` Constituent snapshot ${formatDisplayDate(breadthUniverse.constituent_snapshot_as_of)}; breadth uses only members also present in the liquid F&O universe.`
+        : '';
+      document.getElementById('regimeValidationNote').textContent =
+        `Risk state, not direction forecast: stressed markets can rebound sharply while still containing the worst losses.${benchmarkText}${membershipText} ${firstLimitation}`;
+    }
+
+    function resetRegimeValidationResult(message) {
+      document.getElementById('regimeValidationRange').textContent = '—';
+      document.getElementById('regimeValidationSessions').textContent = '—';
+      document.getElementById('regimeValidationTransitions').textContent = '—';
+      document.getElementById('regimeValidationCoverage').textContent = '80% stock-coverage gate';
+      document.getElementById('regimeValidationStatus').textContent = message;
+      document.getElementById('regimeValidationBody').innerHTML = `<tr><td colspan="10">${escapeHtml(message)}</td></tr>`;
+      document.getElementById('regimeBaselineBody').innerHTML = '<tr><td colspan="8">The baseline will appear with the validation report.</td></tr>';
+    }
+
+    function updateRegimeValidationSelection(resetResult = false) {
+      const selectedName = regimeValidationIndexSelect.value || 'Nifty 50';
+      const selected = regimeValidationUniverse.find((row) => row.display_name === selectedName);
+      const readiness = document.getElementById('regimeValidationReadiness');
+      const methodNote = document.getElementById('regimeValidationMethodNote');
+      const selectionNote = document.getElementById('regimeValidationSelectionNote');
+      const isNifty50 = selectedName === 'Nifty 50';
+      regimeValidationBenchmarkSelect.disabled = isNifty50;
+      regimeValidationBenchmarkSelect.value = isNifty50 ? 'none' : 'Nifty 50';
+      methodNote.textContent = `Each historical session is classified from trailing data only. The table then measures ${selectedName} outcomes after 5, 20 and 60 completed sessions.`;
+
+      if (!selected) {
+        refreshRegimeValidationButton.disabled = true;
+        readiness.textContent = 'Stored-history status is unavailable.';
+        selectionNote.textContent = 'Reconnect the local service to check index readiness.';
+        return;
+      }
+      if (!selected.current_regime_ready) {
+        refreshRegimeValidationButton.disabled = true;
+        readiness.textContent = `${selected.session_count}/252 sessions · insufficient history`;
+        selectionNote.textContent = `${selected.sessions_until_current_regime} more completed sessions are needed for current-regime analysis; walk-forward outcomes will accumulate after that.`;
+      } else if (!selected.walk_forward_ready) {
+        refreshRegimeValidationButton.disabled = true;
+        readiness.textContent = `${selected.session_count}/312 sessions · current regime ready, walk-forward history incomplete`;
+        selectionNote.textContent = `${selected.sessions_until_walk_forward} more completed sessions are needed to produce a full 60-session validation outcome.`;
+      } else if (!selected.constituent_breadth_ready) {
+        refreshRegimeValidationButton.disabled = true;
+        readiness.textContent = `${selected.fno_constituent_count}/${selected.official_constituent_count} current constituents in F&O · insufficient liquid breadth`;
+        selectionNote.textContent = 'Index price history is ready, but fewer than five current constituents belong to the chosen liquid F&O universe. The regime is withheld.';
+      } else if (!isNifty50) {
+        refreshRegimeValidationButton.disabled = false;
+        readiness.textContent = `${selected.session_count.toLocaleString('en-IN')} sessions · history ready`;
+        selectionNote.textContent = 'Ready for trailing-only index outcomes with absolute and Nifty 50-relative performance measures.';
+      } else {
+        refreshRegimeValidationButton.disabled = false;
+        readiness.textContent = `${selected.session_count.toLocaleString('en-IN')} sessions · walk-forward validation ready`;
+        selectionNote.textContent = 'Current-regime analysis needs 252 completed sessions. Full 60-session walk-forward evaluation needs at least 312 sessions.';
+      }
+      if (resetResult) resetRegimeValidationResult(
+        selected.validation_ready
+          ? `${selectedName} selected · run validation`
+          : `${selectedName} · insufficient history or liquid constituent breadth`
+      );
+    }
+
+    async function loadRegimeValidationUniverse() {
+      try {
+        const response = await fetch('/api/market-sentiment/regime-validation-universe', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true || !Array.isArray(result.indices)) throw new Error('unavailable');
+        regimeValidationUniverse = result.indices;
+        regimeValidationIndexSelect.innerHTML = '';
+        result.indices.forEach((row) => {
+          let suffix = '';
+          if (!row.current_regime_ready) suffix = ` — insufficient history (${row.session_count}/252)`;
+          else if (!row.constituent_breadth_ready) suffix = ` — insufficient F&O breadth (${row.fno_constituent_count}/${row.official_constituent_count})`;
+          appendChoice(regimeValidationIndexSelect, row.display_name, `${row.display_name}${suffix}`);
+        });
+        regimeValidationIndexSelect.value = 'Nifty 50';
+        updateRegimeValidationSelection();
+        return true;
+      } catch (_error) {
+        regimeValidationUniverse = [];
+        updateRegimeValidationSelection();
+        return false;
+      }
+    }
+
+    async function loadRegimeValidation(showSuccess = false) {
+      const button = refreshRegimeValidationButton;
+      button.disabled = true;
+      button.textContent = 'Validating…';
+      document.getElementById('regimeValidationStatus').textContent = 'Calculating historical outcomes…';
+      try {
+        const parameters = new URLSearchParams({
+          index: regimeValidationIndexSelect.value,
+          benchmark: regimeValidationBenchmarkSelect.value,
+        });
+        const response = await fetch(`/api/market-sentiment/regime-validation?${parameters}`, { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          document.getElementById('regimeValidationStatus').textContent = 'Historical coverage unavailable';
+          if (showSuccess) showNotice('Walk-forward validation needs sufficient local index and stock history.');
+          return false;
+        }
+        renderRegimeValidation(result);
+        if (showSuccess) showNotice(`${result.target_index} walk-forward validation updated from local EOD history.`);
+        return true;
+      } catch (_error) {
+        document.getElementById('regimeValidationStatus').textContent = 'Local validation service unavailable';
+        if (showSuccess) showNotice('The local walk-forward validation service is unavailable.');
+        return false;
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Run validation';
       }
     }
 
@@ -2924,8 +3180,16 @@
     });
     themeToggle.addEventListener('click', () => setTheme(currentTheme() === 'dark' ? 'light' : 'dark'));
     refreshIndexButton.addEventListener('click', loadIndexSnapshot);
-    refreshSentimentButton.addEventListener('click', () => loadDomesticSentiment(true));
+    refreshSentimentButton.addEventListener('click', async () => {
+      await Promise.all([loadDomesticSentiment(true), loadRegimeValidation(false)]);
+    });
     refreshFnoButton.addEventListener('click', () => loadDomesticSentiment(true));
+    refreshRegimeValidationButton.addEventListener('click', () => loadRegimeValidation(true));
+    regimeValidationIndexSelect.addEventListener('change', () => updateRegimeValidationSelection(true));
+    regimeValidationBenchmarkSelect.addEventListener('change', () => {
+      const benchmark = regimeValidationBenchmarkSelect.value === 'none' ? 'No relative benchmark' : 'Nifty 50 benchmark';
+      showNotice(`${benchmark} selected for the next per-index validation step.`);
+    });
     document.getElementById('flowChartWindowSelect').addEventListener('change', drawInstitutionalFlowCharts);
     window.addEventListener('resize', () => {
       if (!marketSentimentView.hidden && institutionalFlowSeries.length) drawInstitutionalFlowCharts();
@@ -2983,7 +3247,10 @@
         emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isSeasonality ? '' : button.dataset.page;
         if ((isMarketSentiment || isFno) && document.getElementById('sentimentAsOfValue').textContent === '—') {
           loadDomesticSentiment(false);
-        } else if (isMarketSentiment) {
+        }
+        if (isMarketSentiment) {
+          if (!regimeValidationUniverse.length) loadRegimeValidationUniverse();
+          if (document.getElementById('regimeValidationRange').textContent === '—') loadRegimeValidation(false);
           window.requestAnimationFrame(drawInstitutionalFlowCharts);
           window.requestAnimationFrame(drawPriceStrengthChart);
         } else if (isFno) {

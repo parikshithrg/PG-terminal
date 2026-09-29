@@ -151,6 +151,34 @@ for compatibility, but the interface must display the plain-language labels
 Count clusters, not raw indicators. One red volatility family should not outweigh
 five calm independent families merely because it contains several related rows.
 
+### Frozen validation candidate — `market-regime-candidate-v1`
+
+This first candidate is deliberately simple and remains unavailable for trading
+or portfolio instructions until walk-forward validation is complete.
+
+| Independent cluster | Weight | Current scoring input |
+| --- | ---: | --- |
+| Domestic cash trend | 25% | Trend band |
+| Participation and price strength | 20% | Equal average of breadth and price-strength bands |
+| Volatility and stress | 15% | Equal average of realised-volatility and available India VIX bands |
+| Institutional flows | 15% | Unranked until thresholds are validated |
+| Currency and sovereign rates | 10% | Unranked until thresholds are validated |
+| Global risk | 15% | Unranked until thresholds are validated |
+
+Positive, mixed, and negative internal bands map to `+1`, `0`, and `-1`.
+The weighted total is divided by available weight, so missing evidence is never
+silently treated as neutral. Classification requires fresh EOD data, at least
+80% F&O stock coverage, and at least 60% weighted evidence. Confidence is low at
+60%, medium at 75%, and high at 90% available weight, with corresponding stock
+coverage requirements of 80%, 90%, and 95%.
+
+Validation-only score boundaries are: Positive market at `>= +55`, Cautiously
+positive from `+20` to below `+55`, Uncertain market above `-20` and below
+`+20`, Weak market above `-55` through `-20`, and High-risk market at `<= -55`.
+A future displayed label requires two-session confirmation. Recovering market is
+transition-dependent and cannot be assigned from a single snapshot. These
+thresholds are frozen for testing, not asserted as empirically valid.
+
 ## Confidence and freshness contract
 
 Every indicator must publish:
@@ -265,10 +293,32 @@ These are review prompts, not target weights or automated transactions.
 - [x] Add a collapsible plain-language interpretation guide that exposes the
   provisional domestic reading, freshness, F&O coverage, cluster coverage, and
   limitations before a composite score is activated.
-- [ ] Define and freeze the first candidate regime rule version separately from
-  the evidence-snapshot version.
-- Run walk-forward and event validation.
+- [x] Define and freeze `market-regime-candidate-v1` separately from the
+  evidence-snapshot version, including weights, score boundaries, freshness and
+  coverage gates, missing-data treatment, and confidence levels.
+- [x] Run the first trailing-only walk-forward report across 5-, 20-, and
+  60-session outcomes, enforce the 80% historical breadth-coverage gate, compare
+  with a Nifty 200DMA baseline, and test two-session confirmation. The report is
+  exploratory: the current 210-stock universe creates survivorship/membership
+  bias, overlapping outcome windows are not independent, and only 60% of the
+  candidate weight is historically populated.
+- [ ] Run named-event validation and repeat the study with point-in-time universe
+  membership and historically available external clusters.
 - Publish the evidence table and limitations before activating a composite label.
+
+#### Multi-index extension
+
+- [x] Add the index-selection, benchmark-selection, and automatic history-readiness
+  interface. Short-history indices remain visible and automatically become
+  current-regime eligible at 252 sessions.
+- [x] Generalize trailing-only outcomes to every supported index and add excess
+  return, outperformance probability, and relative-drawdown measures versus
+  Nifty 50.
+- [x] Add constituent-aware breadth from the official current membership snapshot,
+  intersected with the liquid F&O universe and withheld below five eligible
+  members. This remains subject to survivorship bias.
+- [ ] Add cross-index rankings without mixing the broad-market regime with the
+  selected index's opportunity/risk layer.
 
 ### Phase 5 — portfolio reference
 

@@ -111,9 +111,41 @@ testing. The available FRED Nasdaq Emerging Markets series requires pre-approval
 and was rejected; a permitted broad emerging-market equity benchmark remains open.
 
 Phase 4 has started with immutable, versioned daily evidence snapshots. The EOD
-workflow stores a canonical hash, preserves changed same-day evidence as an
-auditable revision, and does not yet assign a composite regime. The next step is
-to freeze a candidate regime-rule version and define its validation outputs.
+workflow stores a canonical hash and preserves changed same-day evidence as an
+auditable revision. `market-regime-candidate-v1` now freezes six cluster weights,
+score boundaries, coverage/freshness gates, missing-data treatment, and
+confidence levels separately from the evidence model. It is validation-only and
+does not replace the visible `Score not ready` state. A trailing-only walk-forward
+report now compares 5-, 20-, and 60-session Nifty outcomes by confirmed regime
+and against the Nifty 200DMA baseline. Two-session confirmation reduced historical
+one-day state changes materially, but the report remains exploratory because it
+uses today's F&O membership, overlapping outcome windows, and only the 60% of
+candidate weight available from domestic historical evidence. Named-event and
+point-in-time-universe validation are next.
+
+### Phase 4A — multi-index opportunity and risk validation
+
+1. **Interface and readiness — complete.** Added a target-index selector,
+   Nifty 50 benchmark choice, dynamic stored-session counts, and explicit
+   insufficient-history states. Current-regime analysis becomes eligible at 252
+   sessions; a complete 60-session walk-forward outcome needs at least 312.
+2. **Per-index engine — complete.** The trailing-only walk-forward engine now
+   evaluates every sufficiently mature locally supported index without changing
+   the frozen candidate-v1 thresholds.
+3. **Relative outcomes — complete.** Reports include excess return versus Nifty
+   50, probability of outperforming it, benchmark-relative drawdown, and
+   regime-conditioned performance.
+4. Keep the broad-market regime separate from the selected index's opportunity
+   and risk layer. Do not present a sector reading as a trading instruction.
+5. **Constituent-aware breadth — complete for the current snapshot.** Official
+   NSE Indices membership is intersected with the liquid 210-stock F&O universe;
+   reports expose both counts and retain a survivorship warning. Indices with
+   fewer than five eligible constituents are withheld. Point-in-time membership
+   remains preferred when an authoritative historical source becomes available.
+6. **Next:** add a cross-index comparison table ranking absolute return, relative return,
+   outperformance rate, drawdown risk, sample size, and data readiness.
+7. Validate normal periods and named stress events, then review thresholds and
+   limitations before enabling any visible current index classification.
 
 1. **Market sentiment and regime foundation** — implement the approved
    [Market Sentiment blueprint](MARKET_SENTIMENT_BLUEPRINT.md) in phases,

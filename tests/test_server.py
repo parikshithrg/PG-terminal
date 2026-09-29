@@ -17,7 +17,11 @@ from server import (
     classify_network_error,
     completed_history_date,
     calculate_market_breadth,
+    calculate_candidate_regime,
     calculate_domestic_sentiment_core,
+    calculate_regime_walk_forward_validation,
+    build_regime_validation_universe,
+    load_index_constituent_snapshot,
     calculate_institutional_flow_summary,
     calculate_confirmed_fpi_summary,
     calculate_macro_context_summary,
@@ -49,6 +53,226 @@ from server import (
 
 
 class KiteHandshakeHelpersTest(unittest.TestCase):
+    @staticmethod
+    def _candidate_evidence(
+        band="constructive", *, freshness="fresh", coverage=100.0, external=True
+    ):
+        external_band = band if external else "unranked"
+        return {
+            "trend": {"band": band},
+            "breadth": {"band": band, "coverage_pct": coverage},
+            "price_strength": {"band": band},
+            "volatility": {
+                "band": band,
+                "india_vix": {"available": True, "band": band},
+            },
+            "institutional_flows": {"band": external_band},
+            "macro_context": {"band": external_band},
+            "global_risk": {"band": external_band},
+            "freshness": {"state": freshness},
+        }
+
+    def test_candidate_regime_rule_is_versioned_weighted_and_validation_only(self):
+        result = calculate_candidate_regime(self._candidate_evidence())
+        self.assertEqual(result["rule_version"], "market-regime-candidate-v1")
+        self.assertEqual(result["validation_status"], "candidate_unvalidated")
+        self.assertTrue(result["classification_eligible"])
+        self.assertEqual(result["label_key"], "positive_market")
+        self.assertEqual(result["score"], 100.0)
+        self.assertEqual(result["confidence"], "high")
+        self.assertEqual(result["available_weight_pct"], 100.0)
+        self.assertEqual(sum(result["contract"]["cluster_weights"].values()), 1.0)
+        self.assertEqual(
+            result["contract"]["missing_evidence_policy"],
+            "exclude_and_reduce_confidence",
+        )
+
+    def test_candidate_regime_excludes_missing_clusters_and_lowers_confidence(self):
+        result = calculate_candidate_regime(
+            self._candidate_evidence("defensive", external=False)
+        )
+        self.assertTrue(result["classification_eligible"])
+        self.assertEqual(result["available_weight_pct"], 60.0)
+        self.assertEqual(result["confidence"], "low")
+        self.assertEqual(result["label_key"], "high_risk_market")
+        self.assertEqual(
+            result["missing_clusters"],
+            ["institutional_flows", "currency_and_rates", "global_risk"],
+        )
+
+    def test_candidate_regime_refuses_stale_or_low_coverage_evidence(self):
+        stale = calculate_candidate_regime(
+            self._candidate_evidence(freshness="stale")
+        )
+        self.assertFalse(stale["classification_eligible"])
+        self.assertEqual(stale["label_key"], "not_enough_reliable_data")
+        self.assertIn("fresh_eod_data_required", stale["gate_failures"])
+
+        low_coverage = calculate_candidate_regime(
+            self._candidate_evidence(coverage=79.9)
+        )
+        self.assertFalse(low_coverage["classification_eligible"])
+        self.assertIn("stock_coverage_below_80_pct", low_coverage["gate_failures"])
+
+    def test_regime_walk_forward_uses_trailing_evidence_and_future_outcomes(self):
+        start = date(2024, 1, 1)
+        dates = [start + timedelta(days=index) for index in range(400)]
+
+        def rising(multiplier):
+            return [
+                {
+                    "date": session_date,
+                    "open": 100.0 + index * multiplier,
+                    "high": 101.0 + index * multiplier,
+                    "low": 99.0 + index * multiplier,
+                    "close": 100.0 + index * multiplier,
+                }
+                for index, session_date in enumerate(dates)
+            ]
+
+        result = calculate_regime_walk_forward_validation(
+            rising(1.0),
+            {
+                "UP1": rising(1.0),
+                "UP2": rising(0.8),
+                "UP3": rising(0.6),
+                "UP4": rising(0.4),
+                "NEW": rising(0.2)[-200:],
+            },
+            india_vix_candles=rising(0.02),
+        )
+        self.assertEqual(result["rule_version"], "market-regime-candidate-v1")
+        self.assertEqual(result["evaluation_start"], dates[251].isoformat())
+        self.assertEqual(result["evaluation_end"], dates[339].isoformat())
+        self.assertEqual(result["sessions_evaluated"], 89)
+        self.assertEqual(result["confirmation_sessions"], 2)
+        positive = next(
+            row for row in result["by_regime"] if row["label_key"] == "positive_market"
+        )
+        self.assertEqual(positive["sessions"], 88)
+        self.assertEqual(positive["horizons"]["60"]["positive_rate_pct"], 100.0)
+        self.assertTrue(result["baseline"])
+        self.assertIn("survivorship", result["limitations"][0])
+
+    def test_regime_validation_universe_marks_short_history_without_hiding_it(self):
+        result = build_regime_validation_universe(
+            [
+                {
+                    "display_name": "Nifty 50",
+                    "session_count": 2481,
+                    "first_session": date(2016, 9, 26),
+                    "last_session": date(2026, 9, 28),
+                },
+                {
+                    "display_name": "Nifty Chemicals",
+                    "session_count": 210,
+                    "first_session": date(2025, 11, 24),
+                    "last_session": date(2026, 9, 28),
+                },
+            ],
+            supported_indices=("Nifty 50", "Nifty Chemicals", "Nifty IT"),
+        )
+        self.assertEqual(result["walk_forward_sessions_required"], 312)
+        by_name = {row["display_name"]: row for row in result["indices"]}
+        self.assertTrue(by_name["Nifty 50"]["walk_forward_ready"])
+        self.assertFalse(by_name["Nifty Chemicals"]["current_regime_ready"])
+        self.assertEqual(by_name["Nifty Chemicals"]["sessions_until_current_regime"], 42)
+        self.assertEqual(by_name["Nifty Chemicals"]["sessions_until_walk_forward"], 102)
+        self.assertEqual(by_name["Nifty IT"]["session_count"], 0)
+
+    def test_regime_validation_universe_withholds_thin_fno_constituent_breadth(self):
+        result = build_regime_validation_universe(
+            [
+                {
+                    "display_name": "Nifty Media",
+                    "session_count": 2481,
+                    "first_session": date(2016, 9, 26),
+                    "last_session": date(2026, 9, 28),
+                }
+            ],
+            stock_names={"A", "B", "C", "D"},
+            constituent_snapshot={
+                "as_of": "2026-09-29",
+                "indices": {"Nifty Media": ["A", "B", "C", "D", "E", "F"]},
+            },
+            supported_indices=("Nifty Media",),
+        )
+        row = result["indices"][0]
+        self.assertTrue(row["walk_forward_ready"])
+        self.assertFalse(row["constituent_breadth_ready"])
+        self.assertFalse(row["validation_ready"])
+        self.assertEqual(row["fno_constituent_count"], 4)
+
+    def test_regime_walk_forward_reports_selected_index_relative_to_benchmark(self):
+        start = date(2024, 1, 1)
+        dates = [start + timedelta(days=index) for index in range(400)]
+
+        def rising(multiplier):
+            return [
+                {
+                    "date": session_date,
+                    "open": 100.0 + index * multiplier,
+                    "high": 101.0 + index * multiplier,
+                    "low": 99.0 + index * multiplier,
+                    "close": 100.0 + index * multiplier,
+                }
+                for index, session_date in enumerate(dates)
+            ]
+
+        result = calculate_regime_walk_forward_validation(
+            rising(1.0),
+            {name: rising(0.5) for name in ("A", "B", "C", "D", "E")},
+            target_index="Nifty IT",
+            benchmark_candles=rising(0.2),
+            benchmark_index="Nifty 50",
+        )
+        self.assertEqual(result["target_index"], "Nifty IT")
+        self.assertEqual(result["benchmark_index"], "Nifty 50")
+        positive = next(
+            row for row in result["by_regime"] if row["label_key"] == "positive_market"
+        )
+        metrics = positive["horizons"]["20"]
+        self.assertGreater(metrics["median_excess_return_pct"], 0)
+        self.assertEqual(metrics["outperformance_rate_pct"], 100.0)
+        self.assertEqual(metrics["worst_relative_drawdown_pct"], 0.0)
+
+    def test_regime_walk_forward_uses_current_constituents_inside_fno_universe(self):
+        start = date(2024, 1, 1)
+        dates = [start + timedelta(days=index) for index in range(400)]
+
+        def rising(multiplier):
+            return [
+                {
+                    "date": session_date,
+                    "open": 100.0 + index * multiplier,
+                    "high": 101.0 + index * multiplier,
+                    "low": 99.0 + index * multiplier,
+                    "close": 100.0 + index * multiplier,
+                }
+                for index, session_date in enumerate(dates)
+            ]
+
+        result = calculate_regime_walk_forward_validation(
+            rising(1.0),
+            {name: rising(0.5) for name in ("A", "B", "C", "D", "E", "OUTSIDE")},
+            target_index="Nifty IT",
+            constituent_symbols=["A", "B", "C", "D", "E", "MISSING"],
+            constituent_snapshot_as_of="2026-09-29",
+        )
+        breadth = result["breadth_universe"]
+        self.assertEqual(result["stock_universe_size"], 5)
+        self.assertEqual(breadth["official_constituent_count"], 6)
+        self.assertEqual(breadth["fno_constituent_count"], 5)
+        self.assertEqual(breadth["constituents_outside_fno_universe"], ["MISSING"])
+        self.assertEqual(breadth["constituent_snapshot_as_of"], "2026-09-29")
+
+    def test_official_constituent_snapshot_covers_supported_index_universe(self):
+        snapshot = load_index_constituent_snapshot()
+        self.assertEqual(snapshot["membership_type"], "current_snapshot")
+        self.assertEqual(len(snapshot["indices"]), 19)
+        self.assertEqual(len(snapshot["indices"]["Nifty 50"]), 50)
+        self.assertIn("SBIN", snapshot["indices"]["Nifty PSU Bank"])
+
     def test_completed_history_date_excludes_current_session_before_close(self):
         india = ZoneInfo("Asia/Kolkata")
         self.assertEqual(
@@ -600,6 +824,15 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(result["volatility"]["india_vix"]["one_year_percentile"], 100.0)
         self.assertEqual(result["freshness"]["state"], "fresh")
         self.assertEqual(result["freshness"]["expected_through"], "2025-10-27")
+        self.assertEqual(
+            result["candidate_regime"]["rule_version"],
+            "market-regime-candidate-v1",
+        )
+        self.assertFalse(result["candidate_regime"]["classification_eligible"])
+        self.assertIn(
+            "stock_coverage_below_80_pct",
+            result["candidate_regime"]["gate_failures"],
+        )
 
     def test_institutional_flow_parser_and_summary_preserve_provisional_values(self):
         parsed = parse_institutional_flows(
