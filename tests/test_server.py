@@ -20,6 +20,8 @@ from server import (
     calculate_candidate_regime,
     calculate_domestic_sentiment_core,
     calculate_regime_walk_forward_validation,
+    build_regime_external_cluster_readiness,
+    apply_recovering_market_state,
     build_regime_validation_universe,
     load_index_constituent_snapshot,
     calculate_institutional_flow_summary,
@@ -151,6 +153,8 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         )
         self.assertEqual(positive["sessions"], 88)
         self.assertEqual(positive["horizons"]["60"]["positive_rate_pct"], 100.0)
+        self.assertEqual(result["overall"]["sessions"], 88)
+        self.assertEqual(result["overall"]["horizons"]["20"]["positive_rate_pct"], 100.0)
         self.assertTrue(result["baseline"])
         self.assertIn("survivorship", result["limitations"][0])
 
@@ -225,9 +229,23 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
             target_index="Nifty IT",
             benchmark_candles=rising(0.2),
             benchmark_index="Nifty 50",
+            event_windows=(
+                {
+                    "key": "synthetic_rise",
+                    "label": "Synthetic rising window",
+                    "start": dates[260],
+                    "end": dates[270],
+                },
+            ),
         )
         self.assertEqual(result["target_index"], "Nifty IT")
         self.assertEqual(result["benchmark_index"], "Nifty 50")
+        self.assertEqual(result["current_state"]["as_of_date"], dates[-1].isoformat())
+        self.assertEqual(result["current_state"]["session_lag"], 0)
+        self.assertTrue(result["current_state"]["classification_ready"])
+        self.assertEqual(
+            result["current_state"]["transition_label_key"], "positive_market"
+        )
         positive = next(
             row for row in result["by_regime"] if row["label_key"] == "positive_market"
         )
@@ -235,6 +253,83 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertGreater(metrics["median_excess_return_pct"], 0)
         self.assertEqual(metrics["outperformance_rate_pct"], 100.0)
         self.assertEqual(metrics["worst_relative_drawdown_pct"], 0.0)
+        event = result["event_validation"][0]
+        self.assertEqual(event["key"], "synthetic_rise")
+        self.assertGreater(event["index_return_pct"], 0)
+        self.assertGreater(event["excess_return_pct"], 0)
+        self.assertEqual(event["maximum_drawdown_pct"], 0.0)
+        self.assertEqual(event["weak_or_high_risk_sessions_pct"], 0.0)
+        control = event["normal_period_control"]
+        self.assertGreater(control["window_count"], 0)
+        self.assertEqual(control["median_maximum_drawdown_pct"], 0.0)
+        self.assertEqual(control["event_drawdown_severity_percentile_pct"], 50.0)
+        self.assertEqual(event["recovering_sessions_pct"], 0.0)
+        self.assertEqual(control["median_recovering_sessions_pct"], 0.0)
+        self.assertEqual(control["event_recovery_share_percentile_pct"], 50.0)
+        directional = result["transition_analysis"]["directional_state_evidence"]
+        positive_state = next(
+            row for row in directional if row["label_key"] == "positive_market"
+        )
+        self.assertTrue(positive_state["sample_ready"])
+        self.assertEqual(positive_state["research_bias"], "long_research_candidate")
+
+    def test_external_cluster_readiness_requires_complete_dated_sessions(self):
+        dates = [date(2025, 1, 1) + timedelta(days=index) for index in range(252)]
+        institutional = [
+            {"date": session_date, "category": category}
+            for session_date in dates
+            for category in ("FII/FPI", "DII")
+        ]
+        macro = [
+            {"date": session_date, "metric_key": metric}
+            for session_date in dates
+            for metric in (
+                "usd_inr",
+                "gbp_inr",
+                "eur_inr",
+                "jpy_100_inr",
+                "india_10y_gsec_yield",
+            )
+        ]
+        futures = [
+            {"date": dates[-1], "underlying": f"STOCK{index}"}
+            for index in range(168)
+        ]
+        result = build_regime_external_cluster_readiness(
+            institutional_flow_rows=institutional,
+            macro_snapshot_rows=macro,
+            futures_snapshot_rows=futures,
+        )
+        by_key = {row["key"]: row for row in result["rows"]}
+        self.assertTrue(by_key["nse_provisional_institutional_flows"]["history_ready"])
+        self.assertFalse(by_key["nse_provisional_institutional_flows"]["walk_forward_ready"])
+        self.assertTrue(by_key["rbi_currency_and_rates"]["history_ready"])
+        self.assertEqual(by_key["kite_futures_oi"]["stored_sessions"], 1)
+        self.assertFalse(any(row["scoring_ready"] for row in result["rows"]))
+
+    def test_recovering_state_uses_prior_regimes_without_outcome_data(self):
+        labels = (
+            ["weak_market"] * 6
+            + ["uncertain_market"] * 3
+            + ["positive_market"]
+            + ["high_risk_market"] * 5
+            + ["cautiously_positive", "high_risk_market"]
+        )
+        observations = [
+            {
+                "date": date(2026, 1, 1) + timedelta(days=index),
+                "confirmed_label_key": label,
+            }
+            for index, label in enumerate(labels)
+        ]
+        result = apply_recovering_market_state(observations)
+        self.assertEqual(result["status"], "validation_only_outcome_blind_rule")
+        self.assertEqual(result["episode_count"], 2)
+        self.assertEqual(result["exit_counts"]["positive_market_confirmed"], 1)
+        self.assertEqual(result["exit_counts"]["relapsed_to_risk"], 1)
+        self.assertEqual(observations[6]["transition_label_key"], "recovering_market")
+        self.assertEqual(observations[9]["transition_label_key"], "positive_market")
+        self.assertEqual(observations[-1]["transition_label_key"], "high_risk_market")
 
     def test_regime_walk_forward_uses_current_constituents_inside_fno_universe(self):
         start = date(2024, 1, 1)
@@ -266,9 +361,55 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(breadth["constituents_outside_fno_universe"], ["MISSING"])
         self.assertEqual(breadth["constituent_snapshot_as_of"], "2026-09-29")
 
+    def test_regime_walk_forward_uses_dated_constituent_membership_when_available(self):
+        start = date(2024, 1, 1)
+        dates = [start + timedelta(days=index) for index in range(400)]
+
+        def rising(multiplier):
+            return [
+                {
+                    "date": session_date,
+                    "open": 100.0 + index * multiplier,
+                    "high": 101.0 + index * multiplier,
+                    "low": 99.0 + index * multiplier,
+                    "close": 100.0 + index * multiplier,
+                }
+                for index, session_date in enumerate(dates)
+            ]
+
+        first_members = ["A", "B", "C", "D", "E"]
+        second_members = ["F", "G", "H", "I", "J"]
+        result = calculate_regime_walk_forward_validation(
+            rising(1.0),
+            {name: rising(0.5) for name in first_members + second_members},
+            target_index="Nifty IT",
+            constituent_symbols=["CURRENT"],
+            constituent_membership_history=[
+                {
+                    "effective_from": dates[0],
+                    "effective_to": dates[300],
+                    "symbols": first_members,
+                },
+                {
+                    "effective_from": dates[301],
+                    "effective_to": None,
+                    "symbols": second_members,
+                },
+            ],
+        )
+        breadth = result["breadth_universe"]
+        self.assertEqual(result["stock_universe_size"], 10)
+        self.assertTrue(breadth["membership_history_available"])
+        self.assertEqual(breadth["membership_snapshot_count"], 2)
+        self.assertEqual(
+            breadth["method"],
+            "point_in_time_index_constituents_intersected_with_fno_universe",
+        )
+
     def test_official_constituent_snapshot_covers_supported_index_universe(self):
         snapshot = load_index_constituent_snapshot()
         self.assertEqual(snapshot["membership_type"], "current_snapshot")
+        self.assertEqual(snapshot["history"], {})
         self.assertEqual(len(snapshot["indices"]), 19)
         self.assertEqual(len(snapshot["indices"]["Nifty 50"]), 50)
         self.assertIn("SBIN", snapshot["indices"]["Nifty PSU Bank"])

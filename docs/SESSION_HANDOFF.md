@@ -5,13 +5,14 @@ Updated: 2026-09-29
 ## Saved state
 
 - Branch: `main`
-- Baseline pushed commit before this session: `90a62d1` — Improve sentiment workflow and add F&O workspace
+- Baseline pushed commit before this session: `f4c494d` — Add walk-forward and multi-index regime validation
 - Phase 4 foundation commit: `d7fcb23` — Start versioned sentiment validation snapshots
-- Verification at handoff: 64 automated tests passed; Python and embedded browser JavaScript syntax checks passed.
+- Verification at handoff: 67 automated tests passed; Python and embedded browser JavaScript syntax checks passed.
 
 ## Current milestone
 
-Market Sentiment Phase 4 has started. The EOD workflow now stores canonical,
+Market Sentiment Phase 4 validation and cross-sectional decision research are in
+progress. The EOD workflow stores canonical,
 hashed daily sentiment-evidence snapshots with an explicit model version.
 Identical reruns are idempotent, while changed evidence for the same day is
 preserved as a separate immutable revision for audit.
@@ -23,8 +24,9 @@ portfolio instruction.
 It defines six cluster weights, validation-only score boundaries, fresh-data and
 coverage gates, explicit missing-data behavior, and low/medium/high confidence
 requirements. Its label and score remain hidden from the main regime card. The
-first walk-forward report is now reviewable on Market Sentiment but remains
-exploratory and is not approved for decisions.
+walk-forward, event/control, recovery, and current cross-index evidence is now
+reviewable on Market Sentiment but remains research-only and is not approved for
+orders or position sizing.
 
 ## Latest implementation
 
@@ -46,6 +48,54 @@ exploratory and is not approved for decisions.
   liquid F&O universe, exposes official/eligible counts, and withholds indices
   with fewer than five eligible members. This improves relevance but does not
   remove current-membership survivorship bias.
+- Added an on-demand cross-index historical comparison. Eligible indices are
+  ranked by median 20-session excess return versus Nifty 50 with absolute return,
+  positive/outperformance rates, absolute/relative drawdowns, sample size, and
+  constituent coverage. Failed readiness gates are listed separately.
+- Added fixed named-event reviews to each selected-index validation for the 2018
+  India NBFC stress, 2020 COVID-19 shock, 2022 inflation/Ukraine shock, and June
+  2024 Indian election-result shock. Reports include absolute/relative returns,
+  drawdowns, entry/exit regime, stressed-session share, and detection timing.
+  The UI states that these hindsight-selected windows are descriptive.
+- Added normal-period distributions around every event review. Non-overlapping
+  windows use the same session count and exclude all named events; the report
+  compares control-median return and shows event return, drawdown-severity, and
+  stressed-session percentiles.
+- Added point-in-time constituent-membership support to the loader and validation
+  engine. Dated effective-from/effective-to snapshots are applied per session
+  when supplied. The checked-in dataset still contains only the official current
+  snapshot, so the UI continues to disclose current-membership survivorship bias.
+- Added an external historical-evidence readiness table to walk-forward
+  validation. It separately audits NSE provisional flows, NSDL confirmed FPI,
+  RBI/FBIL currency and rates, permitted FRED global-risk series, and Kite
+  futures/OI. It exposes 252-session history and 312-session full-test gates and
+  never converts sparse or merely sufficient coverage into a score.
+- Added the validation-only Recovering market transition state. Its rule is
+  outcome-blind: five prior confirmed weak/high-risk sessions, improvement to
+  uncertain/cautiously positive, a maximum 20-session recovery window, and
+  immediate exit on positive confirmation or renewed risk. The UI reports state
+  outcomes and episode exits but does not expose it as a current market signal.
+- Extended that identical recovery rule across every eligible supported index.
+  The cross-index study now reports episode/exit/relapse counts, absolute and
+  Nifty-relative 20-session outcomes, and worst recovery losses. Event reviews
+  compare recovery-session frequency with equal-length normal controls.
+- Reframed Market Sentiment around cross-sectional trading decisions rather than
+  one overall-market signal. Each index-state pair now has a fixed historical
+  directional research gate. Recovery is compared with the same index's ordinary
+  Uncertain/Cautiously positive observations; positive outcomes after weak/high-
+  risk states are identified as countertrend rebound studies, not ordinary longs.
+  No weak/high-risk state currently passes the frozen downside-continuation short
+  gate, which remains an honest research result rather than a forced signal.
+- Added a current cross-sectional decision board. Every eligible index uses its
+  latest completed-session trailing state—not the 60-session-truncated outcome
+  sample—and is joined only to its own historical state evidence. The board can
+  show simultaneous long, short, tactical/countertrend watch, avoid, and
+  insufficient rows; Nifty 50 is context only.
+- The latest verified stored-session board (28-Sep-26) showed Nifty Auto as the
+  sole long research match, Nifty Financial Services and Nifty PSU Bank as
+  countertrend watches, the two MidSmall indices as tactical watches, eleven
+  avoid/no-edge rows, no validated short, and Nifty 50 as context. This snapshot
+  is expected to change after later EOD updates and is not a saved recommendation.
 - Added a persistent site-wide light/dark theme switcher, including dark-aware
   tables, dialogs, notices, forms, and canvas charts.
 - Corrected the incremental EOD history path so NIFTY 50 and the 210-stock F&O
@@ -77,16 +127,28 @@ exploratory and is not approved for decisions.
 
 ## Next work
 
-1. Add the cross-index comparison table, retaining explicit membership-bias
-   warnings and excluding indices that fail history or liquid-breadth gates.
-2. Add named major-event validation and point-in-time F&O membership where source
-   history permits it.
-3. Extend historical coverage to institutional flows, macro context, global risk,
-   and futures/OI so more than 60% of candidate weight can be tested.
-4. Test transition behavior and define the recovering label without fitting to
-   the displayed outcome sample.
-5. Display a composite regime label only after its evidence and limitations are
+1. Add candidate risk controls and horizon-specific validation: slower long
+   setups, shorter downside-continuation tests, tail-loss/stop-distance evidence,
+   and futures/OI confirmation when enough snapshots accumulate.
+2. Continue daily collection for institutional flows, macro context, global risk,
+   and futures/OI; freeze their directional thresholds only after adequate
+   coverage, then test them out of sample.
+3. Source and audit authoritative dated index membership before populating the
+   new point-in-time schema; never infer historical membership from today's list.
+4. Display any decision layer only after its evidence and limitations are
    reviewable in the interface.
+
+## Approved longer-range product milestones
+
+1. Turn Dashboard into the summary layer for every workspace page, with one
+   concise section per page, freshness/readiness state, and a route to details.
+2. Recompose Market Sentiment as a macro-to-micro decision story: broad risk
+   context, walk-forward validation, macro/global drivers, independent sector/
+   index states, simultaneous long/short candidates, and stock-level follow-through.
+3. Build Portfolio Analysis around local `.csv`/`.xlsx` upload, preview and
+   column mapping. Combine holdings with validated sentiment and seasonality to
+   provide evidence-linked, scenario-based allocation review prompts. Keep the
+   workflow local, read-only, and separate from broker execution.
 
 ## Open data decision
 
@@ -94,6 +156,13 @@ The FRED-distributed Nasdaq Emerging Markets Index candidate was rejected
 because it is marked `Copyrighted: Pre-Approval Required`. A permitted broad
 emerging-market equity benchmark remains an open source-selection item; do not
 silently substitute an ETF or scraped proxy.
+
+NSE Indices states that historical/end-of-day constituent data is available as a
+subscription product. Its public press-release archive records many individual
+index changes, but PG-terminal does not treat those notices as a complete dated
+membership dataset without a separate reconstruction and audit. The engine is
+ready for licensed or otherwise authoritative effective-dated snapshots; until
+then it keeps the current-membership warning visible.
 
 ## Resume note
 

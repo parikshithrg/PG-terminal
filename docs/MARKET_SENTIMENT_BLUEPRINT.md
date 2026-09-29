@@ -302,8 +302,43 @@ These are review prompts, not target weights or automated transactions.
   exploratory: the current 210-stock universe creates survivorship/membership
   bias, overlapping outcome windows are not independent, and only 60% of the
   candidate weight is historically populated.
-- [ ] Run named-event validation and repeat the study with point-in-time universe
-  membership and historically available external clusters.
+- [x] Add the first fixed named-event stress review, covering the 2018 India NBFC
+  liquidity stress, 2020 COVID-19 shock, 2022 global inflation/Ukraine shock,
+  and June 2024 Indian election-result shock. Report detection timing, entry/
+  exit state, returns, drawdowns, and benchmark-relative outcomes; treat these
+  hindsight-selected windows as descriptive rather than independent tests.
+- [x] Compare every named event with non-overlapping, equal-session control
+  windows outside all named events. Expose return, drawdown-severity, and
+  stressed-session percentiles rather than selecting a favourable calm date.
+- [x] Add the engine and file-schema path for dated point-in-time index membership.
+  It activates only when authoritative effective-from/effective-to snapshots are
+  present; the current snapshot is never relabelled as historical membership.
+- [ ] Populate and audit authoritative point-in-time membership, then repeat the
+  study with historically available external clusters.
+- [x] Add an external-history readiness audit for institutional flows, confirmed
+  FPI, RBI/FBIL macro observations, permitted global-risk series, and futures/OI.
+  Require 252 complete sessions for historical features and 312 for a full
+  60-session walk-forward outcome. Keep scoring disabled until thresholds are
+  frozen and reviewed independently.
+- [x] Freeze an outcome-blind Recovering market transition rule for validation:
+  require five prior confirmed weak/high-risk sessions, enter only on improvement
+  to uncertain/cautiously positive, cap the state at 20 sessions, and exit on
+  positive confirmation or renewed risk. Measure outcomes after state assignment.
+- [x] Compare recovery-state stability across all eligible indices and named/
+  control windows, including Nifty-relative outcomes and relapse/positive-exit
+  counts. Keep excluded short-history/thin-breadth indices visible.
+- [x] Test incremental value versus each index's base Uncertain/Cautiously
+  positive states with minimum-sample and consistency gates.
+- [x] Add a historical long/short research map across every eligible index-state
+  pair. Long candidates are limited to Positive/Cautiously positive/Recovering
+  states; short candidates require validated downside continuation in Weak/High-
+  risk states. Post-selloff rebounds remain a separate countertrend study.
+- [x] Join each index's latest completed-session state to its validated historical
+  map so long, short, watch, avoid, and insufficient-evidence candidates coexist.
+  Calculate current state separately from the forward-outcome cutoff and keep
+  Nifty 50 as context only.
+- [ ] Add candidate-level risk controls, shorter-horizon downside-continuation
+  tests, and futures/OI confirmation before treating the board as actionable.
 - Publish the evidence table and limitations before activating a composite label.
 
 #### Multi-index extension
@@ -317,14 +352,24 @@ These are review prompts, not target weights or automated transactions.
 - [x] Add constituent-aware breadth from the official current membership snapshot,
   intersected with the liquid F&O universe and withheld below five eligible
   members. This remains subject to survivorship bias.
-- [ ] Add cross-index rankings without mixing the broad-market regime with the
-  selected index's opportunity/risk layer.
+- [x] Add an exploratory cross-index table ranking eligible indices by historical
+  20-session absolute/relative outcomes, outperformance, drawdown, sample size,
+  and constituent coverage. Keep it separate from the current broad-market regime.
 
 ### Phase 5 — portfolio reference
 
 - Pass the validated regime and confidence to Portfolio Analysis.
-- Show exposure diagnostics and review prompts without executing or prescribing
-  allocation changes.
+- Reorder the Market Sentiment page into a top-to-bottom story: overall regime,
+  walk-forward evidence, macro/global drivers, broad-index regime, sector/index
+  regimes, and stock-level follow-through.
+- Show exposure diagnostics and scenario-based allocation review prompts without
+  executing allocation changes.
+- Accept locally processed `.csv` and `.xlsx` portfolio uploads only after a
+  preview, column-mapping, and validation step. Holdings stay in memory unless
+  the user explicitly approves persistence.
+- Combine regime confidence/freshness and relevant seasonality evidence with
+  portfolio concentration, sector weights, risk contribution, and drawdown
+  diagnostics. Keep every recommendation explainable and review-only.
 
 ## Reference material
 

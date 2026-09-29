@@ -142,10 +142,133 @@ point-in-time-universe validation are next.
    reports expose both counts and retain a survivorship warning. Indices with
    fewer than five eligible constituents are withheld. Point-in-time membership
    remains preferred when an authoritative historical source becomes available.
-6. **Next:** add a cross-index comparison table ranking absolute return, relative return,
-   outperformance rate, drawdown risk, sample size, and data readiness.
-7. Validate normal periods and named stress events, then review thresholds and
-   limitations before enabling any visible current index classification.
+6. **Cross-index historical comparison — complete.** The table ranks eligible
+   indices by 20-session median excess return and shows absolute return,
+   outperformance rate, absolute/relative drawdown risk, sample size, and liquid
+   constituent coverage. It excludes failed readiness gates and is explicitly
+   historical rather than a live trading leaderboard.
+7. **Named stress-event review — complete for the first fixed windows.** Selected-
+   index reports now review the 2018 India NBFC liquidity stress, 2020 COVID-19
+   shock, 2022 global inflation/Ukraine shock, and June 2024 Indian election-
+   result shock. They show return, drawdown, benchmark-relative outcome, entry/
+   exit regime, stressed-session share, and detection timing. These windows are
+   retrospective and explicitly not treated as independent samples.
+8. **Normal-period controls — complete.** Every named event is now compared with
+   non-overlapping windows of equal session length that exclude all named events.
+   Reports show the control median return plus event return, drawdown-severity,
+   and stressed-session percentiles. The controls are descriptive distributions,
+   not hand-picked calm dates or causal counterfactuals.
+9. **Point-in-time membership path — ready, data pending.** The validation engine
+   and constituent loader accept dated effective-from/effective-to membership
+   snapshots and apply the matching membership at each historical session. The
+   repository currently contains only the official 29-Sep-26 current snapshot,
+   so reports retain the survivorship warning until an authoritative historical
+   source is approved and populated.
+   NSE Indices describes historical/end-of-day constituent data as a subscription
+   product (`https://www.niftyindices.com/offerings/data-subscription`). Public
+   press releases may document individual changes but are not treated as a
+   complete, machine-audited membership history.
+10. **External-history readiness — complete.** The validation report now audits
+   complete dated sessions for provisional institutional cash flow, confirmed
+   FPI investment, RBI/FBIL currency and rates, permitted FRED global-risk data,
+   and liquid-universe futures/OI snapshots. A 252-session history gate and
+   312-session full walk-forward gate are explicit. Passing a coverage gate does
+   not activate scoring; directional thresholds still require separate review.
+11. **Ongoing:** continue accumulating these EOD histories, freeze candidate
+   thresholds for each external cluster, and evaluate them out of sample. Source
+   authoritative dated constituent membership in parallel if access is approved.
+12. **Recovering-market transition rule — complete for validation.** A frozen,
+   outcome-blind state machine enters `Recovering market` only after at least five
+   consecutive confirmed weak/high-risk sessions improve to uncertain or
+   cautiously positive. Recovery lasts at most 20 sessions and ends immediately
+   on positive confirmation or renewed risk. The report measures its later
+   returns and drawdowns only after assignment and keeps it off the current signal.
+13. **Cross-index recovery stability — complete.** The frozen recovery rule now
+   runs across every eligible index, not only Nifty 50. The comparison exposes
+   episode counts, exits to Positive market, relapses, absolute and Nifty-relative
+   20-session outcomes, and worst returns/drawdowns. Named-event reports also
+   compare recovery-session frequency with same-length normal controls.
+14. **Incremental and directional state evidence — complete.** Recovery is now
+   compared with the same index's ordinary Uncertain/Cautiously positive sample.
+   A separate historical research map applies fixed 60-session, absolute-return,
+   positive-rate, and Nifty-relative gates to every index-state combination.
+   Trend/recovery states may qualify as long research candidates; only validated
+   downside continuation in weak/high-risk states may qualify as short research.
+   Positive post-selloff returns are labelled countertrend rebound studies rather
+   than misleading long signals. No short state currently clears the frozen gate.
+15. **Current cross-sectional decision board — complete for research.** Every
+   eligible index is classified through the latest completed session, separately
+   from the 60-session-truncated outcome sample, then joined to its own validated
+   state history. The board ranks simultaneous long, short, countertrend/tactical
+   watch, avoid, and insufficient-evidence rows. Nifty 50 is context only.
+16. **Next executable step:** add candidate risk controls and signal horizons.
+   Separate slower 20-session long setups from shorter downside-continuation
+   research, expose tail loss/stop-distance evidence, and require futures/OI
+   confirmation for short candidates once sufficient history exists.
+
+## Approved product-integration milestones
+
+### A. Dashboard as the workspace summary
+
+The Dashboard becomes a concise summary of every main workspace page. It should
+not duplicate full analysis; each section must show the most decision-relevant
+result, freshness/coverage state, and a clear route to the source page.
+
+1. Add one summary section for Market Sentiment, F&O, Screener, Seasonality,
+   Earnings Analysis, Portfolio Analysis, News & Events, and Stock Data YTD.
+2. Use a consistent card contract: headline state, two to four supporting
+   measures, as-of date, missing-data warning, and `View details` action.
+3. Keep unavailable or immature analysis visible with an honest readiness state;
+   never replace missing evidence with a neutral-looking value.
+4. Make the Dashboard responsive and keep the EOD update progress/freshness
+   state visible without requiring users to open each page.
+
+### B. Market Sentiment as a macro-to-micro story
+
+Reorder Market Sentiment so a newer investor can move from the conclusion to its
+supporting evidence and then from broad environment to specific opportunities or
+risks. The intended top-to-bottom reading order is:
+
+The page is a cross-sectional trading-decision workspace, not an overall-market
+signal. The broad regime supplies risk context; each index/sector is classified
+independently so long and short candidates may coexist.
+
+1. Broad risk context, confidence, freshness, and a one-paragraph summary of what
+   is driving the environment. Do not present it as the site's trading signal.
+2. Walk-forward validation, interpretation boundaries, sample coverage, and
+   limitations. Keep historical validation separate from the current reading.
+3. Macro/global environment and liquidity: volatility, institutional flows,
+   currency, sovereign yields, and global risk backdrop.
+4. Broad-index regime and trend evidence.
+5. Sector/index regimes, relative performance, breadth, and cross-index ranking.
+6. Stock-level follow-through: participation, price strength, and liquid F&O
+   leaders/laggards, clearly separated from trade recommendations.
+7. Add short transition text between layers so the page explains why each layer
+   follows from the previous one instead of presenting disconnected cards.
+
+### C. Portfolio Analysis as a read-only allocation review
+
+Portfolio Analysis should combine the user's holdings with validated Market
+Sentiment and Seasonality evidence to indicate how the current allocation aligns
+with the market environment. It remains an analytical review, not execution.
+
+1. Accept local `.csv` and `.xlsx` uploads with an explicit preview-and-column-
+   mapping step. Required fields should be instrument/symbol and quantity or
+   portfolio weight; optional fields can include average cost and current value.
+2. Validate symbols, duplicates, quantities, weights, missing prices, and file
+   structure before calculation. Reject unsupported or ambiguous rows visibly.
+3. Keep uploaded portfolio data local and in memory by default; do not transmit,
+   commit, or persist a holdings file without explicit approval.
+4. Calculate position and sector weights, concentration, cash allocation, beta,
+   volatility contribution, drawdown exposure, and overlap with available index
+   and F&O universes.
+5. Bring in the current validated market regime, index/sector regimes, evidence
+   confidence, freshness, and relevant seasonality observations.
+6. Produce scenario-based allocation review prompts: over/under-exposure,
+   concentration warnings, defensive/aggressive tilts, and instruments requiring
+   review. Every suggestion must show the supporting evidence and uncertainty.
+7. Never place orders or imply certainty. Recommendations require user review and
+   must remain separate from automated broker actions.
 
 1. **Market sentiment and regime foundation** — implement the approved
    [Market Sentiment blueprint](MARKET_SENTIMENT_BLUEPRINT.md) in phases,

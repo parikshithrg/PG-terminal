@@ -1080,12 +1080,39 @@
                 <div class="summary-meta" id="regimeValidationStatus">Not run</div>
               </article>
             </section>
+            <h3 class="section-subtitle">External historical-evidence readiness</h3>
+            <p class="section-note">External evidence enters validation only after enough dated observations exist and its directional thresholds pass a separate review. Sparse history is not treated as neutral.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Evidence input</th><th>Candidate cluster</th><th>Weight</th><th>Stored complete sessions</th><th>History required</th><th>Stored period</th><th>Status</th></tr></thead>
+                <tbody id="regimeExternalReadinessBody"><tr><td colspan="7">Run validation to audit external historical coverage.</td></tr></tbody>
+              </table>
+            </div>
+            <div class="analysis-note" id="regimeExternalReadinessNote">Coverage readiness never activates a score by itself.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Regime</th><th>Sessions</th><th>5d median</th><th>20d median</th><th>20d positive</th><th>20d excess vs benchmark</th><th>20d outperform rate</th><th>Worst 20d relative drawdown</th><th>60d median</th><th>Worst 20d drawdown</th></tr></thead>
                 <tbody id="regimeValidationBody"><tr><td colspan="10">Run validation to inspect historical outcomes.</td></tr></tbody>
               </table>
             </div>
+            <h3 class="section-subtitle">Transition-aware recovery review</h3>
+            <p class="section-note">Recovering market is assigned from prior regime history only: at least five confirmed weak/high-risk sessions followed by confirmed improvement. It lasts no more than 20 sessions and is evaluated only after the rule is assigned.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Transition state</th><th>Sessions</th><th>5d median</th><th>20d median</th><th>20d positive</th><th>20d excess</th><th>20d outperform rate</th><th>60d median</th><th>Worst 20d drawdown</th></tr></thead>
+                <tbody id="regimeTransitionBody"><tr><td colspan="9">Transition-state results will appear with the validation report.</td></tr></tbody>
+              </table>
+            </div>
+            <details class="panel sentiment-data-quality">
+              <summary>Recovery episodes and outcomes</summary>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Recovery entry</th><th>Prior risk episode</th><th>Exit</th><th>Exit reason</th><th>20d return</th><th>20d maximum drawdown</th><th>20d excess</th></tr></thead>
+                  <tbody id="regimeRecoveryEpisodesBody"><tr><td colspan="7">Recovery episodes will appear with the validation report.</td></tr></tbody>
+                </table>
+              </div>
+            </details>
+            <div class="analysis-note" id="regimeTransitionNote">This transition state remains validation-only and is not a current market signal.</div>
             <h3 class="section-subtitle">Simple trend baseline</h3>
             <div class="table-wrap">
               <table>
@@ -1093,7 +1120,59 @@
                 <tbody id="regimeBaselineBody"><tr><td colspan="8">The baseline will appear with the validation report.</td></tr></tbody>
               </table>
             </div>
+            <h3 class="section-subtitle">Named stress-event review</h3>
+            <p class="section-note">Each event is compared with non-overlapping windows of the same length outside every named event. A high drawdown or stress percentile means the event was more severe than most ordinary historical windows.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Review window</th><th>Dates</th><th>Index return</th><th>Control median return</th><th>Return percentile</th><th>Excess vs benchmark</th><th>Maximum drawdown</th><th>Drawdown severity percentile</th><th>Relative drawdown</th><th>Entry regime</th><th>Exit regime</th><th>Weak/high-risk sessions</th><th>Stress percentile</th><th>Recovering sessions</th><th>Recovery percentile</th><th>First weak/high-risk reading</th></tr></thead>
+                <tbody id="regimeEventValidationBody"><tr><td colspan="16">Named-event results will appear with the selected-index validation.</td></tr></tbody>
+              </table>
+            </div>
             <div class="analysis-note" id="regimeValidationNote">This is a risk-state test, not a direction forecast. A high-risk reading can be followed by a sharp rebound while still containing the worst drawdowns.</div>
+          </section>
+
+          <section class="analysis-section" aria-labelledby="crossIndexComparisonTitle">
+            <div class="section-heading-row">
+              <div>
+                <h2 id="crossIndexComparisonTitle">Cross-index historical comparison</h2>
+                <p class="section-note">Exploratory 20-session outcomes ranked by median excess return versus Nifty 50. This is a historical comparison, not a current trading signal.</p>
+              </div>
+              <button class="panel-button" id="loadCrossIndexComparisonButton" type="button">Build comparison</button>
+            </div>
+            <h3 class="section-subtitle">Current cross-sectional decision board</h3>
+            <p class="section-note">Each index's latest completed-session state is matched only with that index's validated historical state evidence. Nifty 50 is displayed as context, not as the universal direction.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Decision</th><th>Index</th><th>Current state</th><th>State score</th><th>Stock coverage</th><th>As of</th><th>Historical state sample</th><th>20d median</th><th>20d positive</th><th>20d excess vs Nifty 50</th><th>Worst 20d drawdown</th><th>Current evidence</th></tr></thead>
+                <tbody id="currentIndexDecisionBody"><tr><td colspan="12">Build the comparison to calculate current index candidates.</td></tr></tbody>
+              </table>
+            </div>
+            <div class="analysis-note" id="currentIndexDecisionNote">Long and short candidates may coexist. Missing or historically unsupported states remain visible as avoid or insufficient evidence.</div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Rank</th><th>Index</th><th>Sample</th><th>Median return</th><th>Positive</th><th>Median excess vs Nifty 50</th><th>Outperform rate</th><th>Worst drawdown</th><th>Worst relative drawdown</th><th>F&O constituent coverage</th></tr></thead>
+                <tbody id="crossIndexComparisonBody"><tr><td colspan="10">Build the comparison from validated local history.</td></tr></tbody>
+              </table>
+            </div>
+            <div class="analysis-note" id="crossIndexComparisonNote">Indices without sufficient history or at least five liquid F&O constituents will be excluded and listed here.</div>
+            <h3 class="section-subtitle">Recovery-state stability across indices</h3>
+            <p class="section-note">The same frozen recovery rule is applied to every eligible index. Outcomes are descriptive and are not ranked as current opportunities.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Index</th><th>Episodes</th><th>Recovery sessions</th><th>Reached Positive</th><th>Relapsed</th><th>20d recovery median</th><th>Comparable base median</th><th>Incremental median</th><th>20d positive</th><th>20d excess vs Nifty 50</th><th>20d outperform rate</th><th>Worst 20d return</th><th>Worst 20d drawdown</th><th>Recovery thesis</th></tr></thead>
+                <tbody id="crossIndexRecoveryBody"><tr><td colspan="14">Build the cross-index comparison to review recovery stability.</td></tr></tbody>
+              </table>
+            </div>
+            <div class="analysis-note" id="crossIndexRecoveryNote">Recovery comparisons will appear here after the historical study is built.</div>
+            <h3 class="section-subtitle">Historical long/short research map</h3>
+            <p class="section-note">This maps which validated state has historically supported each index's strongest long or short research case. It is not a live signal; the next stage must join it with each index's current state.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Index</th><th>Long-side state</th><th>Long sample</th><th>Long 20d median</th><th>Long excess</th><th>Short-side state</th><th>Short sample</th><th>Short 20d median</th><th>Short excess</th></tr></thead>
+                <tbody id="crossIndexDirectionalBody"><tr><td colspan="9">Build the cross-index comparison to create the historical research map.</td></tr></tbody>
+              </table>
+            </div>
+            <div class="analysis-note" id="crossIndexDirectionalNote">Broad-market state is context; sector and index states are evaluated independently.</div>
           </section>
 
           <div class="section-heading-row">
@@ -2234,6 +2313,22 @@
       document.getElementById('regimeValidationStatus').textContent =
         `${result.target_index} · ${result.rule_version} · ${result.cache_hit ? 'cached result' : 'fresh calculation'}`;
 
+      const externalReadiness = result.external_cluster_readiness || {};
+      const externalRows = Array.isArray(externalReadiness.rows) ? externalReadiness.rows : [];
+      document.getElementById('regimeExternalReadinessBody').innerHTML = externalRows.length
+        ? externalRows.map((row) => `<tr>
+            <td>${escapeHtml(row.label)}</td>
+            <td>${escapeHtml(row.cluster)}</td>
+            <td>${row.candidate_weight_pct == null ? 'Supporting only' : `${Number(row.candidate_weight_pct).toFixed(0)}%`}</td>
+            <td>${Number(row.stored_sessions).toLocaleString('en-IN')}</td>
+            <td>${Number(row.history_sessions_required).toLocaleString('en-IN')} history · ${Number(row.walk_forward_sessions_required).toLocaleString('en-IN')} full test</td>
+            <td>${row.first_session && row.last_session ? `${formatDisplayDate(row.first_session)} to ${formatDisplayDate(row.last_session)}` : 'Not stored'}</td>
+            <td>${row.scoring_ready ? 'Validated for scoring' : row.walk_forward_ready ? 'Threshold review pending' : `${Number(row.sessions_until_history_ready).toLocaleString('en-IN')} sessions to history gate`}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="7">External historical-coverage data is unavailable.</td></tr>';
+      document.getElementById('regimeExternalReadinessNote').textContent =
+        externalReadiness.note || 'Coverage readiness never activates a score by itself.';
+
       document.getElementById('regimeValidationBody').innerHTML = result.by_regime.map((row) => `<tr>
         <td>${escapeHtml(row.label)}</td>
         <td>${Number(row.sessions).toLocaleString('en-IN')}</td>
@@ -2247,6 +2342,44 @@
         <td>${validationPercent(validationMetric(row, 20, 'worst_max_drawdown_pct'), true)}</td>
       </tr>`).join('');
 
+      const transition = result.transition_analysis || {};
+      const transitionRows = Array.isArray(transition.by_state) ? transition.by_state : [];
+      document.getElementById('regimeTransitionBody').innerHTML = transitionRows.length
+        ? transitionRows.map((row) => `<tr>
+            <td>${escapeHtml(row.label)}</td>
+            <td>${Number(row.sessions).toLocaleString('en-IN')}</td>
+            <td>${validationPercent(validationMetric(row, 5, 'median_return_pct'), true)}</td>
+            <td>${validationPercent(validationMetric(row, 20, 'median_return_pct'), true)}</td>
+            <td>${validationPercent(validationMetric(row, 20, 'positive_rate_pct'))}</td>
+            <td>${validationPercent(validationMetric(row, 20, 'median_excess_return_pct'), true)}</td>
+            <td>${validationPercent(validationMetric(row, 20, 'outperformance_rate_pct'))}</td>
+            <td>${validationPercent(validationMetric(row, 60, 'median_return_pct'), true)}</td>
+            <td>${validationPercent(validationMetric(row, 20, 'worst_max_drawdown_pct'), true)}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="9">No transition-state observations are available.</td></tr>';
+      const recoveryEpisodes = Array.isArray(transition.episodes) ? transition.episodes : [];
+      document.getElementById('regimeRecoveryEpisodesBody').innerHTML = recoveryEpisodes.length
+        ? recoveryEpisodes.map((episode) => {
+          const outcome = (episode.forward_outcomes || {})['20'] || {};
+          return `<tr>
+            <td>${formatDisplayDate(episode.entry_date)} · score ${Number(episode.entry_score).toFixed(1)}</td>
+            <td>${escapeHtml(episode.prior_risk_regime || 'Risk')} · ${Number(episode.prior_risk_sessions).toLocaleString('en-IN')} sessions</td>
+            <td>${episode.exit_date ? formatDisplayDate(episode.exit_date) : 'Still open'}</td>
+            <td>${escapeHtml(String(episode.exit_reason || '').replaceAll('_', ' '))}</td>
+            <td>${validationPercent(outcome.return_pct, true)}</td>
+            <td>${validationPercent(outcome.maximum_drawdown_pct, true)}</td>
+            <td>${validationPercent(outcome.excess_return_pct, true)}</td>
+          </tr>`;
+        }).join('')
+        : '<tr><td colspan="7">No qualifying recovery episodes were found.</td></tr>';
+      const exits = transition.exit_counts || {};
+      const incremental = transition.recovery_incremental_evidence || {};
+      const incrementalText = incremental.delta_median_return_pct == null
+        ? 'Recovery incremental comparison does not yet meet the sample gate.'
+        : `Recovery vs comparable Uncertain/Cautiously positive observations: ${validationPercent(incremental.delta_median_return_pct, true)} median-return difference and ${validationPercent(incremental.delta_positive_rate_pct, true)} positive-rate difference · ${String(incremental.status || '').replaceAll('_', ' ')}.`;
+      document.getElementById('regimeTransitionNote').textContent =
+        `${Number(transition.episode_count || 0).toLocaleString('en-IN')} recovery episodes · ${Number(exits.positive_market_confirmed || 0).toLocaleString('en-IN')} reached Positive market · ${Number(exits.relapsed_to_risk || 0).toLocaleString('en-IN')} relapsed · ${Number(exits.maximum_window_reached || 0).toLocaleString('en-IN')} reached the 20-session limit · ${Number(exits.still_open || 0).toLocaleString('en-IN')} still open. ${incrementalText} Validation only; not a current signal.`;
+
       document.getElementById('regimeBaselineBody').innerHTML = result.baseline.map((row) => `<tr>
         <td>${escapeHtml(row.label)}</td>
         <td>${Number(row.sessions).toLocaleString('en-IN')}</td>
@@ -2258,13 +2391,40 @@
         <td>${validationPercent(validationMetric(row, 20, 'worst_max_drawdown_pct'), true)}</td>
       </tr>`).join('');
 
+      const eventRows = Array.isArray(result.event_validation) ? result.event_validation : [];
+      document.getElementById('regimeEventValidationBody').innerHTML = eventRows.length
+        ? eventRows.map((row) => {
+          const control = row.normal_period_control || {};
+          return `<tr>
+            <td>${escapeHtml(row.label)}</td>
+            <td>${formatDisplayDate(row.window_start)} to ${formatDisplayDate(row.window_end)}</td>
+            <td>${validationPercent(row.index_return_pct, true)}</td>
+            <td>${validationPercent(control.median_return_pct, true)} · ${Number(control.window_count || 0).toLocaleString('en-IN')} windows</td>
+            <td>${validationPercent(control.event_return_percentile_pct)}</td>
+            <td>${validationPercent(row.excess_return_pct, true)}</td>
+            <td>${validationPercent(row.maximum_drawdown_pct, true)}</td>
+            <td>${validationPercent(control.event_drawdown_severity_percentile_pct)}</td>
+            <td>${validationPercent(row.relative_drawdown_pct, true)}</td>
+            <td>${escapeHtml(row.entry_regime)}</td>
+            <td>${escapeHtml(row.exit_regime)}</td>
+            <td>${validationPercent(row.weak_or_high_risk_sessions_pct)}</td>
+            <td>${validationPercent(control.event_stress_share_percentile_pct)}</td>
+            <td>${validationPercent(row.recovering_sessions_pct)}</td>
+            <td>${validationPercent(control.event_recovery_share_percentile_pct)}</td>
+            <td>${row.first_weak_or_high_risk_date ? `${formatDisplayDate(row.first_weak_or_high_risk_date)} · ${row.sessions_to_first_weak_or_high_risk} sessions` : 'Not reached'}</td>
+          </tr>`;
+        }).join('')
+        : '<tr><td colspan="16">No named review windows overlap the available validation history.</td></tr>';
+
       const firstLimitation = Array.isArray(result.limitations) && result.limitations.length
         ? result.limitations[0]
         : 'Historical results remain exploratory.';
       const benchmarkText = result.benchmark_index
         ? ` Excess return and outperformance use ${result.benchmark_index}; relative drawdown measures deterioration in the target-to-benchmark ratio.`
         : ' No relative benchmark is applied to this result.';
-      const membershipText = breadthUniverse.constituent_snapshot_as_of
+      const membershipText = breadthUniverse.membership_history_available
+        ? ` Breadth uses ${Number(breadthUniverse.membership_snapshot_count).toLocaleString('en-IN')} dated membership snapshots intersected with the liquid F&O universe.`
+        : breadthUniverse.constituent_snapshot_as_of
         ? ` Constituent snapshot ${formatDisplayDate(breadthUniverse.constituent_snapshot_as_of)}; breadth uses only members also present in the liquid F&O universe.`
         : '';
       document.getElementById('regimeValidationNote').textContent =
@@ -2277,8 +2437,14 @@
       document.getElementById('regimeValidationTransitions').textContent = '—';
       document.getElementById('regimeValidationCoverage').textContent = '80% stock-coverage gate';
       document.getElementById('regimeValidationStatus').textContent = message;
+      document.getElementById('regimeExternalReadinessBody').innerHTML = '<tr><td colspan="7">Run validation to audit external historical coverage.</td></tr>';
+      document.getElementById('regimeExternalReadinessNote').textContent = 'Coverage readiness never activates a score by itself.';
       document.getElementById('regimeValidationBody').innerHTML = `<tr><td colspan="10">${escapeHtml(message)}</td></tr>`;
+      document.getElementById('regimeTransitionBody').innerHTML = '<tr><td colspan="9">Transition-state results will appear with the validation report.</td></tr>';
+      document.getElementById('regimeRecoveryEpisodesBody').innerHTML = '<tr><td colspan="7">Recovery episodes will appear with the validation report.</td></tr>';
+      document.getElementById('regimeTransitionNote').textContent = 'This transition state remains validation-only and is not a current market signal.';
       document.getElementById('regimeBaselineBody').innerHTML = '<tr><td colspan="8">The baseline will appear with the validation report.</td></tr>';
+      document.getElementById('regimeEventValidationBody').innerHTML = '<tr><td colspan="16">Named-event results will appear with the selected-index validation.</td></tr>';
     }
 
     function updateRegimeValidationSelection(resetResult = false) {
@@ -2376,6 +2542,142 @@
       } finally {
         button.disabled = false;
         button.textContent = 'Run validation';
+      }
+    }
+
+    function renderCrossIndexComparison(result) {
+      const decisionLabels = {
+        long_candidate: 'Long candidate',
+        short_candidate: 'Short candidate',
+        countertrend_watch: 'Countertrend watch',
+        tactical_watch: 'Tactical rebound watch',
+        reversal_watch: 'Reversal watch',
+        avoid_no_validated_edge: 'Avoid · no validated edge',
+        insufficient_evidence: 'Insufficient evidence',
+        market_context_only: 'Market context only',
+      };
+      const decisionRows = Array.isArray(result.current_decision_rows)
+        ? result.current_decision_rows : [];
+      document.getElementById('currentIndexDecisionBody').innerHTML = decisionRows.length
+        ? decisionRows.map((row) => {
+          const current = row.current_state || {};
+          const historical = row.current_state_historical_evidence || {};
+          const evidence = current.evidence || {};
+          return `<tr>
+            <td>${escapeHtml(decisionLabels[row.current_decision] || row.current_decision || 'Insufficient evidence')}</td>
+            <td>${escapeHtml(row.index)}${row.is_benchmark ? ' · benchmark' : ''}</td>
+            <td>${escapeHtml(current.transition_label || current.base_label || 'Unavailable')}</td>
+            <td>${current.score == null ? '—' : Number(current.score).toFixed(1)}</td>
+            <td>${current.stock_coverage_pct == null ? '—' : validationPercent(current.stock_coverage_pct)}</td>
+            <td>${current.as_of_date ? formatDisplayDate(current.as_of_date) : '—'}${Number(current.session_lag || 0) ? ` · ${current.session_lag} sessions stale` : ''}</td>
+            <td>${historical.sessions == null ? '—' : Number(historical.sessions).toLocaleString('en-IN')}</td>
+            <td>${validationPercent(historical.median_return_pct, true)}</td>
+            <td>${validationPercent(historical.positive_rate_pct)}</td>
+            <td>${row.is_benchmark ? 'Baseline' : validationPercent(historical.median_excess_return_pct, true)}</td>
+            <td>${validationPercent(historical.worst_max_drawdown_pct, true)}</td>
+            <td>Trend ${escapeHtml(evidence.trend_band || '—')} · breadth ${escapeHtml(evidence.breadth_band || '—')} · strength ${escapeHtml(evidence.price_strength_band || '—')} · volatility ${escapeHtml(evidence.volatility_band || '—')}</td>
+          </tr>`;
+        }).join('')
+        : '<tr><td colspan="12">Current index candidates are unavailable.</td></tr>';
+      const decisionCounts = decisionRows.reduce((counts, row) => {
+        counts[row.current_decision] = (counts[row.current_decision] || 0) + 1;
+        return counts;
+      }, {});
+      document.getElementById('currentIndexDecisionNote').textContent =
+        `${Number(decisionCounts.long_candidate || 0).toLocaleString('en-IN')} long · ${Number(decisionCounts.short_candidate || 0).toLocaleString('en-IN')} short · ${Number((decisionCounts.countertrend_watch || 0) + (decisionCounts.tactical_watch || 0) + (decisionCounts.reversal_watch || 0)).toLocaleString('en-IN')} watch · ${Number(decisionCounts.avoid_no_validated_edge || 0).toLocaleString('en-IN')} avoid · ${Number(decisionCounts.insufficient_evidence || 0).toLocaleString('en-IN')} insufficient. Candidates are evidence matches, not orders; position sizing, liquidity, stops, and futures/OI confirmation are not yet applied.`;
+      const body = document.getElementById('crossIndexComparisonBody');
+      body.innerHTML = result.rows.map((row) => `<tr>
+        <td>${row.rank}</td>
+        <td>${escapeHtml(row.index)}${row.is_benchmark ? ' · benchmark' : ''}</td>
+        <td>${Number(row.sessions).toLocaleString('en-IN')}</td>
+        <td>${validationPercent(row.median_return_pct, true)}</td>
+        <td>${validationPercent(row.positive_rate_pct)}</td>
+        <td>${validationPercent(row.median_excess_return_pct, true)}</td>
+        <td>${row.is_benchmark ? 'Baseline' : validationPercent(row.outperformance_rate_pct)}</td>
+        <td>${validationPercent(row.worst_max_drawdown_pct, true)}</td>
+        <td>${validationPercent(row.worst_relative_drawdown_pct, true)}</td>
+        <td>${row.fno_constituent_count}/${row.official_constituent_count}</td>
+      </tr>`).join('');
+      const excluded = Array.isArray(result.excluded) ? result.excluded : [];
+      const excludedText = excluded.length
+        ? excluded.map((row) => `${row.index} (${row.reason === 'insufficient_history' ? 'insufficient history' : 'insufficient liquid breadth'})`).join(' · ')
+        : 'None';
+      document.getElementById('crossIndexComparisonNote').textContent =
+        `20-session historical comparison · constituent snapshot ${formatDisplayDate(result.constituent_snapshot_as_of)} · excluded: ${excludedText}. Current-membership and overlapping-window limitations apply.`;
+      const recoveryRows = result.rows.filter((row) => Number(row.recovery_episode_count) > 0);
+      document.getElementById('crossIndexRecoveryBody').innerHTML = recoveryRows.length
+        ? recoveryRows.map((row) => `<tr>
+            <td>${escapeHtml(row.index)}${row.is_benchmark ? ' · benchmark' : ''}</td>
+            <td>${Number(row.recovery_episode_count).toLocaleString('en-IN')}</td>
+            <td>${Number(row.recovery_sessions).toLocaleString('en-IN')}</td>
+            <td>${Number(row.recovery_positive_exit_count).toLocaleString('en-IN')}</td>
+            <td>${Number(row.recovery_relapse_count).toLocaleString('en-IN')}</td>
+            <td>${validationPercent(row.recovery_20d_median_return_pct, true)}</td>
+            <td>${validationPercent(row.recovery_base_20d_median_return_pct, true)}</td>
+            <td>${validationPercent(row.recovery_incremental_median_return_pct, true)}</td>
+            <td>${validationPercent(row.recovery_20d_positive_rate_pct)}</td>
+            <td>${row.is_benchmark ? 'Baseline' : validationPercent(row.recovery_20d_median_excess_return_pct, true)}</td>
+            <td>${row.is_benchmark ? 'Baseline' : validationPercent(row.recovery_20d_outperformance_rate_pct)}</td>
+            <td>${validationPercent(row.recovery_20d_worst_return_pct, true)}</td>
+            <td>${validationPercent(row.recovery_20d_worst_drawdown_pct, true)}</td>
+            <td>${escapeHtml(String(row.recovery_incremental_status || 'insufficient sample').replaceAll('_', ' '))}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="14">No eligible index has a qualifying recovery episode.</td></tr>';
+      const recoveryContract = result.recovery_state_contract || {};
+      document.getElementById('crossIndexRecoveryNote').textContent =
+        `${Number(recoveryContract.eligible_indices || 0).toLocaleString('en-IN')} indices have qualifying recovery episodes. All use the same ${Number(recoveryContract.minimum_prior_risk_sessions || 5)}-session prior-risk gate and ${Number(recoveryContract.maximum_recovery_sessions || 20)}-session maximum recovery window. Validation only; not a live opportunity ranking.`;
+      document.getElementById('crossIndexDirectionalBody').innerHTML = result.rows.map((row) => {
+        const longState = row.historical_long_state;
+        const shortState = row.historical_short_state;
+        return `<tr>
+          <td>${escapeHtml(row.index)}${row.is_benchmark ? ' · benchmark' : ''}</td>
+          <td>${longState ? escapeHtml(longState.label) : 'No validated long state'}</td>
+          <td>${longState ? Number(longState.sessions).toLocaleString('en-IN') : '—'}</td>
+          <td>${longState ? validationPercent(longState.median_return_pct, true) : '—'}</td>
+          <td>${longState ? (row.is_benchmark ? 'Baseline' : validationPercent(longState.median_excess_return_pct, true)) : '—'}</td>
+          <td>${shortState ? escapeHtml(shortState.label) : 'No validated short state'}</td>
+          <td>${shortState ? Number(shortState.sessions).toLocaleString('en-IN') : '—'}</td>
+          <td>${shortState ? validationPercent(shortState.median_return_pct, true) : '—'}</td>
+          <td>${shortState ? (row.is_benchmark ? 'Baseline' : validationPercent(shortState.median_excess_return_pct, true)) : '—'}</td>
+        </tr>`;
+      }).join('');
+      const directionalContract = result.directional_research_contract || {};
+      document.getElementById('crossIndexDirectionalNote').textContent =
+        `Historical research gate: at least ${Number(directionalContract.minimum_state_sessions || 60).toLocaleString('en-IN')} state observations, ±${Number(directionalContract.absolute_median_return_threshold_pct || 1).toFixed(1)}% median return, and ${Number(directionalContract.positive_rate_long_threshold_pct || 60).toFixed(0)}%/40% positive-rate confirmation. Sector/index candidates must also clear the Nifty 50-relative gate. Broad-market state remains context, not a universal signal.`;
+    }
+
+    async function loadCrossIndexComparison() {
+      const button = document.getElementById('loadCrossIndexComparisonButton');
+      button.disabled = true;
+      button.textContent = 'Building…';
+      document.getElementById('currentIndexDecisionBody').innerHTML = '<tr><td colspan="12">Calculating latest state and matching historical evidence for every eligible index…</td></tr>';
+      document.getElementById('crossIndexComparisonBody').innerHTML = '<tr><td colspan="10">Calculating validated outcomes across eligible indices…</td></tr>';
+      document.getElementById('crossIndexRecoveryBody').innerHTML = '<tr><td colspan="14">Calculating recovery-state stability across eligible indices…</td></tr>';
+      document.getElementById('crossIndexDirectionalBody').innerHTML = '<tr><td colspan="9">Building the historical long/short research map…</td></tr>';
+      try {
+        const response = await fetch('/api/market-sentiment/cross-index-validation', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          document.getElementById('crossIndexComparisonBody').innerHTML = '<tr><td colspan="10">Cross-index comparison is unavailable.</td></tr>';
+          document.getElementById('currentIndexDecisionBody').innerHTML = '<tr><td colspan="12">Current cross-sectional candidates are unavailable.</td></tr>';
+          document.getElementById('crossIndexRecoveryBody').innerHTML = '<tr><td colspan="14">Cross-index recovery comparison is unavailable.</td></tr>';
+          document.getElementById('crossIndexDirectionalBody').innerHTML = '<tr><td colspan="9">Historical long/short research map is unavailable.</td></tr>';
+          showNotice('Cross-index comparison needs sufficient validated local history.');
+          return false;
+        }
+        renderCrossIndexComparison(result);
+        showNotice(`Compared ${result.rows.length} eligible indices using historical 20-session outcomes.`);
+        return true;
+      } catch (_error) {
+        document.getElementById('crossIndexComparisonBody').innerHTML = '<tr><td colspan="10">The local comparison service is unavailable.</td></tr>';
+        document.getElementById('currentIndexDecisionBody').innerHTML = '<tr><td colspan="12">The local decision service is unavailable.</td></tr>';
+        document.getElementById('crossIndexRecoveryBody').innerHTML = '<tr><td colspan="14">The local recovery comparison service is unavailable.</td></tr>';
+        document.getElementById('crossIndexDirectionalBody').innerHTML = '<tr><td colspan="9">The local directional research service is unavailable.</td></tr>';
+        showNotice('The local cross-index comparison service is unavailable.');
+        return false;
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Build comparison';
       }
     }
 
@@ -3185,6 +3487,7 @@
     });
     refreshFnoButton.addEventListener('click', () => loadDomesticSentiment(true));
     refreshRegimeValidationButton.addEventListener('click', () => loadRegimeValidation(true));
+    document.getElementById('loadCrossIndexComparisonButton').addEventListener('click', loadCrossIndexComparison);
     regimeValidationIndexSelect.addEventListener('change', () => updateRegimeValidationSelection(true));
     regimeValidationBenchmarkSelect.addEventListener('change', () => {
       const benchmark = regimeValidationBenchmarkSelect.value === 'none' ? 'No relative benchmark' : 'Nifty 50 benchmark';

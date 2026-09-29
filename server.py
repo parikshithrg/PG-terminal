@@ -71,6 +71,43 @@ REGIME_MINIMUM_AVAILABLE_WEIGHT = 0.60
 REGIME_MINIMUM_STOCK_COVERAGE_PCT = 80.0
 REGIME_VALIDATION_TRAILING_SESSIONS = 252
 REGIME_VALIDATION_DEFAULT_HORIZONS = (5, 20, 60)
+REGIME_EXTERNAL_HISTORY_SESSIONS = 252
+REGIME_EXTERNAL_WALK_FORWARD_SESSIONS = 312
+REGIME_RECOVERY_MINIMUM_RISK_SESSIONS = 5
+REGIME_RECOVERY_MAXIMUM_SESSIONS = 20
+REGIME_DIRECTIONAL_MINIMUM_STATE_SESSIONS = 60
+REGIME_DIRECTIONAL_RETURN_THRESHOLD_PCT = 1.0
+REGIME_DIRECTIONAL_POSITIVE_RATE_THRESHOLD_PCT = 60.0
+REGIME_DIRECTIONAL_EXCESS_THRESHOLD_PCT = 0.5
+REGIME_RECOVERY_INCREMENTAL_RETURN_PCT = 0.5
+REGIME_RECOVERY_INCREMENTAL_POSITIVE_RATE_PCT = 5.0
+REGIME_RECOVERY_DRAWDOWN_TOLERANCE_PCT = 2.0
+REGIME_VALIDATION_EVENTS = (
+    {
+        "key": "india_nbfc_stress_2018",
+        "label": "India NBFC liquidity stress",
+        "start": date(2018, 9, 4),
+        "end": date(2018, 10, 31),
+    },
+    {
+        "key": "covid_shock_2020",
+        "label": "COVID-19 market shock",
+        "start": date(2020, 2, 20),
+        "end": date(2020, 5, 29),
+    },
+    {
+        "key": "global_inflation_ukraine_2022",
+        "label": "Global inflation and Ukraine shock",
+        "start": date(2022, 2, 24),
+        "end": date(2022, 6, 17),
+    },
+    {
+        "key": "india_election_result_2024",
+        "label": "India general-election result shock",
+        "start": date(2024, 6, 3),
+        "end": date(2024, 6, 10),
+    },
+)
 REGIME_LABEL_THRESHOLDS = {
     "positive_market": 0.55,
     "cautiously_positive": 0.20,
@@ -191,10 +228,12 @@ _MONTHLY_EQUITY_RETURNS_CACHE: dict[str, object] = {}
 _MONTHLY_LEADERS_CACHE: dict[str, object] = {}
 _HISTORICAL_MONTH_LEADERS_CACHE: dict[str, object] = {}
 _REGIME_VALIDATION_CACHE: dict[str, object] = {}
+_CROSS_INDEX_VALIDATION_CACHE: dict[str, object] = {}
 _SESSION_LOCK = threading.Lock()
 _BREADTH_BUILD_LOCK = threading.Lock()
 _HISTORICAL_MONTH_LEADERS_LOCK = threading.Lock()
 _REGIME_VALIDATION_LOCK = threading.Lock()
+_CROSS_INDEX_VALIDATION_LOCK = threading.Lock()
 _EOD_STORE: EODStore | None = None
 
 
@@ -227,11 +266,51 @@ def load_index_constituent_snapshot() -> dict[str, object]:
         )
         if clean_symbols:
             normalized[str(index_name)] = clean_symbols
+    normalized_history: dict[str, list[dict[str, object]]] = {}
+    raw_history = payload.get("history") if isinstance(payload, dict) else None
+    if isinstance(raw_history, dict):
+        for index_name, snapshots in raw_history.items():
+            if index_name not in SEASONALITY_INDICES or not isinstance(snapshots, list):
+                continue
+            clean_snapshots: list[dict[str, object]] = []
+            for snapshot in snapshots:
+                if not isinstance(snapshot, dict) or not isinstance(snapshot.get("symbols"), list):
+                    continue
+                try:
+                    effective_from = date.fromisoformat(str(snapshot.get("effective_from")))
+                    effective_to = (
+                        date.fromisoformat(str(snapshot.get("effective_to")))
+                        if snapshot.get("effective_to") else None
+                    )
+                except ValueError:
+                    continue
+                if effective_to is not None and effective_to < effective_from:
+                    continue
+                symbols = sorted(
+                    {
+                        str(symbol).strip()
+                        for symbol in snapshot["symbols"]
+                        if isinstance(symbol, str) and str(symbol).strip()
+                    }
+                )
+                if symbols:
+                    clean_snapshots.append(
+                        {
+                            "effective_from": effective_from,
+                            "effective_to": effective_to,
+                            "symbols": symbols,
+                        }
+                    )
+            if clean_snapshots:
+                normalized_history[str(index_name)] = sorted(
+                    clean_snapshots, key=lambda item: item["effective_from"]
+                )
     return {
         "as_of": payload.get("as_of"),
         "source": payload.get("source"),
         "membership_type": payload.get("membership_type"),
         "indices": normalized,
+        "history": normalized_history,
     }
 
 
@@ -2063,6 +2142,281 @@ def calculate_candidate_regime(evidence: dict[str, object]) -> dict[str, object]
     }
 
 
+def build_regime_external_cluster_readiness(
+    *,
+    institutional_flow_rows: list[dict[str, object]] | None = None,
+    confirmed_fpi_rows: list[dict[str, object]] | None = None,
+    macro_snapshot_rows: list[dict[str, object]] | None = None,
+    global_risk_rows: list[dict[str, object]] | None = None,
+    futures_snapshot_rows: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    """Audit dated external evidence before it can enter walk-forward scoring."""
+
+    def complete_dates(
+        rows: list[dict[str, object]],
+        *,
+        group_key: str,
+        required_values: set[str],
+    ) -> list[date]:
+        found: defaultdict[date, set[str]] = defaultdict(set)
+        for row in rows:
+            row_date = row.get("date")
+            value = row.get(group_key)
+            if isinstance(row_date, date) and isinstance(value, str):
+                found[row_date].add(value)
+        return sorted(row_date for row_date, values in found.items() if required_values <= values)
+
+    provisional_dates = complete_dates(
+        institutional_flow_rows or [],
+        group_key="category",
+        required_values={"FII/FPI", "DII"},
+    )
+    confirmed_dates = complete_dates(
+        confirmed_fpi_rows or [],
+        group_key="investment_route",
+        required_values={"Stock Exchange", "Primary market & others", "Sub-total"},
+    )
+    macro_dates = complete_dates(
+        macro_snapshot_rows or [],
+        group_key="metric_key",
+        required_values={
+            "usd_inr",
+            "gbp_inr",
+            "eur_inr",
+            "jpy_100_inr",
+            "india_10y_gsec_yield",
+        },
+    )
+    global_dates = complete_dates(
+        global_risk_rows or [],
+        group_key="metric_key",
+        required_values=set(value[0] for value in FRED_GLOBAL_SERIES.values()),
+    )
+    futures_by_date: defaultdict[date, set[str]] = defaultdict(set)
+    for row in futures_snapshot_rows or []:
+        row_date = row.get("date")
+        underlying = row.get("underlying")
+        if isinstance(row_date, date) and isinstance(underlying, str):
+            futures_by_date[row_date].add(underlying)
+    futures_dates = sorted(
+        row_date
+        for row_date, underlyings in futures_by_date.items()
+        if len(underlyings) >= math.ceil(FNO_UNIVERSE_EXPECTED * 0.80)
+    )
+
+    def readiness_row(
+        key: str,
+        label: str,
+        cluster: str,
+        weight_pct: float | None,
+        dates: list[date],
+        source: str,
+    ) -> dict[str, object]:
+        stored_sessions = len(dates)
+        history_ready = stored_sessions >= REGIME_EXTERNAL_HISTORY_SESSIONS
+        walk_forward_ready = stored_sessions >= REGIME_EXTERNAL_WALK_FORWARD_SESSIONS
+        return {
+            "key": key,
+            "label": label,
+            "cluster": cluster,
+            "candidate_weight_pct": weight_pct,
+            "stored_sessions": stored_sessions,
+            "first_session": dates[0].isoformat() if dates else None,
+            "last_session": dates[-1].isoformat() if dates else None,
+            "history_sessions_required": REGIME_EXTERNAL_HISTORY_SESSIONS,
+            "walk_forward_sessions_required": REGIME_EXTERNAL_WALK_FORWARD_SESSIONS,
+            "sessions_until_history_ready": max(
+                0, REGIME_EXTERNAL_HISTORY_SESSIONS - stored_sessions
+            ),
+            "sessions_until_walk_forward_ready": max(
+                0, REGIME_EXTERNAL_WALK_FORWARD_SESSIONS - stored_sessions
+            ),
+            "history_ready": history_ready,
+            "walk_forward_ready": walk_forward_ready,
+            "scoring_ready": False,
+            "source": source,
+            "status": (
+                "threshold_validation_pending"
+                if walk_forward_ready else "accumulating_history"
+            ),
+        }
+
+    rows = [
+        readiness_row(
+            "nse_provisional_institutional_flows",
+            "NSE provisional FII/FPI and DII cash flows",
+            "Institutional flows",
+            15.0,
+            provisional_dates,
+            NSE_FII_DII_SOURCE,
+        ),
+        readiness_row(
+            "nsdl_confirmed_fpi",
+            "NSDL confirmed FPI equity investment",
+            "Institutional-flow cross-check",
+            None,
+            confirmed_dates,
+            NSDL_FPI_SOURCE,
+        ),
+        readiness_row(
+            "rbi_currency_and_rates",
+            "RBI/FBIL currency and sovereign rates",
+            "Currency and rates",
+            10.0,
+            macro_dates,
+            RBI_MACRO_SOURCE,
+        ),
+        readiness_row(
+            "fred_global_risk",
+            "Permitted FRED global-risk series",
+            "Global risk",
+            15.0,
+            global_dates,
+            FRED_GLOBAL_SOURCE,
+        ),
+        readiness_row(
+            "kite_futures_oi",
+            "Kite F&O price and open-interest snapshots",
+            "F&O confirmation layer",
+            None,
+            futures_dates,
+            KITE_FUTURES_SOURCE,
+        ),
+    ]
+    return {
+        "minimum_history_sessions": REGIME_EXTERNAL_HISTORY_SESSIONS,
+        "minimum_walk_forward_sessions": REGIME_EXTERNAL_WALK_FORWARD_SESSIONS,
+        "rows": rows,
+        "candidate_weight_ready_pct": sum(
+            float(row["candidate_weight_pct"] or 0)
+            for row in rows
+            if row["scoring_ready"]
+        ),
+        "note": (
+            "Coverage readiness does not activate scoring. Every external cluster "
+            "still requires frozen directional thresholds and out-of-sample review."
+        ),
+    }
+
+
+def apply_recovering_market_state(
+    observations: list[dict[str, object]],
+    *,
+    minimum_risk_sessions: int = REGIME_RECOVERY_MINIMUM_RISK_SESSIONS,
+    maximum_recovery_sessions: int = REGIME_RECOVERY_MAXIMUM_SESSIONS,
+) -> dict[str, object]:
+    """Apply an outcome-blind transition state after sustained risk episodes."""
+    if minimum_risk_sessions <= 0 or maximum_recovery_sessions <= 0:
+        raise ValueError("invalid_recovery_state_contract")
+    risk_labels = {"weak_market", "high_risk_market"}
+    recovery_entry_labels = {"uncertain_market", "cautiously_positive"}
+    risk_run = 0
+    risk_run_start: date | None = None
+    last_risk_label: str | None = None
+    active_episode: dict[str, object] | None = None
+    episodes: list[dict[str, object]] = []
+
+    def close_episode(exit_reason: str, exit_date: date | None) -> None:
+        nonlocal active_episode
+        if active_episode is None:
+            return
+        active_episode["exit_reason"] = exit_reason
+        active_episode["exit_date"] = exit_date.isoformat() if exit_date else None
+        episodes.append(active_episode)
+        active_episode = None
+
+    for position, observation in enumerate(observations):
+        label = observation.get("confirmed_label_key")
+        session_date = observation.get("date")
+        if not isinstance(label, str) or not isinstance(session_date, date):
+            observation["transition_label_key"] = None
+            continue
+
+        if active_episode is not None:
+            if label in risk_labels:
+                close_episode("relapsed_to_risk", session_date)
+                observation["transition_label_key"] = label
+                risk_run = 1
+                risk_run_start = session_date
+                last_risk_label = label
+                continue
+            if label == "positive_market":
+                close_episode("positive_market_confirmed", session_date)
+                observation["transition_label_key"] = label
+                risk_run = 0
+                risk_run_start = None
+                last_risk_label = None
+                continue
+            if int(active_episode["recovery_sessions"]) < maximum_recovery_sessions:
+                active_episode["recovery_sessions"] = int(active_episode["recovery_sessions"]) + 1
+                observation["transition_label_key"] = "recovering_market"
+                continue
+            previous_date = observations[position - 1].get("date") if position else None
+            close_episode(
+                "maximum_window_reached",
+                previous_date if isinstance(previous_date, date) else session_date,
+            )
+            observation["transition_label_key"] = label
+            risk_run = 0
+            risk_run_start = None
+            last_risk_label = None
+            continue
+
+        if label in risk_labels:
+            if risk_run == 0:
+                risk_run_start = session_date
+            risk_run += 1
+            last_risk_label = label
+            observation["transition_label_key"] = label
+            continue
+
+        if risk_run >= minimum_risk_sessions and label in recovery_entry_labels:
+            active_episode = {
+                "entry_date": session_date.isoformat(),
+                "entry_base_regime": label,
+                "prior_risk_regime": last_risk_label,
+                "prior_risk_start": risk_run_start.isoformat() if risk_run_start else None,
+                "prior_risk_sessions": risk_run,
+                "recovery_sessions": 1,
+                "exit_date": None,
+                "exit_reason": "still_open",
+            }
+            observation["transition_label_key"] = "recovering_market"
+        else:
+            observation["transition_label_key"] = label
+        risk_run = 0
+        risk_run_start = None
+        last_risk_label = None
+
+    if active_episode is not None:
+        close_episode("still_open", None)
+
+    exit_counts = {
+        reason: sum(episode["exit_reason"] == reason for episode in episodes)
+        for reason in (
+            "positive_market_confirmed",
+            "relapsed_to_risk",
+            "maximum_window_reached",
+            "still_open",
+        )
+    }
+    return {
+        "status": "validation_only_outcome_blind_rule",
+        "minimum_prior_risk_sessions": minimum_risk_sessions,
+        "maximum_recovery_sessions": maximum_recovery_sessions,
+        "entry_base_regimes": sorted(recovery_entry_labels),
+        "positive_market_exits_immediately": True,
+        "episodes": episodes,
+        "episode_count": len(episodes),
+        "exit_counts": exit_counts,
+        "method": (
+            "After at least five consecutive confirmed weak/high-risk sessions, "
+            "an improvement to uncertain or cautiously positive is labelled Recovering "
+            "market for at most 20 sessions. Positive confirmation or renewed risk ends it."
+        ),
+    }
+
+
 def build_regime_validation_universe(
     instruments: list[dict[str, object]],
     *,
@@ -2147,7 +2501,14 @@ def calculate_regime_walk_forward_validation(
     benchmark_candles: list[dict[str, object]] | None = None,
     benchmark_index: str | None = None,
     constituent_symbols: list[str] | None = None,
+    constituent_membership_history: list[dict[str, object]] | None = None,
     constituent_snapshot_as_of: str | None = None,
+    institutional_flow_rows: list[dict[str, object]] | None = None,
+    confirmed_fpi_rows: list[dict[str, object]] | None = None,
+    macro_snapshot_rows: list[dict[str, object]] | None = None,
+    global_risk_rows: list[dict[str, object]] | None = None,
+    futures_snapshot_rows: list[dict[str, object]] | None = None,
+    event_windows: tuple[dict[str, object], ...] = REGIME_VALIDATION_EVENTS,
     horizons: tuple[int, ...] = REGIME_VALIDATION_DEFAULT_HORIZONS,
 ) -> dict[str, object]:
     """Evaluate the frozen candidate using only evidence known at each historical EOD."""
@@ -2197,19 +2558,45 @@ def calculate_regime_walk_forward_validation(
         )
 
     official_constituents = sorted(set(constituent_symbols or []))
+    membership_history: list[dict[str, object]] = []
+    for snapshot in constituent_membership_history or []:
+        effective_from = snapshot.get("effective_from")
+        effective_to = snapshot.get("effective_to")
+        symbols = snapshot.get("symbols")
+        if (
+            isinstance(effective_from, date)
+            and (effective_to is None or isinstance(effective_to, date))
+            and isinstance(symbols, list)
+        ):
+            membership_history.append(
+                {
+                    "effective_from": effective_from,
+                    "effective_to": effective_to,
+                    "symbols": sorted({str(symbol) for symbol in symbols if str(symbol)}),
+                }
+            )
+    membership_history.sort(key=lambda item: item["effective_from"])
+    historical_constituents = sorted(
+        {
+            symbol
+            for snapshot in membership_history
+            for symbol in snapshot["symbols"]
+        }
+    )
+    selected_constituents = historical_constituents or official_constituents
     selected_stock_histories = (
         {
             symbol: stock_histories[symbol]
-            for symbol in official_constituents
+            for symbol in selected_constituents
             if symbol in stock_histories
         }
-        if official_constituents else stock_histories
+        if selected_constituents else stock_histories
     )
     if len(selected_stock_histories) < 5:
         raise ValueError("regime_validation_constituent_coverage_unavailable")
 
-    metrics_by_date: defaultdict[date, list[tuple[bool, bool, bool, int, bool, bool]]] = defaultdict(list)
-    for history in selected_stock_histories.values():
+    metrics_by_date: defaultdict[date, list[tuple[str, bool, bool, bool, int, bool, bool]]] = defaultdict(list)
+    for symbol, history in selected_stock_histories.items():
         ordered = sorted(history, key=lambda item: item["date"])
         if len(ordered) < 252:
             continue
@@ -2236,6 +2623,7 @@ def calculate_regime_walk_forward_validation(
             advance_state = 1 if close > closes[position - 1] else -1 if close < closes[position - 1] else 0
             metrics_by_date[ordered[position]["date"]].append(
                 (
+                    symbol,
                     close > window_average(prefix, position, 20),
                     close > window_average(prefix, position, 50),
                     close > window_average(prefix, position, 200),
@@ -2250,11 +2638,37 @@ def calculate_regime_walk_forward_validation(
         raise ValueError("regime_validation_stock_history_unavailable")
 
     observations: list[dict[str, object]] = []
+    state_observations: list[dict[str, object]] = []
     skipped_for_coverage = 0
-    for position in range(251, len(index_closes) - maximum_horizon):
+
+    def membership_for_date(session_date: date) -> set[str] | None:
+        for snapshot in reversed(membership_history):
+            if snapshot["effective_from"] <= session_date and (
+                snapshot["effective_to"] is None
+                or session_date <= snapshot["effective_to"]
+            ):
+                return set(snapshot["symbols"])
+        return set(official_constituents) if not membership_history and official_constituents else None
+
+    for position in range(251, len(index_closes)):
         session_date = index_dates[position]
-        stock_metrics = metrics_by_date.get(session_date, [])
-        coverage_pct = 100 * len(stock_metrics) / universe_total
+        session_membership = membership_for_date(session_date)
+        if membership_history and session_membership is None:
+            skipped_for_coverage += 1
+            continue
+        stock_metrics = [
+            item
+            for item in metrics_by_date.get(session_date, [])
+            if session_membership is None or item[0] in session_membership
+        ]
+        session_universe_total = (
+            len(session_membership.intersection(stock_histories))
+            if session_membership is not None else universe_total
+        )
+        if session_universe_total < 5:
+            skipped_for_coverage += 1
+            continue
+        coverage_pct = 100 * len(stock_metrics) / session_universe_total
         if coverage_pct < REGIME_MINIMUM_STOCK_COVERAGE_PCT:
             skipped_for_coverage += 1
             continue
@@ -2274,10 +2688,10 @@ def calculate_regime_walk_forward_validation(
             trend_band = "mixed"
 
         evaluated = len(stock_metrics)
-        above50 = 100 * sum(item[1] for item in stock_metrics) / evaluated
-        above200 = 100 * sum(item[2] for item in stock_metrics) / evaluated
-        advances = sum(item[3] > 0 for item in stock_metrics)
-        declines = sum(item[3] < 0 for item in stock_metrics)
+        above50 = 100 * sum(item[2] for item in stock_metrics) / evaluated
+        above200 = 100 * sum(item[3] for item in stock_metrics) / evaluated
+        advances = sum(item[4] > 0 for item in stock_metrics)
+        declines = sum(item[4] < 0 for item in stock_metrics)
         if above50 >= 55 and above200 >= 55 and advances > declines:
             breadth_band = "constructive"
         elif (above50 < 40 and above200 < 40) or (declines and advances / declines < 0.67):
@@ -2285,8 +2699,8 @@ def calculate_regime_walk_forward_validation(
         else:
             breadth_band = "mixed"
 
-        near_high_pct = 100 * sum(item[4] for item in stock_metrics) / evaluated
-        near_low_pct = 100 * sum(item[5] for item in stock_metrics) / evaluated
+        near_high_pct = 100 * sum(item[5] for item in stock_metrics) / evaluated
+        near_low_pct = 100 * sum(item[6] for item in stock_metrics) / evaluated
         net_strength = near_high_pct - near_low_pct
         price_strength_band = (
             "constructive" if net_strength >= 10 else "defensive" if net_strength <= -10 else "mixed"
@@ -2333,6 +2747,27 @@ def calculate_regime_walk_forward_validation(
         if not candidate["classification_eligible"]:
             continue
 
+        state_observation: dict[str, object] = {
+            "date": session_date,
+            "raw_label_key": candidate["label_key"],
+            "score": float(candidate["score"]),
+            "coverage_pct": coverage_pct,
+            "baseline_key": "above_200dma" if close > sma200 else "below_200dma",
+            "close": close,
+            "trend_band": trend_band,
+            "breadth_band": breadth_band,
+            "price_strength_band": price_strength_band,
+            "volatility_band": volatility_band,
+            "india_vix_band": vix_band,
+            "above_50dma_pct": round(above50, 1),
+            "above_200dma_pct": round(above200, 1),
+            "net_strength_pct": round(net_strength, 1),
+            "realised_volatility_percentile": round(volatility_percentile, 1),
+        }
+        state_observations.append(state_observation)
+        if position + maximum_horizon >= len(index_closes):
+            continue
+
         forward_returns: dict[str, float] = {}
         forward_drawdowns: dict[str, float] = {}
         forward_excess_returns: dict[str, float | None] = {}
@@ -2367,19 +2802,15 @@ def calculate_regime_walk_forward_validation(
             else:
                 forward_excess_returns[str(horizon)] = None
                 forward_relative_drawdowns[str(horizon)] = None
-        observations.append(
+        state_observation.update(
             {
-                "date": session_date,
-                "raw_label_key": candidate["label_key"],
-                "score": float(candidate["score"]),
-                "coverage_pct": coverage_pct,
-                "baseline_key": "above_200dma" if close > sma200 else "below_200dma",
                 "forward_returns_pct": forward_returns,
                 "forward_drawdowns_pct": forward_drawdowns,
                 "forward_excess_returns_pct": forward_excess_returns,
                 "forward_relative_drawdowns_pct": forward_relative_drawdowns,
             }
         )
+        observations.append(state_observation)
 
     if len(observations) < 2:
         raise ValueError("regime_validation_coverage_unavailable")
@@ -2387,7 +2818,7 @@ def calculate_regime_walk_forward_validation(
     pending_label: str | None = None
     pending_count = 0
     confirmed_label: str | None = None
-    for observation in observations:
+    for observation in state_observations:
         raw_label = str(observation["raw_label_key"])
         if raw_label == pending_label:
             pending_count += 1
@@ -2397,6 +2828,21 @@ def calculate_regime_walk_forward_validation(
         if pending_count >= 2:
             confirmed_label = raw_label
         observation["confirmed_label_key"] = confirmed_label
+
+    current_transition_analysis = apply_recovering_market_state(state_observations)
+    transition_analysis = {
+        key: value
+        for key, value in current_transition_analysis.items()
+        if key not in {"episodes", "episode_count", "exit_counts"}
+    }
+    historical_transition = apply_recovering_market_state(observations)
+    transition_analysis.update(
+        {
+            "episodes": historical_transition["episodes"],
+            "episode_count": historical_transition["episode_count"],
+            "exit_counts": historical_transition["exit_counts"],
+        }
+    )
 
     def aggregate(group: list[dict[str, object]]) -> dict[str, object]:
         summary: dict[str, object] = {
@@ -2491,6 +2937,270 @@ def calculate_regime_walk_forward_validation(
         for key in ("above_200dma", "below_200dma")
         if baseline_grouped[key]
     ]
+    confirmed_observations = [
+        item
+        for item in observations
+        if isinstance(item.get("confirmed_label_key"), str)
+    ]
+    overall = aggregate(confirmed_observations)
+    transition_grouped: defaultdict[str, list[dict[str, object]]] = defaultdict(list)
+    for observation in observations:
+        transition_label = observation.get("transition_label_key")
+        if isinstance(transition_label, str):
+            transition_grouped[transition_label].append(observation)
+    transition_order = [
+        "positive_market",
+        "cautiously_positive",
+        "recovering_market",
+        "uncertain_market",
+        "weak_market",
+        "high_risk_market",
+    ]
+    transition_label_names = {
+        **label_names,
+        "recovering_market": "Recovering market",
+    }
+    transition_analysis["by_state"] = [
+        {
+            "label_key": key,
+            "label": transition_label_names[key],
+            **aggregate(transition_grouped[key]),
+        }
+        for key in transition_order
+        if transition_grouped[key]
+    ]
+    directional_evidence: list[dict[str, object]] = []
+    for state in transition_analysis["by_state"]:
+        metrics = state["horizons"]["20"]
+        sessions = int(state["sessions"])
+        median_return = float(metrics["median_return_pct"])
+        positive_rate = float(metrics["positive_rate_pct"])
+        median_excess = metrics.get("median_excess_return_pct")
+        outperformance_rate = metrics.get("outperformance_rate_pct")
+        sample_ready = sessions >= REGIME_DIRECTIONAL_MINIMUM_STATE_SESSIONS
+        relative_long_ready = (
+            not use_benchmark
+            or (
+                median_excess is not None
+                and float(median_excess) >= REGIME_DIRECTIONAL_EXCESS_THRESHOLD_PCT
+                and outperformance_rate is not None
+                and float(outperformance_rate) >= 55.0
+            )
+        )
+        relative_short_ready = (
+            not use_benchmark
+            or (
+                median_excess is not None
+                and float(median_excess) <= -REGIME_DIRECTIONAL_EXCESS_THRESHOLD_PCT
+                and outperformance_rate is not None
+                and float(outperformance_rate) <= 45.0
+            )
+        )
+        long_state_eligible = state["label_key"] in {
+            "positive_market",
+            "cautiously_positive",
+            "recovering_market",
+        }
+        short_state_eligible = state["label_key"] in {
+            "weak_market",
+            "high_risk_market",
+        }
+        if (
+            sample_ready
+            and median_return >= REGIME_DIRECTIONAL_RETURN_THRESHOLD_PCT
+            and positive_rate >= REGIME_DIRECTIONAL_POSITIVE_RATE_THRESHOLD_PCT
+            and relative_long_ready
+        ):
+            if long_state_eligible:
+                research_bias = "long_research_candidate"
+            elif short_state_eligible:
+                research_bias = "countertrend_rebound_study"
+            else:
+                research_bias = "tactical_rebound_study"
+        elif (
+            sample_ready
+            and median_return <= -REGIME_DIRECTIONAL_RETURN_THRESHOLD_PCT
+            and positive_rate <= 100 - REGIME_DIRECTIONAL_POSITIVE_RATE_THRESHOLD_PCT
+            and relative_short_ready
+        ):
+            research_bias = (
+                "short_research_candidate"
+                if short_state_eligible else "reversal_short_study"
+            )
+        elif not sample_ready:
+            research_bias = "insufficient_sample"
+        else:
+            research_bias = "no_consistent_edge"
+        directional_evidence.append(
+            {
+                "label_key": state["label_key"],
+                "label": state["label"],
+                "sessions": sessions,
+                "sample_ready": sample_ready,
+                "research_bias": research_bias,
+                "median_return_pct": metrics["median_return_pct"],
+                "positive_rate_pct": metrics["positive_rate_pct"],
+                "median_excess_return_pct": median_excess,
+                "outperformance_rate_pct": outperformance_rate,
+                "worst_return_pct": metrics["worst_return_pct"],
+                "worst_max_drawdown_pct": metrics["worst_max_drawdown_pct"],
+            }
+        )
+    transition_analysis["directional_state_evidence"] = directional_evidence
+    transition_analysis["directional_contract"] = {
+        "minimum_state_sessions": REGIME_DIRECTIONAL_MINIMUM_STATE_SESSIONS,
+        "absolute_median_return_threshold_pct": REGIME_DIRECTIONAL_RETURN_THRESHOLD_PCT,
+        "positive_rate_long_threshold_pct": REGIME_DIRECTIONAL_POSITIVE_RATE_THRESHOLD_PCT,
+        "positive_rate_short_threshold_pct": 100
+        - REGIME_DIRECTIONAL_POSITIVE_RATE_THRESHOLD_PCT,
+        "relative_median_excess_threshold_pct": REGIME_DIRECTIONAL_EXCESS_THRESHOLD_PCT,
+        "relative_outperformance_long_threshold_pct": 55.0,
+        "relative_outperformance_short_threshold_pct": 45.0,
+        "status": "historical_research_only",
+    }
+
+    recovery_group = transition_grouped.get("recovering_market", [])
+    base_comparison_group = (
+        transition_grouped.get("uncertain_market", [])
+        + transition_grouped.get("cautiously_positive", [])
+    )
+    recovery_incremental: dict[str, object] = {
+        "status": "insufficient_sample",
+        "recovery_sessions": len(recovery_group),
+        "comparable_base_sessions": len(base_comparison_group),
+        "minimum_recovery_episodes": 5,
+        "minimum_state_sessions": REGIME_DIRECTIONAL_MINIMUM_STATE_SESSIONS,
+    }
+    if recovery_group and base_comparison_group:
+        recovery_summary = aggregate(recovery_group)
+        base_summary = aggregate(base_comparison_group)
+        recovery_metrics = recovery_summary["horizons"]["20"]
+        base_metrics = base_summary["horizons"]["20"]
+        delta_return = round(
+            float(recovery_metrics["median_return_pct"])
+            - float(base_metrics["median_return_pct"]),
+            2,
+        )
+        delta_positive = round(
+            float(recovery_metrics["positive_rate_pct"])
+            - float(base_metrics["positive_rate_pct"]),
+            1,
+        )
+        delta_drawdown = round(
+            float(recovery_metrics["worst_max_drawdown_pct"])
+            - float(base_metrics["worst_max_drawdown_pct"]),
+            2,
+        )
+        recovery_excess = recovery_metrics.get("median_excess_return_pct")
+        base_excess = base_metrics.get("median_excess_return_pct")
+        delta_excess = (
+            round(float(recovery_excess) - float(base_excess), 2)
+            if recovery_excess is not None and base_excess is not None else None
+        )
+        sample_ready = (
+            len(recovery_group) >= REGIME_DIRECTIONAL_MINIMUM_STATE_SESSIONS
+            and len(base_comparison_group) >= REGIME_DIRECTIONAL_MINIMUM_STATE_SESSIONS
+            and int(transition_analysis["episode_count"]) >= 5
+        )
+        positive_relative_gate = not use_benchmark or (
+            delta_excess is not None and delta_excess >= 0
+        )
+        negative_relative_gate = not use_benchmark or (
+            delta_excess is not None and delta_excess <= 0
+        )
+        if not sample_ready:
+            status = "insufficient_sample"
+        elif (
+            delta_return >= REGIME_RECOVERY_INCREMENTAL_RETURN_PCT
+            and delta_positive >= REGIME_RECOVERY_INCREMENTAL_POSITIVE_RATE_PCT
+            and delta_drawdown >= -REGIME_RECOVERY_DRAWDOWN_TOLERANCE_PCT
+            and positive_relative_gate
+        ):
+            status = "recovery_long_thesis_supported"
+        elif (
+            delta_return <= -REGIME_RECOVERY_INCREMENTAL_RETURN_PCT
+            and delta_positive <= -REGIME_RECOVERY_INCREMENTAL_POSITIVE_RATE_PCT
+            and negative_relative_gate
+        ):
+            status = "recovery_long_thesis_contradicted"
+        else:
+            status = "mixed_incremental_evidence"
+        recovery_incremental.update(
+            {
+                "status": status,
+                "sample_ready": sample_ready,
+                "recovery_20d": recovery_metrics,
+                "comparable_base_20d": base_metrics,
+                "delta_median_return_pct": delta_return,
+                "delta_positive_rate_pct": delta_positive,
+                "delta_worst_drawdown_pct": delta_drawdown,
+                "delta_median_excess_return_pct": delta_excess,
+            }
+        )
+    transition_analysis["recovery_incremental_evidence"] = recovery_incremental
+    observations_by_date = {
+        item["date"].isoformat(): item
+        for item in observations
+        if isinstance(item.get("date"), date)
+    }
+    for episode in transition_analysis["episodes"]:
+        entry_observation = observations_by_date.get(str(episode["entry_date"]))
+        if not isinstance(entry_observation, dict):
+            continue
+        episode["entry_score"] = round(float(entry_observation["score"]), 1)
+        episode["forward_outcomes"] = {
+            key: {
+                "return_pct": entry_observation["forward_returns_pct"].get(key),
+                "maximum_drawdown_pct": entry_observation["forward_drawdowns_pct"].get(key),
+                "excess_return_pct": entry_observation["forward_excess_returns_pct"].get(key),
+            }
+            for key in ("5", "20", "60")
+            if key in entry_observation["forward_returns_pct"]
+        }
+
+    latest_state = state_observations[-1]
+    latest_state_date = latest_state["date"]
+    latest_state_position = index_dates.index(latest_state_date)
+    current_session_lag = len(index_dates) - 1 - latest_state_position
+    current_base_key = latest_state.get("confirmed_label_key")
+    current_transition_key = latest_state.get("transition_label_key")
+    current_state = {
+        "as_of_date": latest_state_date.isoformat(),
+        "latest_index_session": index_dates[-1].isoformat(),
+        "session_lag": current_session_lag,
+        "fresh": current_session_lag == 0,
+        "classification_ready": (
+            current_session_lag == 0
+            and isinstance(current_base_key, str)
+            and isinstance(current_transition_key, str)
+        ),
+        "base_label_key": current_base_key,
+        "base_label": (
+            transition_label_names.get(str(current_base_key))
+            if isinstance(current_base_key, str) else None
+        ),
+        "transition_label_key": current_transition_key,
+        "transition_label": (
+            transition_label_names.get(str(current_transition_key))
+            if isinstance(current_transition_key, str) else None
+        ),
+        "score": round(float(latest_state["score"]), 1),
+        "stock_coverage_pct": round(float(latest_state["coverage_pct"]), 1),
+        "close": round(float(latest_state["close"]), 2),
+        "evidence": {
+            "trend_band": latest_state["trend_band"],
+            "breadth_band": latest_state["breadth_band"],
+            "price_strength_band": latest_state["price_strength_band"],
+            "volatility_band": latest_state["volatility_band"],
+            "india_vix_band": latest_state["india_vix_band"],
+            "above_50dma_pct": latest_state["above_50dma_pct"],
+            "above_200dma_pct": latest_state["above_200dma_pct"],
+            "net_strength_pct": latest_state["net_strength_pct"],
+            "realised_volatility_percentile": latest_state[
+                "realised_volatility_percentile"
+            ],
+        },
+    }
 
     confirmed_sequence = [
         str(item["confirmed_label_key"])
@@ -2533,6 +3243,202 @@ def calculate_regime_walk_forward_validation(
         if (values := durations.get(key))
     ]
 
+    event_results: list[dict[str, object]] = []
+    risk_labels = {"weak_market", "high_risk_market"}
+    close_by_date = dict(zip(index_dates, index_closes))
+    named_event_ranges = [
+        (event.get("start"), event.get("end"))
+        for event in event_windows
+        if isinstance(event.get("start"), date)
+        and isinstance(event.get("end"), date)
+        and event["end"] >= event["start"]
+    ]
+
+    def overlaps_named_event(group: list[dict[str, object]]) -> bool:
+        return any(
+            event_start <= item["date"] <= event_end
+            for item in group
+            for event_start, event_end in named_event_ranges
+        )
+
+    def normal_control_distribution(session_count: int) -> list[dict[str, float]]:
+        if session_count < 2:
+            return []
+        controls: list[dict[str, float]] = []
+        for start in range(0, len(confirmed_observations) - session_count + 1, session_count):
+            group = confirmed_observations[start : start + session_count]
+            if overlaps_named_event(group):
+                continue
+            closes = [close_by_date[item["date"]] for item in group]
+            control_return = (closes[-1] / closes[0] - 1) * 100
+            peak = closes[0]
+            control_drawdown = 0.0
+            for close in closes[1:]:
+                peak = max(peak, close)
+                control_drawdown = min(control_drawdown, (close / peak - 1) * 100)
+            labels = [str(item["confirmed_label_key"]) for item in group]
+            transition_labels = [str(item.get("transition_label_key")) for item in group]
+            controls.append(
+                {
+                    "return_pct": control_return,
+                    "maximum_drawdown_pct": control_drawdown,
+                    "weak_or_high_risk_sessions_pct": (
+                        100 * sum(label in risk_labels for label in labels) / len(labels)
+                    ),
+                    "recovering_sessions_pct": (
+                        100
+                        * sum(label == "recovering_market" for label in transition_labels)
+                        / len(transition_labels)
+                    ),
+                }
+            )
+        return controls
+
+    def empirical_percentile(value: float, controls: list[float]) -> float | None:
+        if not controls:
+            return None
+        lower = sum(item < value for item in controls)
+        equal = sum(math.isclose(item, value, abs_tol=1e-9) for item in controls)
+        return round(100 * (lower + 0.5 * equal) / len(controls), 1)
+
+    for event in event_windows:
+        event_start = event.get("start")
+        event_end = event.get("end")
+        if not isinstance(event_start, date) or not isinstance(event_end, date) or event_end < event_start:
+            continue
+        event_path = [
+            (session_date, close)
+            for session_date, close in zip(index_dates, index_closes)
+            if event_start <= session_date <= event_end
+        ]
+        event_observations = [
+            item
+            for item in observations
+            if event_start <= item["date"] <= event_end
+            and isinstance(item.get("confirmed_label_key"), str)
+        ]
+        if len(event_path) < 2 or not event_observations:
+            continue
+        event_return = (event_path[-1][1] / event_path[0][1] - 1) * 100
+        peak = event_path[0][1]
+        event_drawdown = 0.0
+        for _, close in event_path[1:]:
+            peak = max(peak, close)
+            event_drawdown = min(event_drawdown, (close / peak - 1) * 100)
+        event_labels = [str(item["confirmed_label_key"]) for item in event_observations]
+        regime_counts = {
+            key: event_labels.count(key)
+            for key in ordered_labels
+            if key in event_labels
+        }
+        dominant_key = max(regime_counts, key=regime_counts.get)
+        risk_positions = [
+            index
+            for index, label in enumerate(event_labels)
+            if label in risk_labels
+        ]
+        benchmark_return: float | None = None
+        excess_return: float | None = None
+        relative_drawdown: float | None = None
+        benchmark_path = [benchmark_by_date.get(session_date) for session_date, _ in event_path]
+        if use_benchmark and all(value is not None for value in benchmark_path):
+            aligned_benchmark = [float(value) for value in benchmark_path if value is not None]
+            benchmark_return = (aligned_benchmark[-1] / aligned_benchmark[0] - 1) * 100
+            excess_return = event_return - benchmark_return
+            relative_path = [
+                (target_close / event_path[0][1]) / (benchmark_close / aligned_benchmark[0])
+                for (_, target_close), benchmark_close in zip(event_path, aligned_benchmark)
+            ]
+            relative_peak = relative_path[0]
+            relative_drawdown = 0.0
+            for relative_value in relative_path[1:]:
+                relative_peak = max(relative_peak, relative_value)
+                relative_drawdown = min(
+                    relative_drawdown,
+                    (relative_value / relative_peak - 1) * 100,
+                )
+        event_stress_share = (
+            100 * sum(label in risk_labels for label in event_labels) / len(event_labels)
+        )
+        event_recovery_share = (
+            100
+            * sum(
+                item.get("transition_label_key") == "recovering_market"
+                for item in event_observations
+            )
+            / len(event_observations)
+        )
+        normal_controls = normal_control_distribution(len(event_observations))
+        control_returns = [item["return_pct"] for item in normal_controls]
+        control_drawdowns = [item["maximum_drawdown_pct"] for item in normal_controls]
+        control_stress_shares = [
+            item["weak_or_high_risk_sessions_pct"] for item in normal_controls
+        ]
+        control_recovery_shares = [
+            item["recovering_sessions_pct"] for item in normal_controls
+        ]
+        event_results.append(
+            {
+                "key": str(event.get("key") or "event"),
+                "label": str(event.get("label") or "Event review"),
+                "window_start": event_path[0][0].isoformat(),
+                "window_end": event_path[-1][0].isoformat(),
+                "sessions": len(event_observations),
+                "index_return_pct": round(event_return, 2),
+                "maximum_drawdown_pct": round(event_drawdown, 2),
+                "benchmark_return_pct": round(benchmark_return, 2) if benchmark_return is not None else None,
+                "excess_return_pct": round(excess_return, 2) if excess_return is not None else None,
+                "relative_drawdown_pct": round(relative_drawdown, 2) if relative_drawdown is not None else None,
+                "entry_regime": label_names[event_labels[0]],
+                "exit_regime": label_names[event_labels[-1]],
+                "dominant_regime": label_names[dominant_key],
+                "weak_or_high_risk_sessions_pct": round(event_stress_share, 1),
+                "recovering_sessions_pct": round(event_recovery_share, 1),
+                "first_weak_or_high_risk_date": (
+                    event_observations[risk_positions[0]]["date"].isoformat()
+                    if risk_positions else None
+                ),
+                "sessions_to_first_weak_or_high_risk": risk_positions[0] if risk_positions else None,
+                "minimum_candidate_score": round(
+                    min(float(item["score"]) for item in event_observations), 1
+                ),
+                "regime_session_counts": regime_counts,
+                "normal_period_control": {
+                    "method": "non_overlapping_same_length_windows_excluding_named_events",
+                    "window_count": len(normal_controls),
+                    "median_return_pct": (
+                        round(float(median(control_returns)), 2) if control_returns else None
+                    ),
+                    "median_maximum_drawdown_pct": (
+                        round(float(median(control_drawdowns)), 2) if control_drawdowns else None
+                    ),
+                    "median_weak_or_high_risk_sessions_pct": (
+                        round(float(median(control_stress_shares)), 1)
+                        if control_stress_shares else None
+                    ),
+                    "median_recovering_sessions_pct": (
+                        round(float(median(control_recovery_shares)), 1)
+                        if control_recovery_shares else None
+                    ),
+                    "event_return_percentile_pct": (
+                        empirical_percentile(event_return, control_returns)
+                    ),
+                    "event_drawdown_severity_percentile_pct": (
+                        empirical_percentile(
+                            -event_drawdown,
+                            [-value for value in control_drawdowns],
+                        )
+                    ),
+                    "event_stress_share_percentile_pct": (
+                        empirical_percentile(event_stress_share, control_stress_shares)
+                    ),
+                    "event_recovery_share_percentile_pct": (
+                        empirical_percentile(event_recovery_share, control_recovery_shares)
+                    ),
+                },
+            }
+        )
+
     return {
         "ok": True,
         "target_index": target_index,
@@ -2560,9 +3466,14 @@ def calculate_regime_walk_forward_validation(
         "stock_universe_size": universe_total,
         "breadth_universe": {
             "method": (
-                "current_index_constituents_intersected_with_fno_universe"
-                if official_constituents else "broad_fno_universe"
+                "point_in_time_index_constituents_intersected_with_fno_universe"
+                if membership_history
+                else "current_index_constituents_intersected_with_fno_universe"
+                if official_constituents
+                else "broad_fno_universe"
             ),
+            "membership_history_available": bool(membership_history),
+            "membership_snapshot_count": len(membership_history),
             "constituent_snapshot_as_of": constituent_snapshot_as_of,
             "official_constituent_count": (
                 len(official_constituents) if official_constituents else None
@@ -2580,14 +3491,32 @@ def calculate_regime_walk_forward_validation(
             100 * (raw_transitions - confirmed_transitions) / raw_transitions, 1
         ) if raw_transitions else 0.0,
         "by_regime": by_regime,
+        "overall": overall,
         "duration_summary": duration_summary,
+        "current_state": current_state,
+        "transition_analysis": transition_analysis,
+        "event_validation": event_results,
+        "external_cluster_readiness": build_regime_external_cluster_readiness(
+            institutional_flow_rows=institutional_flow_rows,
+            confirmed_fpi_rows=confirmed_fpi_rows,
+            macro_snapshot_rows=macro_snapshot_rows,
+            global_risk_rows=global_risk_rows,
+            futures_snapshot_rows=futures_snapshot_rows,
+        ),
         "baseline": baseline,
         "limitations": [
-            "Historical breadth uses today’s index constituents intersected with the current F&O universe and is subject to survivorship and membership bias.",
+            (
+                "Historical breadth uses dated index-membership snapshots intersected with the available F&O histories."
+                if membership_history
+                else "Historical breadth uses today’s index constituents intersected with the current F&O universe and is subject to survivorship and membership bias."
+            ),
             "Constituent stocks enter only after 252 stored sessions; each evaluated date must meet the 80% coverage gate.",
             "Institutional-flow, currency/rates, and global-risk clusters remain unranked, leaving 60% candidate weight available.",
             "Thresholds were frozen before this report but have not been statistically fitted or approved for decisions.",
             "Overlapping forward-return windows are descriptive and not independent observations.",
+            "Named event windows are retrospective stress reviews selected with hindsight and are not independent test samples.",
+            "Normal-period controls are non-overlapping same-length historical windows outside the named events; they are descriptive controls, not causal counterfactuals.",
+            "The Recovering market state is an outcome-blind transition rule under validation; it is not displayed as a current signal.",
         ],
     }
 
@@ -3019,6 +3948,9 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         if path == "/api/market-sentiment/regime-validation-universe":
             self._send_regime_validation_universe()
             return
+        if path == "/api/market-sentiment/cross-index-validation":
+            self._send_cross_index_validation()
+            return
         super().do_GET()
 
     def _send_domestic_sentiment_core(self) -> None:
@@ -3061,6 +3993,377 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         )
         self._send_json(HTTPStatus.OK, payload)
 
+    def _send_cross_index_validation(self) -> None:
+        try:
+            payload = self._calculate_cross_index_validation_payload()
+            self._send_json(HTTPStatus.OK, payload)
+        except ValueError as error:
+            self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"ok": False, "reason": str(error)})
+
+    @staticmethod
+    def _calculate_cross_index_validation_payload() -> dict[str, object]:
+        store = _get_eod_store()
+        index_inventory = store.list_instruments(kind="index")
+        stock_inventory = store.list_instruments(kind="stock")
+        stock_histories = {
+            str(item["display_name"]): store.load_candles(
+                kind="stock", display_name=str(item["display_name"])
+            )
+            for item in stock_inventory
+        }
+        constituent_snapshot = load_index_constituent_snapshot()
+        readiness = build_regime_validation_universe(
+            index_inventory,
+            stock_names=set(stock_histories),
+            constituent_snapshot=constituent_snapshot,
+        )
+        histories = {
+            name: store.load_candles(kind="index", display_name=name)
+            for name in SEASONALITY_INDICES
+        }
+        india_vix_candles = store.load_candles(kind="index", display_name="India VIX")
+        nifty50_candles = histories.get("Nifty 50", [])
+        institutional_flow_rows = store.load_institutional_flows()
+        confirmed_fpi_rows = store.load_confirmed_fpi_investments()
+        macro_snapshot_rows = store.load_macro_snapshots()
+        global_risk_rows = store.load_global_risk_observations()
+        futures_snapshot_rows = store.load_futures_eod_snapshots()
+        external_rows = {
+            "institutional": institutional_flow_rows,
+            "confirmed_fpi": confirmed_fpi_rows,
+            "macro": macro_snapshot_rows,
+            "global": global_risk_rows,
+            "futures": futures_snapshot_rows,
+        }
+        cache_contract = {
+            "rule_version": REGIME_RULE_VERSION,
+            "recovery_contract": (
+                REGIME_RECOVERY_MINIMUM_RISK_SESSIONS,
+                REGIME_RECOVERY_MAXIMUM_SESSIONS,
+            ),
+            "directional_contract": (
+                REGIME_DIRECTIONAL_MINIMUM_STATE_SESSIONS,
+                REGIME_DIRECTIONAL_RETURN_THRESHOLD_PCT,
+                REGIME_DIRECTIONAL_POSITIVE_RATE_THRESHOLD_PCT,
+                REGIME_DIRECTIONAL_EXCESS_THRESHOLD_PCT,
+            ),
+            "constituent_snapshot_as_of": constituent_snapshot.get("as_of"),
+            "constituent_membership_history": {
+                name: [
+                    (
+                        item["effective_from"].isoformat(),
+                        item["effective_to"].isoformat() if item["effective_to"] else None,
+                        item["symbols"],
+                    )
+                    for item in snapshots
+                ]
+                for name, snapshots in constituent_snapshot.get("history", {}).items()
+            },
+            "indices": [
+                (
+                    name,
+                    len(history),
+                    history[-1]["date"].isoformat() if history else None,
+                )
+                for name, history in sorted(histories.items())
+            ],
+            "stocks": [
+                (
+                    name,
+                    len(history),
+                    history[-1]["date"].isoformat() if history else None,
+                )
+                for name, history in sorted(stock_histories.items())
+            ],
+            "external_history": {
+                key: (
+                    len(rows),
+                    max(
+                        (item["date"].isoformat() for item in rows if isinstance(item.get("date"), date)),
+                        default=None,
+                    ),
+                )
+                for key, rows in external_rows.items()
+            },
+        }
+        cache_key = hashlib.sha256(
+            json.dumps(cache_contract, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        with _CROSS_INDEX_VALIDATION_LOCK:
+            if _CROSS_INDEX_VALIDATION_CACHE.get("key") == cache_key:
+                cached = _CROSS_INDEX_VALIDATION_CACHE.get("payload")
+                if isinstance(cached, dict):
+                    payload = json.loads(json.dumps(cached))
+                    payload["cache_hit"] = True
+                    return payload
+
+            rows: list[dict[str, object]] = []
+            excluded: list[dict[str, object]] = []
+            constituent_indices = constituent_snapshot["indices"]
+            constituent_history = constituent_snapshot.get("history", {})
+            for state in readiness["indices"]:
+                name = str(state["display_name"])
+                if not state["validation_ready"]:
+                    reason = (
+                        "insufficient_history"
+                        if not state["walk_forward_ready"]
+                        else "insufficient_fno_constituent_breadth"
+                    )
+                    excluded.append({"index": name, "reason": reason})
+                    continue
+                validation = calculate_regime_walk_forward_validation(
+                    histories[name],
+                    stock_histories,
+                    india_vix_candles=india_vix_candles,
+                    target_index=name,
+                    benchmark_candles=nifty50_candles,
+                    benchmark_index="Nifty 50" if name != "Nifty 50" else None,
+                    constituent_symbols=constituent_indices[name],
+                    constituent_membership_history=constituent_history.get(name, []),
+                    constituent_snapshot_as_of=str(constituent_snapshot.get("as_of") or ""),
+                    institutional_flow_rows=institutional_flow_rows,
+                    confirmed_fpi_rows=confirmed_fpi_rows,
+                    macro_snapshot_rows=macro_snapshot_rows,
+                    global_risk_rows=global_risk_rows,
+                    futures_snapshot_rows=futures_snapshot_rows,
+                )
+                metrics = validation["overall"]["horizons"]["20"]
+                transition = validation.get("transition_analysis", {})
+                recovery_state = next(
+                    (
+                        row
+                        for row in transition.get("by_state", [])
+                        if row.get("label_key") == "recovering_market"
+                    ),
+                    None,
+                )
+                recovery_metrics = (
+                    recovery_state.get("horizons", {}).get("20", {})
+                    if isinstance(recovery_state, dict) else {}
+                )
+                recovery_exits = transition.get("exit_counts", {})
+                directional_states = transition.get("directional_state_evidence", [])
+                long_states = [
+                    item
+                    for item in directional_states
+                    if item.get("research_bias") == "long_research_candidate"
+                ]
+                short_states = [
+                    item
+                    for item in directional_states
+                    if item.get("research_bias") == "short_research_candidate"
+                ]
+                long_state = max(
+                    long_states,
+                    key=lambda item: (
+                        float(item["median_excess_return_pct"])
+                        if item.get("median_excess_return_pct") is not None
+                        else float(item["median_return_pct"])
+                    ),
+                    default=None,
+                )
+                short_state = min(
+                    short_states,
+                    key=lambda item: (
+                        float(item["median_excess_return_pct"])
+                        if item.get("median_excess_return_pct") is not None
+                        else float(item["median_return_pct"])
+                    ),
+                    default=None,
+                )
+                recovery_incremental = transition.get(
+                    "recovery_incremental_evidence", {}
+                )
+                current_state = validation.get("current_state", {})
+                current_transition_key = current_state.get("transition_label_key")
+                matched_state_evidence = next(
+                    (
+                        item
+                        for item in directional_states
+                        if item.get("label_key") == current_transition_key
+                    ),
+                    None,
+                )
+                is_benchmark = name == "Nifty 50"
+                if is_benchmark:
+                    current_decision = "market_context_only"
+                elif not current_state.get("classification_ready"):
+                    current_decision = "insufficient_evidence"
+                elif not isinstance(matched_state_evidence, dict):
+                    current_decision = "insufficient_evidence"
+                elif matched_state_evidence.get("research_bias") == "long_research_candidate":
+                    current_decision = "long_candidate"
+                elif matched_state_evidence.get("research_bias") == "short_research_candidate":
+                    current_decision = "short_candidate"
+                elif matched_state_evidence.get("research_bias") == "countertrend_rebound_study":
+                    current_decision = "countertrend_watch"
+                elif matched_state_evidence.get("research_bias") == "tactical_rebound_study":
+                    current_decision = "tactical_watch"
+                elif matched_state_evidence.get("research_bias") == "reversal_short_study":
+                    current_decision = "reversal_watch"
+                elif matched_state_evidence.get("research_bias") == "insufficient_sample":
+                    current_decision = "insufficient_evidence"
+                else:
+                    current_decision = "avoid_no_validated_edge"
+                rows.append(
+                    {
+                        "index": name,
+                        "is_benchmark": is_benchmark,
+                        "sessions": validation["overall"]["sessions"],
+                        "median_return_pct": metrics["median_return_pct"],
+                        "positive_rate_pct": metrics["positive_rate_pct"],
+                        "median_excess_return_pct": 0.0 if is_benchmark else metrics["median_excess_return_pct"],
+                        "outperformance_rate_pct": None if is_benchmark else metrics["outperformance_rate_pct"],
+                        "worst_max_drawdown_pct": metrics["worst_max_drawdown_pct"],
+                        "worst_relative_drawdown_pct": 0.0 if is_benchmark else metrics["worst_relative_drawdown_pct"],
+                        "official_constituent_count": validation["breadth_universe"]["official_constituent_count"],
+                        "fno_constituent_count": validation["breadth_universe"]["fno_constituent_count"],
+                        "evaluation_start": validation["evaluation_start"],
+                        "evaluation_end": validation["evaluation_end"],
+                        "recovery_episode_count": int(transition.get("episode_count") or 0),
+                        "recovery_sessions": int(
+                            recovery_state.get("sessions") or 0
+                            if isinstance(recovery_state, dict) else 0
+                        ),
+                        "recovery_positive_exit_count": int(
+                            recovery_exits.get("positive_market_confirmed") or 0
+                        ),
+                        "recovery_relapse_count": int(
+                            recovery_exits.get("relapsed_to_risk") or 0
+                        ),
+                        "recovery_timeout_count": int(
+                            recovery_exits.get("maximum_window_reached") or 0
+                        ),
+                        "recovery_open_count": int(recovery_exits.get("still_open") or 0),
+                        "recovery_20d_median_return_pct": recovery_metrics.get(
+                            "median_return_pct"
+                        ),
+                        "recovery_20d_positive_rate_pct": recovery_metrics.get(
+                            "positive_rate_pct"
+                        ),
+                        "recovery_20d_worst_return_pct": recovery_metrics.get(
+                            "worst_return_pct"
+                        ),
+                        "recovery_20d_worst_drawdown_pct": recovery_metrics.get(
+                            "worst_max_drawdown_pct"
+                        ),
+                        "recovery_20d_median_excess_return_pct": (
+                            0.0
+                            if is_benchmark and recovery_metrics
+                            else recovery_metrics.get("median_excess_return_pct")
+                        ),
+                        "recovery_20d_outperformance_rate_pct": (
+                            None
+                            if is_benchmark else recovery_metrics.get("outperformance_rate_pct")
+                        ),
+                        "recovery_comparable_base_sessions": int(
+                            recovery_incremental.get("comparable_base_sessions") or 0
+                        ),
+                        "recovery_base_20d_median_return_pct": (
+                            recovery_incremental.get("comparable_base_20d", {}).get(
+                                "median_return_pct"
+                            )
+                        ),
+                        "recovery_incremental_median_return_pct": recovery_incremental.get(
+                            "delta_median_return_pct"
+                        ),
+                        "recovery_incremental_positive_rate_pct": recovery_incremental.get(
+                            "delta_positive_rate_pct"
+                        ),
+                        "recovery_incremental_status": recovery_incremental.get("status"),
+                        "historical_long_state": long_state,
+                        "historical_short_state": short_state,
+                        "current_state": current_state,
+                        "current_state_historical_evidence": matched_state_evidence,
+                        "current_decision": current_decision,
+                    }
+                )
+            rows.sort(
+                key=lambda row: (
+                    -float(row["median_excess_return_pct"])
+                    if row["median_excess_return_pct"] is not None else math.inf,
+                    str(row["index"]),
+                )
+            )
+            for rank, row in enumerate(rows, start=1):
+                row["rank"] = rank
+            decision_priority = {
+                "long_candidate": 0,
+                "short_candidate": 1,
+                "countertrend_watch": 2,
+                "tactical_watch": 3,
+                "reversal_watch": 4,
+                "avoid_no_validated_edge": 5,
+                "insufficient_evidence": 6,
+                "market_context_only": 7,
+            }
+            decision_rows = sorted(
+                rows,
+                key=lambda row: (
+                    decision_priority.get(str(row["current_decision"]), 9),
+                    -float(
+                        (row.get("current_state_historical_evidence") or {}).get(
+                            "median_excess_return_pct"
+                        )
+                        or (row.get("current_state_historical_evidence") or {}).get(
+                            "median_return_pct"
+                        )
+                        or 0
+                    )
+                    if row["current_decision"] == "long_candidate"
+                    else float(
+                        (row.get("current_state_historical_evidence") or {}).get(
+                            "median_excess_return_pct"
+                        )
+                        or (row.get("current_state_historical_evidence") or {}).get(
+                            "median_return_pct"
+                        )
+                        or 0
+                    )
+                    if row["current_decision"] == "short_candidate"
+                    else 0,
+                    str(row["index"]),
+                ),
+            )
+            for rank, row in enumerate(decision_rows, start=1):
+                row["decision_rank"] = rank
+            payload = {
+                "ok": True,
+                "status": "historical_exploratory_comparison",
+                "horizon_sessions": 20,
+                "benchmark": "Nifty 50",
+                "constituent_snapshot_as_of": constituent_snapshot.get("as_of"),
+                "rows": rows,
+                "current_decision_rows": decision_rows,
+                "recovery_state_contract": {
+                    "minimum_prior_risk_sessions": REGIME_RECOVERY_MINIMUM_RISK_SESSIONS,
+                    "maximum_recovery_sessions": REGIME_RECOVERY_MAXIMUM_SESSIONS,
+                    "status": "validation_only_outcome_blind_rule",
+                    "eligible_indices": sum(
+                        int(row["recovery_episode_count"] > 0) for row in rows
+                    ),
+                },
+                "directional_research_contract": {
+                    "minimum_state_sessions": REGIME_DIRECTIONAL_MINIMUM_STATE_SESSIONS,
+                    "absolute_median_return_threshold_pct": REGIME_DIRECTIONAL_RETURN_THRESHOLD_PCT,
+                    "positive_rate_long_threshold_pct": REGIME_DIRECTIONAL_POSITIVE_RATE_THRESHOLD_PCT,
+                    "positive_rate_short_threshold_pct": 100
+                    - REGIME_DIRECTIONAL_POSITIVE_RATE_THRESHOLD_PCT,
+                    "relative_median_excess_threshold_pct": REGIME_DIRECTIONAL_EXCESS_THRESHOLD_PCT,
+                    "status": "historical_research_only_not_live_signal",
+                },
+                "excluded": excluded,
+                "limitations": [
+                    "Ranks describe historical 20-session outcomes and are not current trade signals.",
+                    "Breadth uses current constituents within the current liquid F&O universe and carries survivorship bias.",
+                    "Overlapping forward windows are descriptive rather than independent observations.",
+                ],
+                "cache_hit": False,
+            }
+            _CROSS_INDEX_VALIDATION_CACHE.clear()
+            _CROSS_INDEX_VALIDATION_CACHE.update({"key": cache_key, "payload": payload})
+            return payload
+
     @staticmethod
     def _calculate_regime_validation_payload(
         *,
@@ -3082,12 +4385,34 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             for item in instruments
         }
         constituent_snapshot = load_index_constituent_snapshot()
+        institutional_flow_rows = store.load_institutional_flows()
+        confirmed_fpi_rows = store.load_confirmed_fpi_investments()
+        macro_snapshot_rows = store.load_macro_snapshots()
+        global_risk_rows = store.load_global_risk_observations()
+        futures_snapshot_rows = store.load_futures_eod_snapshots()
+        external_rows = {
+            "institutional": institutional_flow_rows,
+            "confirmed_fpi": confirmed_fpi_rows,
+            "macro": macro_snapshot_rows,
+            "global": global_risk_rows,
+            "futures": futures_snapshot_rows,
+        }
         constituent_indices = constituent_snapshot["indices"]
         constituent_symbols = constituent_indices.get(target_index, [])
         if not constituent_symbols:
             raise ValueError("index_constituent_snapshot_unavailable")
         cache_contract = {
             "rule_version": REGIME_RULE_VERSION,
+            "recovery_contract": (
+                REGIME_RECOVERY_MINIMUM_RISK_SESSIONS,
+                REGIME_RECOVERY_MAXIMUM_SESSIONS,
+            ),
+            "directional_contract": (
+                REGIME_DIRECTIONAL_MINIMUM_STATE_SESSIONS,
+                REGIME_DIRECTIONAL_RETURN_THRESHOLD_PCT,
+                REGIME_DIRECTIONAL_POSITIVE_RATE_THRESHOLD_PCT,
+                REGIME_DIRECTIONAL_EXCESS_THRESHOLD_PCT,
+            ),
             "target_index": target_index,
             "benchmark_index": benchmark_index,
             "index_sessions": len(index_candles),
@@ -3098,6 +4423,14 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             "benchmark_latest": benchmark_candles[-1]["date"].isoformat() if benchmark_candles else None,
             "constituent_snapshot_as_of": constituent_snapshot.get("as_of"),
             "constituent_symbols": constituent_symbols,
+            "constituent_membership_history": [
+                (
+                    item["effective_from"].isoformat(),
+                    item["effective_to"].isoformat() if item["effective_to"] else None,
+                    item["symbols"],
+                )
+                for item in constituent_snapshot.get("history", {}).get(target_index, [])
+            ],
             "stocks": [
                 (
                     name,
@@ -3106,6 +4439,16 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 )
                 for name, history in sorted(stock_histories.items())
             ],
+            "external_history": {
+                key: (
+                    len(rows),
+                    max(
+                        (item["date"].isoformat() for item in rows if isinstance(item.get("date"), date)),
+                        default=None,
+                    ),
+                )
+                for key, rows in external_rows.items()
+            },
         }
         cache_key = hashlib.sha256(
             json.dumps(cache_contract, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -3125,7 +4468,15 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 benchmark_candles=benchmark_candles,
                 benchmark_index=benchmark_index,
                 constituent_symbols=constituent_symbols,
+                constituent_membership_history=constituent_snapshot.get("history", {}).get(
+                    target_index, []
+                ),
                 constituent_snapshot_as_of=str(constituent_snapshot.get("as_of") or ""),
+                institutional_flow_rows=institutional_flow_rows,
+                confirmed_fpi_rows=confirmed_fpi_rows,
+                macro_snapshot_rows=macro_snapshot_rows,
+                global_risk_rows=global_risk_rows,
+                futures_snapshot_rows=futures_snapshot_rows,
             )
             payload["cache_hit"] = False
             _REGIME_VALIDATION_CACHE.clear()
@@ -4377,6 +5728,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 _MONTHLY_LEADERS_CACHE.clear()
                 _HISTORICAL_MONTH_LEADERS_CACHE.clear()
                 _REGIME_VALIDATION_CACHE.clear()
+                _CROSS_INDEX_VALIDATION_CACHE.clear()
                 _KITE_DIAGNOSTICS["last_error"] = None
             print("Kite session state: disconnected", flush=True)
             self._send_json(HTTPStatus.OK, {"ok": True, "connected": False})
@@ -4479,6 +5831,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             _MONTHLY_LEADERS_CACHE.clear()
             _HISTORICAL_MONTH_LEADERS_CACHE.clear()
             _REGIME_VALIDATION_CACHE.clear()
+            _CROSS_INDEX_VALIDATION_CACHE.clear()
             _KITE_DIAGNOSTICS["last_error"] = None
         print("Kite session state: authenticated", flush=True)
         self._send_json(HTTPStatus.OK, {"ok": True, "connected": True})
@@ -4514,6 +5867,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             _MONTHLY_LEADERS_CACHE.clear()
             _HISTORICAL_MONTH_LEADERS_CACHE.clear()
             _REGIME_VALIDATION_CACHE.clear()
+            _CROSS_INDEX_VALIDATION_CACHE.clear()
             _KITE_DIAGNOSTICS["last_error"] = None
         print("Kite session state: authenticated", flush=True)
         self._send_json(HTTPStatus.OK, {"ok": True, "connected": True})
@@ -4681,6 +6035,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             _MONTHLY_LEADERS_CACHE.clear()
             _HISTORICAL_MONTH_LEADERS_CACHE.clear()
             _REGIME_VALIDATION_CACHE.clear()
+            _CROSS_INDEX_VALIDATION_CACHE.clear()
 
     @staticmethod
     def _set_last_error(reason: str) -> None:
