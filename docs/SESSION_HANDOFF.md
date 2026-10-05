@@ -2,6 +2,35 @@
 
 Updated: 2026-09-29
 
+## Linux migration checkpoint — 2026-10-05
+
+- `PG-terminal` is the active product repository. The separate
+  `custom_terminal` repository contains transition and research-migration
+  material; its later 05-Oct commits do not supersede this product history.
+- Linux checkout: `/home/parikshith/Documents/PG-terminal`.
+- Restored product baseline: `main` at `1e70921b5aadde380b9a1c1536f3514854bf6022`
+  (`Expand cross-index validation and decision research`), matching GitHub and
+  the external-backup checkout exactly.
+- Runtime: isolated Python `3.12.14` in `.venv`. PG-terminal currently uses only
+  the Python standard library and has no separate pip requirements file.
+- Validation completed on Linux: Python compilation passed; all 67 offline unit
+  tests passed; the local HTTP server returned `200`; no Kite login, provider
+  request, market-data update, research run, recommendation, or trade action was
+  performed.
+- Restored local store: `data/pg_terminal_eod.sqlite3`, 108,425,216 bytes,
+  SHA-256 `3b00eb4cb5ebee9c0877c3eddc86db1c93ae3886d9a6ced4f2e16e2d610de183`.
+  It matches the external backup byte-for-byte, has no WAL/SHM sidecars, and
+  passes read-only `PRAGMA quick_check(1)` with 9 tables.
+- The repository was clean and synchronized with GitHub before this checkpoint
+  note. `.venv`, Python caches, and the local SQLite store remain local-only.
+- Node.js is not installed and is not required at runtime. The live page loaded
+  successfully; repeat an optional Node-based JavaScript syntax check only if a
+  future frontend change warrants it.
+- Resume development from the existing **Next work** item below: candidate risk
+  controls and horizon-specific validation. Preserve the analysis-only boundary
+  and reconnect Kite manually only when the owner explicitly chooses a workflow
+  that requires it.
+
 ## Saved state
 
 - Branch: `main`
