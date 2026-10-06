@@ -152,6 +152,11 @@ orders or position sizing.
   The 05-Oct-26 live check used 2,478 sessions from 05-Oct-16 through 05-Oct-26:
   April averaged +3.71%, March averaged -1.39%, and zero month effects survived
   both chronological holdout halves.
+- Permanent Seasonality requirement: Nifty 50 is only the initial slice. Extend
+  all calculations, month/weekday tables, turn-of-month tests, chronological
+  holdouts, comparisons, and Dashboard/detail summaries to every supported
+  index. Keep short-history indices visible with explicit readiness and coverage;
+  do not silently drop them or substitute the Nifty 50 result.
 - The latest verified stored-session board (28-Sep-26) showed Nifty Auto as the
   sole long research match, Nifty Financial Services and Nifty PSU Bank as
   countertrend watches, the two MidSmall indices as tactical watches, eleven
@@ -188,15 +193,17 @@ orders or position sizing.
 
 ## Next work
 
-1. Define and build the Screener workspace contract—local universe, filters,
+1. Extend the complete Seasonality analysis and validation contract from Nifty
+   50 to every supported index, including per-index readiness and coverage.
+2. Define and build the Screener workspace contract—local universe, filters,
    result columns, freshness/readiness, and evidence limitations—before adding
    its Dashboard summary card.
-2. Continue daily collection for institutional flows, macro context, global risk,
+3. Continue daily collection for institutional flows, macro context, global risk,
    and futures/OI; freeze their directional thresholds only after adequate
    coverage, then test them out of sample.
-3. Source and audit authoritative dated index membership before populating the
+4. Source and audit authoritative dated index membership before populating the
    new point-in-time schema; never infer historical membership from today's list.
-4. Display any decision layer only after its evidence and limitations are
+5. Display any decision layer only after its evidence and limitations are
    reviewable in the interface.
 
 ## Approved longer-range product milestones

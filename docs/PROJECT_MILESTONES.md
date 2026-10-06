@@ -225,8 +225,16 @@ point-in-time-universe validation are next.
    session and month coverage, chronological holdout survival, and the held-out
    turn-of-month result. `View details` loads the complete locally stored month,
    weekday, turn-of-month, and holdout tables without requiring a Kite session.
-   All language keeps historical averages separate from forecasts.
-20. **Next executable step:** establish the Screener workspace contract before
+   All language keeps historical averages separate from forecasts. **Nifty 50 is
+   only the first presentation slice:** every seasonality calculation, validation
+   test, chronological holdout, turn-of-month analysis, and result view must be
+   extended to every supported index. Short-history indices must remain visible
+   with explicit readiness/coverage states rather than being silently excluded.
+20. **Next executable step:** extend the complete Seasonality analysis and
+   validation contract to every supported index, including per-index history,
+   coverage, holdout, and current-readiness states in both Dashboard and detail
+   views.
+21. **Following step:** establish the Screener workspace contract before
    adding its Dashboard card. Define the locally supported universe, filters,
    result columns, freshness/readiness states, and evidence limitations so the
    Dashboard can summarize a real screen rather than an empty placeholder.
