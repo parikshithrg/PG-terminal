@@ -370,7 +370,14 @@ def parse_nifty500_constituents(csv_payload: str) -> list[dict[str, str]]:
         symbol = (row.get("Symbol") or "").strip().upper()
         industry = (row.get("Industry") or "").strip()
         series = (row.get("Series") or "").strip().upper()
-        if not symbol or not industry or series not in {"EQ", "BE"} or symbol in seen:
+        # The official NIFTY 500 universe includes listed REIT units in the
+        # NSE ``RR`` series in addition to ordinary ``EQ``/``BE`` securities.
+        if (
+            not symbol
+            or not industry
+            or series not in {"EQ", "BE", "RR"}
+            or symbol in seen
+        ):
             raise ValueError("invalid_constituent_file")
         seen.add(symbol)
         rows.append({"symbol": symbol, "sector": industry})

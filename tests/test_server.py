@@ -729,6 +729,18 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         rows = parse_nifty500_constituents(header + body)
         self.assertEqual(len(rows), 500)
         self.assertEqual(rows[0], {"symbol": "SYM0", "sector": "Sector 0"})
+        current_official_rows = (
+            "".join(
+                f"Company {index},Sector {index % 3},SYM{index},EQ,ISIN{index}\n"
+                for index in range(498)
+            )
+            + "Bagmane Prime Office REIT,Realty,BAGMANE,RR,INE2OVN25015\n"
+            + "Brookfield India Real Estate Trust,Realty,BIRET,RR,INE0FDU25010\n"
+            + "EMBASSY OFFICE PARKS REIT,Realty,EMBASSY,RR,INE041025011\n"
+        )
+        current_rows = parse_nifty500_constituents(header + current_official_rows)
+        self.assertEqual(len(current_rows), 501)
+        self.assertEqual(current_rows[-1], {"symbol": "EMBASSY", "sector": "Realty"})
         rows_with_be_security = parse_nifty500_constituents(
             header + body + "Company BE,Sector 1,SYMBE,BE,ISINBE\n"
         )
