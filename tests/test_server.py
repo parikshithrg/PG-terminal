@@ -21,6 +21,7 @@ from server import (
     calculate_domestic_sentiment_core,
     calculate_regime_walk_forward_validation,
     build_dashboard_market_sentiment_summary,
+    build_dashboard_fno_summary,
     build_index_futures_confirmation,
     build_regime_external_cluster_readiness,
     apply_recovering_market_state,
@@ -411,6 +412,40 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(summary["evidence"]["eligible_indices"], 3)
         self.assertEqual(summary["leading_watch"]["index"], "Nifty IT")
         self.assertFalse(summary["futures_short_confirmation"]["history_ready"])
+
+    def test_dashboard_fno_summary_preserves_descriptive_positioning_contract(self):
+        summary = build_dashboard_fno_summary(
+            {
+                "available": True,
+                "as_of_date": "2026-10-05",
+                "latest_coverage": 208,
+                "expected_universe": 210,
+                "latest_coverage_pct": 99.0,
+                "latest_missing_count": 2,
+                "comparable_count": 205,
+                "eligible_count": 200,
+                "rollover_baseline_count": 1,
+                "stale_gap_count": 2,
+                "liquidity_excluded_count": 3,
+                "state_counts": {
+                    "long_build_up": 60,
+                    "short_covering": 45,
+                    "short_build_up": 35,
+                    "long_unwinding": 30,
+                    "no_clear_signal": 30,
+                },
+                "reason": "Descriptive same-contract evidence.",
+                "safeguards": {"regime_score_enabled": False},
+            },
+            stored_history_sessions=2,
+        )
+        self.assertEqual(summary["scope"], "descriptive_only")
+        self.assertEqual(summary["status"], "bullish_tilt")
+        self.assertEqual(summary["coverage"]["latest"], 208)
+        self.assertEqual(summary["comparisons"]["eligible"], 200)
+        self.assertEqual(summary["positioning"]["bullish"], 105)
+        self.assertEqual(summary["positioning"]["bearish"], 65)
+        self.assertFalse(summary["safeguards"]["regime_score_enabled"])
 
     def test_external_cluster_readiness_requires_complete_dated_sessions(self):
         dates = [date(2025, 1, 1) + timedelta(days=index) for index in range(252)]

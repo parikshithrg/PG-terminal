@@ -214,9 +214,16 @@ point-in-time-universe validation are next.
    decision mix, domestic freshness, evidence-cluster/index coverage, and the
    futures/OI short-history gate. Its `View details` action opens Market
    Sentiment, and the card preserves the research-only/no-execution boundary.
-18. **Next executable step:** add the F&O Dashboard summary card. Reuse the same
-   headline, supporting-measures, as-of/readiness, and `View details` contract;
-   keep descriptive positioning separate from a trading recommendation.
+18. **Dashboard summary layer — F&O slice complete.** The Dashboard now shows
+   latest contract coverage, eligible same-contract comparisons, bullish and
+   bearish quadrant counts, stored-session depth, rollover/stale/liquidity
+   exclusions, and the active noise safeguards. Rollover baselines remain
+   visibly withheld rather than compared across contracts, and `View details`
+   opens the descriptive F&O workspace.
+19. **Next executable step:** add the Seasonality Dashboard summary card. Surface
+   the selected instrument's strongest/weakest calendar evidence, observation
+   coverage, as-of/readiness, and a route to the full validation tables without
+   presenting seasonal averages as forecasts.
 
 ## Approved product-integration milestones
 

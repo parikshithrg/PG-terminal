@@ -4172,6 +4172,98 @@ def build_dashboard_market_sentiment_summary(
     }
 
 
+def build_dashboard_fno_summary(
+    futures_summary: dict[str, object],
+    *,
+    stored_history_sessions: int,
+) -> dict[str, object]:
+    """Condense descriptive futures/OI state into the Dashboard card contract."""
+    if stored_history_sessions < 0:
+        raise ValueError("dashboard_fno_summary_unavailable")
+    if futures_summary.get("available") is not True:
+        return {
+            "ok": True,
+            "status": "baseline_pending",
+            "scope": "descriptive_only",
+            "as_of_date": None,
+            "stored_history_sessions": stored_history_sessions,
+            "coverage": {
+                "latest": 0,
+                "expected": FNO_UNIVERSE_EXPECTED,
+                "pct": 0.0,
+                "missing": FNO_UNIVERSE_EXPECTED,
+            },
+            "comparisons": {
+                "comparable": 0,
+                "eligible": 0,
+                "rollover_baselines": 0,
+                "stale_gaps": 0,
+                "liquidity_excluded": 0,
+            },
+            "positioning": {
+                "bullish": 0,
+                "bearish": 0,
+                "unclear": 0,
+                "state_counts": {},
+            },
+            "reason": futures_summary.get("reason"),
+            "safeguards": {},
+        }
+
+    state_counts = futures_summary.get("state_counts")
+    state_counts = state_counts if isinstance(state_counts, dict) else {}
+    bullish = int(state_counts.get("long_build_up") or 0) + int(
+        state_counts.get("short_covering") or 0
+    )
+    bearish = int(state_counts.get("short_build_up") or 0) + int(
+        state_counts.get("long_unwinding") or 0
+    )
+    unclear = int(state_counts.get("no_clear_signal") or 0)
+    eligible = int(futures_summary.get("eligible_count") or 0)
+    if eligible == 0:
+        status = "history_building"
+    elif bullish > bearish:
+        status = "bullish_tilt"
+    elif bearish > bullish:
+        status = "bearish_tilt"
+    else:
+        status = "balanced_or_unclear"
+    return {
+        "ok": True,
+        "status": status,
+        "scope": "descriptive_only",
+        "as_of_date": futures_summary.get("as_of_date"),
+        "stored_history_sessions": stored_history_sessions,
+        "coverage": {
+            "latest": int(futures_summary.get("latest_coverage") or 0),
+            "expected": int(
+                futures_summary.get("expected_universe") or FNO_UNIVERSE_EXPECTED
+            ),
+            "pct": float(futures_summary.get("latest_coverage_pct") or 0.0),
+            "missing": int(futures_summary.get("latest_missing_count") or 0),
+        },
+        "comparisons": {
+            "comparable": int(futures_summary.get("comparable_count") or 0),
+            "eligible": eligible,
+            "rollover_baselines": int(
+                futures_summary.get("rollover_baseline_count") or 0
+            ),
+            "stale_gaps": int(futures_summary.get("stale_gap_count") or 0),
+            "liquidity_excluded": int(
+                futures_summary.get("liquidity_excluded_count") or 0
+            ),
+        },
+        "positioning": {
+            "bullish": bullish,
+            "bearish": bearish,
+            "unclear": unclear,
+            "state_counts": state_counts,
+        },
+        "reason": futures_summary.get("reason"),
+        "safeguards": futures_summary.get("safeguards") or {},
+    }
+
+
 def normalize_index_name(value: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", value.upper().replace("&", "AND"))
 
@@ -4284,6 +4376,9 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         if path == "/api/dashboard/market-sentiment-summary":
             self._send_dashboard_market_sentiment_summary()
             return
+        if path == "/api/dashboard/fno-summary":
+            self._send_dashboard_fno_summary()
+            return
         if path == "/api/kite/seasonality":
             self._send_seasonality(urllib.parse.urlsplit(self.path).query)
             return
@@ -4313,6 +4408,26 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             payload = build_dashboard_market_sentiment_summary(
                 self._calculate_sentiment_payload(),
                 self._calculate_cross_index_validation_payload(),
+            )
+            self._send_json(HTTPStatus.OK, payload)
+        except ValueError as error:
+            self._send_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"ok": False, "reason": str(error)},
+            )
+
+    def _send_dashboard_fno_summary(self) -> None:
+        try:
+            rows = _get_eod_store().load_futures_eod_snapshots()
+            payload = build_dashboard_fno_summary(
+                calculate_futures_oi_summary(rows),
+                stored_history_sessions=len(
+                    {
+                        item["date"]
+                        for item in rows
+                        if isinstance(item.get("date"), date)
+                    }
+                ),
             )
             self._send_json(HTTPStatus.OK, payload)
         except ValueError as error:

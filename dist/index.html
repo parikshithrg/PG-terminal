@@ -435,6 +435,7 @@
     .workspace-summary-headline { margin: 5px 0 0; color: var(--heading); font-size: 21px; font-weight: 720; }
     .workspace-summary-status { padding: 4px 8px; border-radius: 999px; color: #94620a; background: #fff4db; font-size: 12px; font-weight: 650; white-space: nowrap; }
     .workspace-summary-status.ready { color: #187a42; background: #e8f7ee; }
+    .workspace-summary-status.defensive { color: #a42f35; background: #fdebec; }
     .workspace-summary-status.unavailable { color: #a42f35; background: #fdebec; }
     .workspace-summary-copy { margin: 10px 0 16px; color: var(--muted); font-size: 13px; }
     .workspace-summary-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
@@ -778,6 +779,7 @@
     html[data-theme="dark"] .sentiment-band.mixed { color: #f0c56c; background: #423417; }
     html[data-theme="dark"] .workspace-summary-status { color: #f0c56c; background: #423417; }
     html[data-theme="dark"] .workspace-summary-status.ready { color: #73d59a; background: #173525; }
+    html[data-theme="dark"] .workspace-summary-status.defensive { color: #f08d93; background: #432226; }
     html[data-theme="dark"] .workspace-summary-status.unavailable { color: #f08d93; background: #432226; }
     html[data-theme="dark"] .sentiment-band.defensive,
     html[data-theme="dark"] .futures-state.short-build-up,
@@ -965,6 +967,38 @@
               <div class="workspace-summary-buttons">
                 <button class="panel-button" id="refreshDashboardSentimentButton" type="button">Refresh summary</button>
                 <button class="panel-button primary" id="viewMarketSentimentButton" type="button">View details</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="dashboard-section" aria-labelledby="dashboardFnoTitle">
+          <div class="workspace-summary-card">
+            <div class="workspace-summary-head">
+              <div>
+                <div class="workspace-summary-kicker">Workspace summary</div>
+                <h2 class="workspace-summary-headline" id="dashboardFnoTitle">F&amp;O positioning</h2>
+              </div>
+              <span class="workspace-summary-status" id="dashboardFnoStatus">Loading local evidence</span>
+            </div>
+            <p class="workspace-summary-copy" id="dashboardFnoCopy">Reading the latest same-contract futures price and open-interest observations.</p>
+            <div class="workspace-summary-metrics" aria-label="F&O positioning summary">
+              <div class="workspace-summary-metric"><strong id="dashboardFnoCoverage">—</strong><span>Latest contracts</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardFnoEligible">—</strong><span>Eligible comparisons</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardFnoBullish">—</strong><span>Bullish quadrants</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardFnoBearish">—</strong><span>Bearish quadrants</span></div>
+            </div>
+            <div class="workspace-summary-readiness">
+              <span><strong>As of</strong> <span id="dashboardFnoAsOf">—</span></span>
+              <span><strong>Coverage</strong> <span id="dashboardFnoCoverageMeta">—</span></span>
+              <span><strong>Stored history</strong> <span id="dashboardFnoHistory">—</span></span>
+              <span><strong>Excluded</strong> <span id="dashboardFnoExcluded">—</span></span>
+            </div>
+            <div class="workspace-summary-actions">
+              <div class="workspace-summary-note" id="dashboardFnoNote">Descriptive positioning only. These quadrants do not activate the regime score.</div>
+              <div class="workspace-summary-buttons">
+                <button class="panel-button" id="refreshDashboardFnoButton" type="button">Refresh summary</button>
+                <button class="panel-button primary" id="viewFnoButton" type="button">View details</button>
               </div>
             </div>
           </div>
@@ -1634,6 +1668,8 @@
     const dashboardView = document.getElementById('dashboardView');
     const refreshDashboardSentimentButton = document.getElementById('refreshDashboardSentimentButton');
     const viewMarketSentimentButton = document.getElementById('viewMarketSentimentButton');
+    const refreshDashboardFnoButton = document.getElementById('refreshDashboardFnoButton');
+    const viewFnoButton = document.getElementById('viewFnoButton');
     const marketSentimentView = document.getElementById('marketSentimentView');
     const refreshSentimentButton = document.getElementById('refreshSentimentButton');
     const regimeValidationIndexSelect = document.getElementById('regimeValidationIndexSelect');
@@ -2383,6 +2419,68 @@
       } finally {
         refreshDashboardSentimentButton.disabled = false;
         refreshDashboardSentimentButton.textContent = 'Refresh summary';
+      }
+    }
+
+    function renderDashboardFnoSummary(result) {
+      const coverage = result.coverage || {};
+      const comparisons = result.comparisons || {};
+      const positioning = result.positioning || {};
+      const safeguards = result.safeguards || {};
+      const status = document.getElementById('dashboardFnoStatus');
+      const statusLabels = {
+        bullish_tilt: 'Bullish-quadrant tilt',
+        bearish_tilt: 'Bearish-quadrant tilt',
+        balanced_or_unclear: 'Balanced or unclear',
+        history_building: 'Comparison history building',
+        baseline_pending: 'Baseline pending',
+      };
+      status.textContent = statusLabels[result.status] || 'Descriptive summary ready';
+      const statusTone = result.status === 'bullish_tilt'
+        ? 'ready'
+        : result.status === 'bearish_tilt' ? 'defensive' : '';
+      status.className = `workspace-summary-status ${statusTone}`.trim();
+      document.getElementById('dashboardFnoCoverage').textContent = Number(coverage.latest || 0).toLocaleString('en-IN');
+      document.getElementById('dashboardFnoEligible').textContent = Number(comparisons.eligible || 0).toLocaleString('en-IN');
+      document.getElementById('dashboardFnoBullish').textContent = Number(positioning.bullish || 0).toLocaleString('en-IN');
+      document.getElementById('dashboardFnoBearish').textContent = Number(positioning.bearish || 0).toLocaleString('en-IN');
+      document.getElementById('dashboardFnoAsOf').textContent = result.as_of_date ? formatDisplayDate(result.as_of_date) : 'Not available';
+      document.getElementById('dashboardFnoCoverageMeta').textContent = `${Number(coverage.latest || 0)}/${Number(coverage.expected || 0)} (${Number(coverage.pct || 0).toFixed(1)}%)`;
+      document.getElementById('dashboardFnoHistory').textContent = `${Number(result.stored_history_sessions || 0)} sessions`;
+      const excluded = Number(comparisons.stale_gaps || 0) + Number(comparisons.liquidity_excluded || 0);
+      document.getElementById('dashboardFnoExcluded').textContent = `${excluded} stale/liquidity · ${Number(comparisons.rollover_baselines || 0)} rollover`;
+      const eligible = Number(comparisons.eligible || 0);
+      document.getElementById('dashboardFnoCopy').textContent = eligible
+        ? `${Number(positioning.bullish || 0)} bullish-quadrant and ${Number(positioning.bearish || 0)} bearish-quadrant states across ${eligible} eligible same-contract comparisons.`
+        : (result.reason || 'A second same-contract observation is required before positioning can be classified.');
+      const priceFloor = Number(safeguards.minimum_absolute_price_change_pct);
+      const oiFloor = Number(safeguards.minimum_absolute_oi_change_pct);
+      document.getElementById('dashboardFnoNote').textContent = Number.isFinite(priceFloor) && Number.isFinite(oiFloor)
+        ? `Noise floor: |price| ≥ ${priceFloor.toFixed(2)}%, |OI| ≥ ${oiFloor.toFixed(2)}%. Descriptive only; regime scoring is off.`
+        : 'Descriptive positioning only. These quadrants do not activate the regime score.';
+    }
+
+    async function loadDashboardFnoSummary(showSuccess = false) {
+      refreshDashboardFnoButton.disabled = true;
+      refreshDashboardFnoButton.textContent = 'Refreshing…';
+      const status = document.getElementById('dashboardFnoStatus');
+      status.textContent = 'Loading local evidence';
+      status.className = 'workspace-summary-status';
+      try {
+        const response = await fetch('/api/dashboard/fno-summary', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) throw new Error('summary_unavailable');
+        renderDashboardFnoSummary(result);
+        if (showSuccess) showNotice(`F&O summary refreshed${result.as_of_date ? ` through ${formatDisplayDate(result.as_of_date)}` : ''}.`);
+        return true;
+      } catch (_error) {
+        status.textContent = 'Summary unavailable';
+        status.className = 'workspace-summary-status unavailable';
+        document.getElementById('dashboardFnoCopy').textContent = 'The stored F&O positioning summary could not be calculated.';
+        return false;
+      } finally {
+        refreshDashboardFnoButton.disabled = false;
+        refreshDashboardFnoButton.textContent = 'Refresh summary';
       }
     }
 
@@ -3629,6 +3727,10 @@
     viewMarketSentimentButton.addEventListener('click', () => {
       document.querySelector('.nav-button[data-page="Market Sentiment"]').click();
     });
+    refreshDashboardFnoButton.addEventListener('click', () => loadDashboardFnoSummary(true));
+    viewFnoButton.addEventListener('click', () => {
+      document.querySelector('.nav-button[data-page="F&O"]').click();
+    });
     regimeValidationIndexSelect.addEventListener('change', () => updateRegimeValidationSelection(true));
     regimeValidationBenchmarkSelect.addEventListener('change', () => {
       const benchmark = regimeValidationBenchmarkSelect.value === 'none' ? 'No relative benchmark' : 'Nifty 50 benchmark';
@@ -3689,7 +3791,10 @@
         seasonalityView.hidden = !isSeasonality;
         emptyView.hidden = isDashboard || isMarketSentiment || isFno || isSeasonality;
         emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isSeasonality ? '' : button.dataset.page;
-        if (isDashboard) loadDashboardMarketSentimentSummary(false);
+        if (isDashboard) {
+          loadDashboardMarketSentimentSummary(false);
+          loadDashboardFnoSummary(false);
+        }
         if ((isMarketSentiment || isFno) && document.getElementById('sentimentAsOfValue').textContent === '—') {
           loadDomesticSentiment(false);
         }
@@ -3719,6 +3824,7 @@
     updateThemeControl();
     restoreKiteStatus();
     loadDashboardMarketSentimentSummary(false);
+    loadDashboardFnoSummary(false);
   </script>
 </body>
 </html>
