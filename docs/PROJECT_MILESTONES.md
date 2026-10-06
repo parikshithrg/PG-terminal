@@ -266,19 +266,32 @@ point-in-time-universe validation are next.
 
 ## Approved product-integration milestones
 
+### Shared interpretation guidance across every workspace
+
+Every page must explain what its tables show and how the user should read the
+data. Guidance should be placed close to the relevant table, use plain language,
+define important columns and states, explain what high/low or positive/negative
+values mean, and state the main limitations. It must help interpretation without
+turning descriptive evidence into a recommendation or repeating the table row by
+row.
+
 ### A. Dashboard as the workspace summary
 
 The Dashboard becomes a concise summary of every main workspace page. It should
 not duplicate full analysis; each section must show the most decision-relevant
 result, freshness/coverage state, and a clear route to the source page.
 
-1. Add one summary section for Market Sentiment, F&O, Screener, Seasonality,
-   Earnings Analysis, Portfolio Analysis, News & Events, and Stock Data YTD.
-2. Use a consistent card contract: headline state, two to four supporting
+1. Add a prominent whole-market condition summary at the top of the Dashboard.
+   Its methodology, evidence inputs, confidence rules, and exact wording will be
+   designed later; do not invent or activate an overall-market conclusion before
+   those decisions are reviewed.
+2. Add one summary section for Market Sentiment, F&O, Screener, Seasonality,
+   Earnings Analysis, Portfolio Analysis, Events Calendar, and Stock Data YTD.
+3. Use a consistent card contract: headline state, two to four supporting
    measures, as-of date, missing-data warning, and `View details` action.
-3. Keep unavailable or immature analysis visible with an honest readiness state;
+4. Keep unavailable or immature analysis visible with an honest readiness state;
    never replace missing evidence with a neutral-looking value.
-4. Make the Dashboard responsive and keep the EOD update progress/freshness
+5. Make the Dashboard responsive and keep the EOD update progress/freshness
    state visible without requiring users to open each page.
 
 ### B. Market Sentiment as a macro-to-micro story
