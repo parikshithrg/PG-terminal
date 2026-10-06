@@ -12,6 +12,7 @@ from server import (
     build_checksum,
     calculate_seasonality,
     calculate_seasonality_validation,
+    calculate_stock_screener,
     calculate_month_to_date_returns,
     calculate_index_ytd,
     classify_network_error,
@@ -22,7 +23,11 @@ from server import (
     calculate_regime_walk_forward_validation,
     build_dashboard_market_sentiment_summary,
     build_dashboard_fno_summary,
+    build_dashboard_screener_summary,
     build_dashboard_seasonality_summary,
+    build_dashboard_seasonality_universe_summary,
+    build_news_events_workspace,
+    build_macro_events_calendar,
     build_index_futures_confirmation,
     build_regime_external_cluster_readiness,
     apply_recovering_market_state,
@@ -53,6 +58,7 @@ from server import (
     parse_fred_global_zip,
     parse_rbi_macro_snapshot,
     parse_near_month_stock_futures,
+    parse_nse_announcement_csv,
     parse_seasonality_index_tokens,
     rank_historical_month_averages,
 )
@@ -470,6 +476,7 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
                 "from_date": "2017-01-02",
                 "as_of_date": "2026-10-05",
                 "completed_sessions": 2400,
+                "holdout_split_date": "2022-01-01",
                 "month_rows": month_rows,
                 "held_out_summary": {
                     "same_direction": 7,
@@ -488,6 +495,247 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(summary["weakest_month"]["period"], "Jan")
         self.assertEqual(summary["holdout"]["survived"], 1)
         self.assertEqual(summary["turn_of_month_test"]["period"], "Test")
+
+    def test_dashboard_seasonality_universe_keeps_partial_and_unavailable_indices(self):
+        ready = {
+            "ok": True,
+            "instrument": "Nifty 50",
+            "kind": "index",
+            "status": "historical_evidence_ready",
+            "completed_sessions": 2400,
+        }
+        partial = {
+            "ok": True,
+            "instrument": "Nifty Chemicals",
+            "kind": "index",
+            "status": "partial_history",
+            "completed_sessions": 214,
+        }
+        result = build_dashboard_seasonality_universe_summary(
+            {"Nifty 50": ready, "Nifty Chemicals": partial},
+            supported_indices=("Nifty 50", "Nifty Chemicals", "Nifty Bank"),
+        )
+        self.assertEqual(result["scope"], "all_supported_indices")
+        self.assertEqual(result["universe"], {
+            "total": 3,
+            "available": 2,
+            "ready": 1,
+            "partial": 1,
+            "unavailable": 1,
+        })
+        self.assertEqual(result["indices"][2]["instrument"], "Nifty Bank")
+        self.assertEqual(result["indices"][2]["status"], "history_unavailable")
+
+    def test_local_stock_screener_keeps_ready_partial_stale_and_unavailable_rows(self):
+        dates = [date(2025, 1, 1) + timedelta(days=index) for index in range(253)]
+
+        def candles(selected_dates, base, step):
+            return [
+                {
+                    "date": candle_date,
+                    "open": base + index * step,
+                    "high": base + index * step + 1,
+                    "low": base + index * step - 1,
+                    "close": base + index * step,
+                }
+                for index, candle_date in enumerate(selected_dates)
+            ]
+
+        result = calculate_stock_screener(
+            {
+                "READY": candles(dates, 50.0, 1.0),
+                "PARTIAL": candles(dates[-100:], 80.0, 0.2),
+                "STALE": candles(dates[:-1], 60.0, 0.5),
+                "EMPTY": [],
+            },
+            candles(dates, 100.0, 0.25),
+            expected_through=dates[-1],
+        )
+        self.assertEqual(result["scope"], "locally_stored_nse_fno_equities")
+        self.assertEqual(result["coverage"], {
+            "total": 4,
+            "ready": 1,
+            "partial_history": 1,
+            "stale": 1,
+            "unavailable": 1,
+        })
+        rows = {row["symbol"]: row for row in result["rows"]}
+        self.assertEqual(rows["READY"]["status"], "ready")
+        self.assertGreater(rows["READY"]["return_20d_pct"], 0)
+        self.assertGreater(rows["READY"]["vs_200dma_pct"], 0)
+        self.assertEqual(rows["READY"]["position_52w_pct"], 100.0)
+        self.assertEqual(rows["PARTIAL"]["status"], "partial_history")
+        self.assertIsNone(rows["PARTIAL"]["vs_200dma_pct"])
+        self.assertEqual(rows["STALE"]["status"], "stale")
+        self.assertIsNone(rows["STALE"]["excess_20d_vs_nifty_pct"])
+        self.assertEqual(rows["EMPTY"]["status"], "unavailable")
+        self.assertEqual(result["contract"]["version"], "local-stock-screener-v1")
+
+    def test_dashboard_screener_summary_is_descriptive_and_keeps_readiness(self):
+        result = build_dashboard_screener_summary(
+            {
+                "ok": True,
+                "as_of_date": "2026-10-05",
+                "benchmark": "Nifty 50",
+                "benchmark_return_20d_pct": -2.0,
+                "coverage": {
+                    "total": 4,
+                    "ready": 3,
+                    "partial_history": 1,
+                    "stale": 0,
+                    "unavailable": 0,
+                },
+                "freshness": {
+                    "state": "stale",
+                    "latest_session": "2026-10-05",
+                    "expected_through": "2026-10-06",
+                },
+                "contract": {"version": "local-stock-screener-v1"},
+                "rows": [
+                    {
+                        "symbol": "ALPHA",
+                        "status": "ready",
+                        "return_20d_pct": 8.0,
+                        "excess_20d_vs_nifty_pct": 10.0,
+                        "vs_200dma_pct": 12.0,
+                    },
+                    {
+                        "symbol": "BETA",
+                        "status": "ready",
+                        "return_20d_pct": -1.0,
+                        "excess_20d_vs_nifty_pct": 1.0,
+                        "vs_200dma_pct": -3.0,
+                    },
+                    {
+                        "symbol": "GAMMA",
+                        "status": "ready",
+                        "return_20d_pct": -9.0,
+                        "excess_20d_vs_nifty_pct": -7.0,
+                        "vs_200dma_pct": 2.0,
+                    },
+                    {"symbol": "NEW", "status": "partial_history"},
+                ],
+            }
+        )
+        self.assertEqual(result["scope"], "descriptive_local_screen_only")
+        self.assertEqual(result["status"], "partial_history")
+        self.assertEqual(result["coverage"]["ready"], 3)
+        self.assertEqual(result["observations"]["positive_20d"], 1)
+        self.assertEqual(result["observations"]["above_200dma"], 2)
+        self.assertEqual(result["observations"]["outperforming_nifty_20d"], 2)
+        self.assertEqual(
+            result["observations"]["highest_20d_excess"]["symbol"], "ALPHA"
+        )
+        self.assertEqual(
+            result["observations"]["lowest_20d_excess"]["symbol"], "GAMMA"
+        )
+        self.assertEqual(result["contract_version"], "local-stock-screener-v1")
+
+    def test_news_events_foundation_keeps_unsourced_live_items_empty(self):
+        result = build_news_events_workspace(
+            reviewed_on=date(2026, 10, 6),
+            sources=(
+                {
+                    "key": "official_source",
+                    "label": "Official source",
+                    "category": "regulatory",
+                    "authority": "Regulator",
+                    "url": "https://example.test/official",
+                    "coverage": "Official releases",
+                },
+            ),
+            event_windows=(
+                {
+                    "key": "past_event",
+                    "label": "Past event",
+                    "start": date(2020, 1, 1),
+                    "end": date(2020, 1, 5),
+                },
+            ),
+        )
+        self.assertEqual(result["status"], "manual_import_ready")
+        self.assertEqual(result["contract"]["version"], "news-events-foundation-v1")
+        self.assertFalse(result["contract"]["live_ingestion_enabled"])
+        self.assertTrue(result["contract"]["manual_csv_import_enabled"])
+        self.assertEqual(result["coverage"]["official_sources_reviewed"], 1)
+        self.assertEqual(result["coverage"]["connected_sources"], 0)
+        self.assertEqual(result["live_items"], [])
+        self.assertEqual(result["sources"][0]["status"], "not_connected")
+        self.assertEqual(
+            result["historical_events"][0]["status"],
+            "available_in_market_sentiment",
+        )
+
+    def test_nse_announcement_csv_parser_accepts_manual_download_and_rejects_bad_rows(self):
+        csv_payload = (
+            "SYMBOL,COMPANY NAME,SUBJECT,BROADCAST DATE/TIME,ATTACHMENT URL\n"
+            "INFY,Infosys Limited,Board meeting outcome,05-Oct-2026 15:42:10,"
+            "https://example.test/infosys.pdf\n"
+        )
+        rows = parse_nse_announcement_csv(csv_payload)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["symbol"], "INFY")
+        self.assertEqual(rows[0]["category"], "corporate_announcement")
+        self.assertEqual(rows[0]["published_at"], "2026-10-05T15:42:10+05:30")
+        with self.assertRaisesRegex(ValueError, "invalid_nse_announcement_row"):
+            parse_nse_announcement_csv(
+                "SYMBOL,COMPANY NAME,SUBJECT,BROADCAST DATE/TIME\n"
+                "bad symbol,Company,Subject,05-Oct-2026 15:42:10\n"
+            )
+
+    def test_macro_event_calendar_keeps_verified_events_and_pending_rbi_separate(self):
+        result = build_macro_events_calendar(
+            today=date(2026, 10, 6),
+            sources=(
+                {
+                    "key": "verified",
+                    "label": "Official calendar",
+                    "authority": "Authority",
+                    "region": "India",
+                    "url": "https://example.test/calendar",
+                    "status": "verified_snapshot",
+                    "note": "Reviewed",
+                },
+                {
+                    "key": "pending",
+                    "label": "Pending calendar",
+                    "authority": "Central bank",
+                    "region": "India",
+                    "url": "https://example.test/pending",
+                    "status": "date_confirmation_required",
+                    "note": "Do not guess",
+                },
+            ),
+            events=(
+                {
+                    "key": "release",
+                    "title": "Official release",
+                    "region": "India",
+                    "category": "inflation",
+                    "start_at": "2026-10-12T08:30:00+05:30",
+                    "timezone": "Asia/Kolkata",
+                    "source_key": "verified",
+                },
+                {
+                    "key": "old",
+                    "title": "Past release",
+                    "region": "India",
+                    "category": "growth",
+                    "start_at": "2026-10-01",
+                    "timezone": "Asia/Kolkata",
+                    "source_key": "verified",
+                },
+            ),
+        )
+        self.assertEqual(result["status"], "official_calendar_snapshot_ready")
+        self.assertEqual(result["contract"]["version"], "macro-events-calendar-v1")
+        self.assertFalse(result["contract"]["unscheduled_news_enabled"])
+        self.assertEqual(result["coverage"]["upcoming_events"], 1)
+        self.assertEqual(result["coverage"]["next_7_days"], 1)
+        self.assertEqual(result["coverage"]["verified_sources"], 1)
+        self.assertEqual(result["coverage"]["pending_sources"], 1)
+        self.assertEqual(result["next_event"]["key"], "release")
+        self.assertEqual(result["events"][0]["india_time"], "2026-10-12T08:30+05:30")
 
     def test_external_cluster_readiness_requires_complete_dated_sessions(self):
         dates = [date(2025, 1, 1) + timedelta(days=index) for index in range(252)]

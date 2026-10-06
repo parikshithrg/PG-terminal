@@ -26,17 +26,19 @@ Updated: 2026-10-06
 - Node.js is not installed and is not required at runtime. The live page loaded
   successfully; repeat an optional Node-based JavaScript syntax check only if a
   future frontend change warrants it.
-- Candidate risk controls and the Market Sentiment/F&O/Seasonality Dashboard
-  summary slices are complete. Resume from the Screener workspace-contract item
-  below. Preserve the analysis-only boundary and reconnect Kite manually only
-  when the owner explicitly chooses a workflow that requires it.
+- Candidate risk controls, the Market Sentiment/F&O/all-index Seasonality
+  Dashboard summary slices, the Screener workspace and Dashboard summary, and
+  the events-only macro calendar are complete. News and corporate-filing work is
+  paused by owner direction. Resume with an Events Calendar Dashboard summary.
+  Preserve the analysis-only boundary and reconnect Kite manually only when the
+  owner explicitly chooses a workflow that requires it.
 
 ## Saved state
 
 - Branch: `main`
 - Baseline pushed commit before this session: `f4c494d` — Add walk-forward and multi-index regime validation
 - Phase 4 foundation commit: `d7fcb23` — Start versioned sentiment validation snapshots
-- Verification at handoff: 72 automated tests passed; Python compilation and
+- Verification at handoff: 79 automated tests passed; Python compilation and
   live-browser milestone checks passed.
 
 ## Current milestone
@@ -152,11 +154,54 @@ orders or position sizing.
   The 05-Oct-26 live check used 2,478 sessions from 05-Oct-16 through 05-Oct-26:
   April averaged +3.71%, March averaged -1.39%, and zero month effects survived
   both chronological holdout halves.
-- Permanent Seasonality requirement: Nifty 50 is only the initial slice. Extend
-  all calculations, month/weekday tables, turn-of-month tests, chronological
-  holdouts, comparisons, and Dashboard/detail summaries to every supported
-  index. Keep short-history indices visible with explicit readiness and coverage;
-  do not silently drop them or substitute the Nifty 50 result.
+- Extended the complete Seasonality contract to all 19 supported indices. The
+  Dashboard selector and detail selector expose each index's own month/weekday,
+  turn-of-month, chronological holdout, session coverage, and readiness state.
+  Dashboard `View details` preserves the selected index. The verified local
+  state shows 18 ready indices and Nifty Chemicals visibly partial at 214
+  sessions and 10/12 populated months; no Nifty 50 evidence is substituted.
+- Added the first versioned Screener workspace contract for the complete local
+  210-stock NSE F&O universe. The page keeps ready, partial-history, stale, and
+  unavailable rows visible; adds symbol, readiness, and price-evidence filters;
+  and provides sortable 20/60-session return, 20-session excess-return,
+  moving-average, 52-week position/drawdown, and volatility evidence. Exact
+  formulas and limitations are shown in the interface. The 06-Oct-26 live check
+  found all 210 rows calculation-ready, while correctly marking the latest
+  05-Oct-26 local EOD data stale relative to the expected 06-Oct-26 session.
+  Rankings remain descriptive and are not recommendations or a backtest.
+- Added the Screener summary card to the Dashboard using the same versioned
+  contract. It reports 210/210 calculation-ready rows, freshness, 20-session
+  positive-return and Nifty-outperformance counts, 200-session-average breadth,
+  and clearly labelled highest/lowest observed excess-return rows. The verified
+  05-Oct-26 snapshot showed 20 positive 20-session returns, 62 equities above
+  their 200-session average, and 84 outperforming Nifty 50 over 20 sessions;
+  the card correctly remained stale relative to 06-Oct-26. `View details`
+  opens the full Screener, and no count or extreme is framed as a recommendation.
+- Added `news-events-foundation-v1` and a real News & Events workspace. It
+  registers NSE corporate filings, BSE corporate announcements, SEBI press
+  releases, and RBI press releases as official source candidates while keeping
+  all four visibly not connected pending ingestion review. The live inbox is
+  intentionally empty; no placeholder or unsourced headline is shown. The page
+  also exposes the four fixed retrospective stress windows already used by
+  Market Sentiment and labels their hindsight-selection limitation. Live
+  ingestion, headline sentiment, automated impact scoring, and trade guidance
+  remain off.
+- Completed the NSE source-access review. NSE's published terms prohibit
+  systematic or automated website collection, so no scraper or undocumented API
+  client was added. The workspace now supports an owner-downloaded NSE CSV:
+  required fields and rows are validated, naive broadcast timestamps are bound
+  to India time, attachment URLs are checked, and records are written to a new
+  append-only local table. Exact duplicates are ignored and changed content gets
+  a distinct hash, preserving revisions without overwriting prior evidence. The
+  live database was not seeded with synthetic test records.
+- Replaced the visible News & Events workflow with `macro-events-calendar-v1`.
+  The events-only workspace contains 13 upcoming October–December 2026 India and
+  U.S. macro events from reviewed MoSPI, Federal Reserve, and U.S. BLS calendar
+  snapshots. It shows IST times where official times are specified, filters by
+  region and event type, and exposes source readiness and limitations. RBI is
+  deliberately date-pending because a current official 2026–27 schedule was not
+  verified; no dates are guessed. News, sentiment, surprise, impact, and trading
+  labels remain off. The prior NSE importer is dormant and not exposed.
 - The latest verified stored-session board (28-Sep-26) showed Nifty Auto as the
   sole long research match, Nifty Financial Services and Nifty PSU Bank as
   countertrend watches, the two MidSmall indices as tactical watches, eleven
@@ -193,17 +238,15 @@ orders or position sizing.
 
 ## Next work
 
-1. Extend the complete Seasonality analysis and validation contract from Nifty
-   50 to every supported index, including per-index readiness and coverage.
-2. Define and build the Screener workspace contract—local universe, filters,
-   result columns, freshness/readiness, and evidence limitations—before adding
-   its Dashboard summary card.
-3. Continue daily collection for institutional flows, macro context, global risk,
+1. Add a concise Events Calendar Dashboard card from the existing contract: next
+   scheduled event, seven-day count, and official-source readiness. Do not revive
+   news ingestion unless the owner changes scope.
+2. Continue daily collection for institutional flows, macro context, global risk,
    and futures/OI; freeze their directional thresholds only after adequate
    coverage, then test them out of sample.
-4. Source and audit authoritative dated index membership before populating the
+3. Source and audit authoritative dated index membership before populating the
    new point-in-time schema; never infer historical membership from today's list.
-5. Display any decision layer only after its evidence and limitations are
+4. Display any decision layer only after its evidence and limitations are
    reviewable in the interface.
 
 ## Approved longer-range product milestones

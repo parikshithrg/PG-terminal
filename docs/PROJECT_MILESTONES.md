@@ -220,24 +220,49 @@ point-in-time-universe validation are next.
    exclusions, and the active noise safeguards. Rollover baselines remain
    visibly withheld rather than compared across contracts, and `View details`
    opens the descriptive F&O workspace.
-19. **Dashboard summary layer — Seasonality slice complete.** The Dashboard now
-   summarizes Nifty 50's strongest/weakest historical calendar months, completed
-   session and month coverage, chronological holdout survival, and the held-out
-   turn-of-month result. `View details` loads the complete locally stored month,
-   weekday, turn-of-month, and holdout tables without requiring a Kite session.
-   All language keeps historical averages separate from forecasts. **Nifty 50 is
-   only the first presentation slice:** every seasonality calculation, validation
-   test, chronological holdout, turn-of-month analysis, and result view must be
-   extended to every supported index. Short-history indices must remain visible
-   with explicit readiness/coverage states rather than being silently excluded.
-20. **Next executable step:** extend the complete Seasonality analysis and
-   validation contract to every supported index, including per-index history,
-   coverage, holdout, and current-readiness states in both Dashboard and detail
-   views.
-21. **Following step:** establish the Screener workspace contract before
-   adding its Dashboard card. Define the locally supported universe, filters,
-   result columns, freshness/readiness states, and evidence limitations so the
-   Dashboard can summarize a real screen rather than an empty placeholder.
+19. **Dashboard summary layer — all-index Seasonality complete.** The Dashboard
+   and detail workspace now expose every supported index with its own locally
+   stored month, weekday, turn-of-month, chronological holdout, session count,
+   calendar coverage, and readiness state. The Dashboard selector routes the
+   selected index into the full detail view. Short-history indices remain
+   visible rather than inheriting Nifty 50 evidence: the current local store
+   reports 18 ready indices and Nifty Chemicals as partial with 214 sessions and
+   10/12 populated calendar months. All language keeps historical averages
+   separate from forecasts, and the workflow does not require a Kite session.
+20. **Screener workspace contract — complete.** The Screener now loads the
+   locally stored 210-stock NSE F&O universe through a versioned
+   `local-stock-screener-v1` contract. It preserves ready, partial-history,
+   stale, and unavailable rows; exposes search, readiness and price-evidence
+   filters; and supports transparent sorting across 20/60-session returns,
+   20-session excess return versus Nifty 50, moving-average position, 52-week
+   position/drawdown, and realized volatility. Formula definitions, freshness,
+   coverage, and current evidence limitations are visible in the workspace.
+   The screen is descriptive EOD evidence, not a recommendation or backtest.
+21. **Dashboard summary layer — Screener slice complete.** The Dashboard now
+   summarizes the versioned local screen with universe readiness, freshness,
+   positive 20-session return count, 200-session-average breadth, and the count
+   outperforming Nifty 50 over 20 sessions. It labels the highest and lowest
+   observed excess-return rows as descriptive extremes, preserves stale and
+   partial states, and routes to the full Screener. Counts and extremes are
+   explicitly not recommendations, validated ranks, or risk-adjusted alpha.
+22. **Events Calendar v1 — complete.** Replaced the News & Events workspace with
+   the versioned `macro-events-calendar-v1` contract. It lists 13 upcoming
+   October–December 2026 India and U.S. macro events from reviewed official
+   MoSPI, Federal Reserve, and U.S. BLS calendar snapshots, converts specified
+   release times to IST, and supports region and event-type filters. The source
+   table distinguishes verified snapshots from date-pending sources.
+23. **RBI date-safety boundary — complete.** RBI remains visible as an official
+   source, but its 2026–27 dated schedule is marked `date_confirmation_required`
+   rather than populated from an unverified calendar. Weekend MoSPI releases
+   carry the official next-working-day caveat. This is a reviewed snapshot, not
+   an automatically synchronized calendar; dates must be rechecked at source.
+24. **News work paused by owner direction.** The earlier corporate-filings source
+   review and manual NSE CSV importer remain dormant and are not exposed in the
+   active workspace. Unscheduled news, headlines, sentiment, surprise estimates,
+   impact scores, recommendations, and trade interpretation are out of scope.
+25. **Next executable step:** add a concise Events Calendar Dashboard card using
+   the same contract (next event, seven-day count, source readiness), then extend
+   calendar coverage only when dates can be verified from official sources.
 
 ## Approved product-integration milestones
 
@@ -336,6 +361,8 @@ with the market environment. It remains an analytical review, not execution.
 7. **Indian events foundation** — evaluate permissions and source quality for
    exchange announcements, financial results, investor presentations,
    shareholding changes, insider disclosures, bulk/block deals, and transcripts.
+   The first source-readiness workspace and compliant NSE manual CSV importer are
+   complete; automated NSE collection remains disabled under the published terms.
 8. **Evidence-grounded analyst** — answer questions only from approved local
    calculations and documents, with source, timestamp, and calculation citations.
 

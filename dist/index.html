@@ -417,6 +417,8 @@
     .summary-meta { margin-top: 5px; color: var(--muted); font-size: 13px; }
     .positive { color: var(--success); }
     .negative { color: var(--danger); }
+    .official-source-link { color: var(--brand-deep); font-weight: 650; text-decoration: none; }
+    .official-source-link:hover { text-decoration: underline; }
 
     .workspace-summary-card {
       padding: 20px;
@@ -433,10 +435,17 @@
     }
     .workspace-summary-kicker { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
     .workspace-summary-headline { margin: 5px 0 0; color: var(--heading); font-size: 21px; font-weight: 720; }
+    .workspace-summary-selector { display: flex; align-items: center; gap: 9px; margin: 14px 0; }
+    .workspace-summary-selector label { color: var(--muted); font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+    .workspace-summary-selector select { min-width: 230px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); background: var(--control-bg); }
     .workspace-summary-status { padding: 4px 8px; border-radius: 999px; color: #94620a; background: #fff4db; font-size: 12px; font-weight: 650; white-space: nowrap; }
     .workspace-summary-status.ready { color: #187a42; background: #e8f7ee; }
     .workspace-summary-status.defensive { color: #a42f35; background: #fdebec; }
     .workspace-summary-status.unavailable { color: #a42f35; background: #fdebec; }
+    .screener-status { display: inline-block; padding: 3px 7px; border-radius: 999px; color: #94620a; background: #fff4db; font-size: 11px; font-weight: 650; white-space: nowrap; }
+    .screener-status.ready { color: #187a42; background: #e8f7ee; }
+    .screener-status.stale,
+    .screener-status.unavailable { color: #a42f35; background: #fdebec; }
     .workspace-summary-copy { margin: 10px 0 16px; color: var(--muted); font-size: 13px; }
     .workspace-summary-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
     .workspace-summary-metric { padding: 12px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-soft); }
@@ -493,7 +502,8 @@
     }
     .selector-field { display: grid; gap: 6px; }
     .selector-field label { color: #44484f; font-size: 13px; font-weight: 600; }
-    .selector-field select {
+    .selector-field select,
+    .selector-field input {
       width: 100%;
       min-height: 40px;
       padding: 8px 10px;
@@ -751,6 +761,7 @@
     html[data-theme="dark"] .selector-field label { color: #d4d8de; }
     html[data-theme="dark"] .field input,
     html[data-theme="dark"] .selector-field select,
+    html[data-theme="dark"] .selector-field input,
     html[data-theme="dark"] .flow-chart-toolbar select,
     html[data-theme="dark"] .futures-table-toolbar select,
     html[data-theme="dark"] .panel-button { border-color: #444b56; color: var(--ink); background: var(--control-bg); }
@@ -781,6 +792,10 @@
     html[data-theme="dark"] .workspace-summary-status.ready { color: #73d59a; background: #173525; }
     html[data-theme="dark"] .workspace-summary-status.defensive { color: #f08d93; background: #432226; }
     html[data-theme="dark"] .workspace-summary-status.unavailable { color: #f08d93; background: #432226; }
+    html[data-theme="dark"] .screener-status { color: #f0c56c; background: #423417; }
+    html[data-theme="dark"] .screener-status.ready { color: #73d59a; background: #173525; }
+    html[data-theme="dark"] .screener-status.stale,
+    html[data-theme="dark"] .screener-status.unavailable { color: #f08d93; background: #432226; }
     html[data-theme="dark"] .sentiment-band.defensive,
     html[data-theme="dark"] .futures-state.short-build-up,
     html[data-theme="dark"] .futures-state.long-unwinding { color: #f08d93; background: #432226; }
@@ -893,7 +908,7 @@
           <li><button class="nav-button" data-page="Seasonality Analysis" style="--item-color:#60a625"><span class="nav-icon"></span><span>Seasonality Analysis</span></button></li>
           <li><button class="nav-button" data-page="Earnings Analysis" style="--item-color:#c52d78"><span class="nav-icon"></span><span>Earnings Analysis</span></button></li>
           <li><button class="nav-button" data-page="Portfolio Analysis" style="--item-color:#8f3bd1"><span class="nav-icon"></span><span>Portfolio Analysis</span></button></li>
-          <li><button class="nav-button" data-page="News & Events" style="--item-color:#e6980b"><span class="nav-icon"></span><span>News & Events</span></button></li>
+          <li><button class="nav-button" data-page="Events Calendar" style="--item-color:#e6980b"><span class="nav-icon"></span><span>Events Calendar</span></button></li>
           <li><button class="nav-button" data-page="Stock Data YTD" style="--item-color:#0c94b7"><span class="nav-icon"></span><span>Stock Data YTD</span></button></li>
         </ul>
       </nav>
@@ -1004,14 +1019,54 @@
           </div>
         </section>
 
+        <section class="dashboard-section" aria-labelledby="dashboardScreenerTitle">
+          <div class="workspace-summary-card">
+            <div class="workspace-summary-head">
+              <div>
+                <div class="workspace-summary-kicker">Workspace summary · local NSE F&amp;O equities</div>
+                <h2 class="workspace-summary-headline" id="dashboardScreenerTitle">Screener</h2>
+              </div>
+              <span class="workspace-summary-status" id="dashboardScreenerStatus">Loading local screen</span>
+            </div>
+            <p class="workspace-summary-copy" id="dashboardScreenerCopy">Summarizing transparent price, trend, and Nifty-relative observations from stored EOD history.</p>
+            <div class="workspace-summary-metrics" aria-label="Screener summary">
+              <div class="workspace-summary-metric"><strong id="dashboardScreenerReady">—</strong><span>Calculation-ready</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardScreenerPositive">—</strong><span>Positive over 20 sessions</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardScreenerAbove200">—</strong><span>Above 200-session average</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardScreenerOutperforming">—</strong><span>Outperforming Nifty · 20 sessions</span></div>
+            </div>
+            <div class="workspace-summary-readiness">
+              <span><strong>As of</strong> <span id="dashboardScreenerAsOf">—</span></span>
+              <span><strong>Freshness</strong> <span id="dashboardScreenerFreshness">—</span></span>
+              <span><strong>Coverage</strong> <span id="dashboardScreenerCoverage">—</span></span>
+              <span><strong>Nifty 20-session return</strong> <span id="dashboardScreenerBenchmark">—</span></span>
+            </div>
+            <div class="workspace-summary-readiness">
+              <span><strong>Highest observed excess</strong> <span id="dashboardScreenerHighest">—</span></span>
+              <span><strong>Lowest observed excess</strong> <span id="dashboardScreenerLowest">—</span></span>
+            </div>
+            <div class="workspace-summary-actions">
+              <div class="workspace-summary-note" id="dashboardScreenerNote">Current local EOD observations only. Counts and extremes are not recommendations or validated ranks.</div>
+              <div class="workspace-summary-buttons">
+                <button class="panel-button" id="refreshDashboardScreenerButton" type="button">Refresh summary</button>
+                <button class="panel-button primary" id="viewScreenerButton" type="button">View details</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section class="dashboard-section" aria-labelledby="dashboardSeasonalityTitle">
           <div class="workspace-summary-card">
             <div class="workspace-summary-head">
               <div>
-                <div class="workspace-summary-kicker">Workspace summary · Nifty 50</div>
+                <div class="workspace-summary-kicker">Workspace summary · all supported indices</div>
                 <h2 class="workspace-summary-headline" id="dashboardSeasonalityTitle">Seasonality</h2>
               </div>
               <span class="workspace-summary-status" id="dashboardSeasonalityStatus">Loading local history</span>
+            </div>
+            <div class="workspace-summary-selector">
+              <label for="dashboardSeasonalityIndexSelect">Index</label>
+              <select id="dashboardSeasonalityIndexSelect" aria-label="Dashboard seasonality index"></select>
             </div>
             <p class="workspace-summary-copy" id="dashboardSeasonalityCopy">Calculating month-of-year evidence and chronological holdout checks from stored EOD history.</p>
             <div class="workspace-summary-metrics" aria-label="Seasonality summary">
@@ -1024,6 +1079,7 @@
               <span><strong>As of</strong> <span id="dashboardSeasonalityAsOf">—</span></span>
               <span><strong>History</strong> <span id="dashboardSeasonalityHistory">—</span></span>
               <span><strong>Calendar coverage</strong> <span id="dashboardSeasonalityCoverage">—</span></span>
+              <span><strong>Universe readiness</strong> <span id="dashboardSeasonalityUniverse">—</span></span>
               <span><strong>Turn-of-month test</strong> <span id="dashboardSeasonalityTurn">—</span></span>
             </div>
             <div class="workspace-summary-actions">
@@ -1517,6 +1573,90 @@
           </div>
         </section>
 
+        <section id="screenerView" hidden aria-labelledby="screenerTitle">
+          <div class="page-tabs" aria-label="Screener views">
+            <div class="page-tab active">Local factors</div>
+          </div>
+
+          <div class="analysis-intro">
+            <div>
+              <h1 id="screenerTitle">Screener</h1>
+              <p class="analysis-caption">Locally stored NSE F&amp;O equities · completed EOD sessions</p>
+            </div>
+            <div class="analysis-status" id="screenerDataStatus">Local screen not loaded</div>
+          </div>
+
+          <div class="analysis-note">
+            This first contract exposes transparent price, trend, relative-strength, and volatility evidence only. It is a descriptive research table—not a recommendation, backtest, or trade-ranking model.
+          </div>
+
+          <div class="universe-controls" aria-label="Screener filters">
+            <div class="selector-field">
+              <label for="screenerSearchInput">Symbol search</label>
+              <input id="screenerSearchInput" type="search" placeholder="e.g. INFY" autocomplete="off">
+            </div>
+            <div class="selector-field">
+              <label for="screenerReadinessSelect">Data readiness</label>
+              <select id="screenerReadinessSelect">
+                <option value="all">All readiness states</option>
+                <option value="ready">Ready</option>
+                <option value="partial_history">Partial history</option>
+                <option value="stale">Stale</option>
+                <option value="unavailable">Unavailable</option>
+              </select>
+            </div>
+            <div class="selector-field">
+              <label for="screenerEvidenceSelect">Price evidence</label>
+              <select id="screenerEvidenceSelect">
+                <option value="all">All price evidence</option>
+                <option value="positive_20d">Positive 20-session return</option>
+                <option value="negative_20d">Negative 20-session return</option>
+                <option value="above_200dma">Above 200-session average</option>
+                <option value="below_200dma">Below 200-session average</option>
+              </select>
+            </div>
+            <div class="selector-field">
+              <label for="screenerSortSelect">Sort rows</label>
+              <select id="screenerSortSelect">
+                <option value="excess_desc">20-session excess vs Nifty 50</option>
+                <option value="return_desc">20-session return</option>
+                <option value="dma200_desc">Distance above 200DMA</option>
+                <option value="volatility_asc">20-session volatility · low first</option>
+                <option value="symbol_asc">Symbol A–Z</option>
+              </select>
+            </div>
+            <div class="universe-action-row">
+              <button class="panel-button" id="refreshScreenerButton" type="button">Refresh local screen</button>
+              <span class="universe-action-status" id="screenerFilterStatus">Uses validated local candles; Kite is not required.</span>
+            </div>
+            <p class="universe-source" id="screenerSourceNote">Universe and readiness are calculated from the local append-only EOD store.</p>
+          </div>
+
+          <section class="summary-grid" aria-label="Screener readiness summary">
+            <article class="summary-card"><div class="summary-value" id="screenerUniverseValue">—</div><div class="summary-meta">Stored F&amp;O equities</div></article>
+            <article class="summary-card"><div class="summary-value" id="screenerReadyValue">—</div><div class="summary-meta">Ready · 252 aligned sessions</div></article>
+            <article class="summary-card"><div class="summary-value" id="screenerPartialValue">—</div><div class="summary-meta">Partial / stale / unavailable</div></article>
+            <article class="summary-card"><div class="summary-value" id="screenerAsOfValue">—</div><div class="summary-meta">Latest benchmark session</div></article>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Transparent local factor table</h2>
+            <p class="section-note" id="screenerTableNote">Load the local screen to inspect coverage and factor values.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Symbol</th><th>Status</th><th>Sessions</th><th>Close</th><th>20d return</th><th>20d excess vs Nifty</th><th>vs 20DMA</th><th>vs 50DMA</th><th>vs 200DMA</th><th>52w position</th><th>52w drawdown</th><th>20d realised vol</th></tr></thead>
+                <tbody id="screenerTableBody"><tr><td colspan="12">Local screen has not been loaded.</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Contract and limitations</h2>
+            <p class="section-note">Every displayed column has a fixed formula. Missing data stays missing; no neutral value is substituted.</p>
+            <div class="analysis-note" id="screenerContractNote">The local screener contract has not been loaded.</div>
+          </section>
+        </section>
+
         <section id="seasonalityView" hidden aria-labelledby="seasonalityTitle">
           <div class="page-tabs" aria-label="Seasonality views">
             <div class="page-tab active">Overview</div>
@@ -1680,6 +1820,84 @@
           </section>
         </section>
 
+        <section id="newsEventsView" hidden aria-labelledby="newsEventsTitle">
+          <div class="page-tabs" aria-label="Events Calendar views">
+            <div class="page-tab active">Macro calendar</div>
+          </div>
+
+          <div class="analysis-intro">
+            <div>
+              <h1 id="newsEventsTitle">Events Calendar</h1>
+              <p class="analysis-caption">Central-bank meetings · inflation, growth, and policy releases</p>
+            </div>
+            <button class="panel-button" id="refreshNewsEventsButton" type="button">Refresh calendar</button>
+          </div>
+
+          <div class="analysis-status" id="newsEventsStatus">Event calendar not loaded</div>
+          <div class="analysis-note" id="newsEventsIntroNote">
+            Scheduled macro events only. Unscheduled news, consensus estimates, surprise scores, and trade-impact labels are excluded.
+          </div>
+
+          <section class="summary-grid" aria-label="Macro event calendar summary">
+            <article class="summary-card"><div class="summary-value" id="eventsUpcomingValue">—</div><div class="summary-meta">Upcoming events</div></article>
+            <article class="summary-card"><div class="summary-value" id="eventsSevenDayValue">—</div><div class="summary-meta">Within seven days</div></article>
+            <article class="summary-card"><div class="summary-value" id="eventsIndiaValue">—</div><div class="summary-meta">India events</div></article>
+            <article class="summary-card"><div class="summary-value" id="eventsUsValue">—</div><div class="summary-meta">U.S. events</div></article>
+          </section>
+
+          <div class="universe-controls" aria-label="Macro event filters">
+            <div class="selector-field">
+              <label for="eventRegionSelect">Region</label>
+              <select id="eventRegionSelect">
+                <option value="all">India and United States</option>
+                <option value="India">India</option>
+                <option value="United States">United States</option>
+              </select>
+            </div>
+            <div class="selector-field">
+              <label for="eventCategorySelect">Event type</label>
+              <select id="eventCategorySelect">
+                <option value="all">All event types</option>
+                <option value="central_bank">Central-bank policy</option>
+                <option value="inflation">Inflation releases</option>
+                <option value="growth">Growth and production</option>
+              </select>
+            </div>
+            <div class="universe-action-row">
+              <span class="universe-action-status" id="eventFilterStatus">Official calendar snapshot; verify source before relying on a date.</span>
+            </div>
+            <p class="universe-source" id="eventNextNote">The next scheduled event will appear after the calendar loads.</p>
+          </div>
+
+          <section class="analysis-section">
+            <h2>Upcoming macro events</h2>
+            <p class="section-note">Timed U.S. releases include their India Standard Time conversion. All-day dates have no assumed release time.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Date / window</th><th>Event</th><th>Region</th><th>Type</th><th>India time</th><th>Days</th><th>Official source</th><th>Note</th></tr></thead>
+                <tbody id="macroEventsBody"><tr><td colspan="8">Macro calendar has not been loaded.</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Calendar source readiness</h2>
+            <p class="section-note">Only verified dated snapshots can populate the event table. RBI remains visible but date-pending rather than guessed.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Calendar</th><th>Authority</th><th>Region</th><th>Status</th><th>Review note</th><th>Official page</th></tr></thead>
+                <tbody id="macroEventSourcesBody"><tr><td colspan="6">Calendar sources have not been loaded.</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Contract and limitations</h2>
+            <p class="section-note">This is a reviewed event snapshot, not a continuously synchronized economic calendar.</p>
+            <div class="analysis-note" id="newsEventsContractNote">The macro-events contract has not been loaded.</div>
+          </section>
+        </section>
+
         <section id="emptyView" hidden aria-live="polite">
           <h1 id="emptyPageTitle"></h1>
         </section>
@@ -1702,7 +1920,10 @@
     const viewMarketSentimentButton = document.getElementById('viewMarketSentimentButton');
     const refreshDashboardFnoButton = document.getElementById('refreshDashboardFnoButton');
     const viewFnoButton = document.getElementById('viewFnoButton');
+    const refreshDashboardScreenerButton = document.getElementById('refreshDashboardScreenerButton');
+    const viewScreenerButton = document.getElementById('viewScreenerButton');
     const refreshDashboardSeasonalityButton = document.getElementById('refreshDashboardSeasonalityButton');
+    const dashboardSeasonalityIndexSelect = document.getElementById('dashboardSeasonalityIndexSelect');
     const viewSeasonalityButton = document.getElementById('viewSeasonalityButton');
     const marketSentimentView = document.getElementById('marketSentimentView');
     const refreshSentimentButton = document.getElementById('refreshSentimentButton');
@@ -1711,7 +1932,17 @@
     const refreshRegimeValidationButton = document.getElementById('refreshRegimeValidationButton');
     const fnoView = document.getElementById('fnoView');
     const refreshFnoButton = document.getElementById('refreshFnoButton');
+    const screenerView = document.getElementById('screenerView');
+    const refreshScreenerButton = document.getElementById('refreshScreenerButton');
+    const screenerSearchInput = document.getElementById('screenerSearchInput');
+    const screenerReadinessSelect = document.getElementById('screenerReadinessSelect');
+    const screenerEvidenceSelect = document.getElementById('screenerEvidenceSelect');
+    const screenerSortSelect = document.getElementById('screenerSortSelect');
     const seasonalityView = document.getElementById('seasonalityView');
+    const newsEventsView = document.getElementById('newsEventsView');
+    const refreshNewsEventsButton = document.getElementById('refreshNewsEventsButton');
+    const eventRegionSelect = document.getElementById('eventRegionSelect');
+    const eventCategorySelect = document.getElementById('eventCategorySelect');
     const seasonalityIndexSelect = document.getElementById('seasonalityIndexSelect');
     const seasonalityStockSelect = document.getElementById('seasonalityStockSelect');
     const seasonalityInstrumentLabel = document.getElementById('seasonalityInstrumentLabel');
@@ -1780,7 +2011,11 @@
     let priceStrengthSeries = [];
     let futuresOiRows = [];
     let futuresOiSort = { key: 'underlying', direction: 'asc' };
+    let screenerRows = [];
+    let screenerPayload = {};
     let regimeValidationUniverse = [];
+    let dashboardSeasonalityRows = [];
+    let dashboardSeasonalityUniverse = {};
     const displayMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     function currentTheme() {
@@ -1819,7 +2054,10 @@
       reference.indexGroups.forEach((group) => {
         const optionGroup = document.createElement('optgroup');
         optionGroup.label = group.label;
-        group.items.forEach((name) => appendChoice(optionGroup, name, name));
+        group.items.forEach((name) => {
+          appendChoice(optionGroup, name, name);
+          appendChoice(dashboardSeasonalityIndexSelect, name, name);
+        });
         seasonalityIndexSelect.appendChild(optionGroup);
       });
       appendChoice(seasonalityStockSelect, '', 'Choose an F&O stock');
@@ -1827,6 +2065,7 @@
         .sort((left, right) => left[0].localeCompare(right[0]))
         .forEach(([symbol, name]) => appendChoice(seasonalityStockSelect, symbol, `${symbol} — ${name}`));
       seasonalityIndexSelect.value = 'Nifty 50';
+      dashboardSeasonalityIndexSelect.value = 'Nifty 50';
       historicalMonthSelect.value = String(new Date().getMonth() + 1);
       seasonalitySelectionNote.textContent = `${reference.indexGroups.reduce((total, group) => total + group.items.length, 0)} Kite-supported indices and ${reference.foStocks.length} NSE F&O stocks · rolling 10-year history · reference snapshot ${formatDisplayDate(reference.asOf)}.`;
     }
@@ -1838,6 +2077,7 @@
       seasonalityInstrumentLabel.textContent = name;
       seasonalityCaption.textContent = `${name} · completed EOD sessions`;
       resetSeasonalityData();
+      loadLocalSeasonality(false);
     }
 
     function selectSeasonalityStock() {
@@ -1847,6 +2087,7 @@
       seasonalityInstrumentLabel.textContent = symbol;
       seasonalityCaption.textContent = `${symbol} · NSE F&O equity · completed EOD sessions`;
       resetSeasonalityData();
+      loadLocalSeasonality(false);
     }
 
     initialiseSeasonalityUniverses();
@@ -2518,12 +2759,119 @@
       }
     }
 
-    function renderDashboardSeasonalitySummary(result) {
+    function renderDashboardScreenerSummary(result) {
+      const coverage = result.coverage || {};
+      const freshness = result.freshness || {};
+      const observations = result.observations || {};
+      const highest = observations.highest_20d_excess || {};
+      const lowest = observations.lowest_20d_excess || {};
+      const status = document.getElementById('dashboardScreenerStatus');
+      const statusLabels = {
+        evidence_ready: 'Current screen ready',
+        stale_evidence: 'Stored screen is stale',
+        partial_history: 'Partial history',
+        screen_unavailable: 'Screen unavailable',
+      };
+      status.textContent = statusLabels[result.status] || 'Descriptive screen ready';
+      const statusTone = result.status === 'evidence_ready'
+        ? 'ready'
+        : result.status === 'stale_evidence' || result.status === 'screen_unavailable'
+          ? 'unavailable'
+          : '';
+      status.className = `workspace-summary-status ${statusTone}`.trim();
+      document.getElementById('dashboardScreenerReady').textContent = Number(coverage.ready || 0).toLocaleString('en-IN');
+      document.getElementById('dashboardScreenerPositive').textContent = Number(observations.positive_20d || 0).toLocaleString('en-IN');
+      document.getElementById('dashboardScreenerAbove200').textContent = Number(observations.above_200dma || 0).toLocaleString('en-IN');
+      document.getElementById('dashboardScreenerOutperforming').textContent = Number(observations.outperforming_nifty_20d || 0).toLocaleString('en-IN');
+      document.getElementById('dashboardScreenerAsOf').textContent = formatDisplayDate(result.as_of_date);
+      const freshnessLabels = { fresh: 'Fresh', stale: 'Stale local EOD' };
+      document.getElementById('dashboardScreenerFreshness').textContent =
+        `${freshnessLabels[freshness.state] || freshness.state || 'Unavailable'} · expected through ${formatDisplayDate(freshness.expected_through)}`;
+      document.getElementById('dashboardScreenerCoverage').textContent =
+        `${Number(coverage.ready || 0)}/${Number(coverage.total || 0)} ready · ${Number(coverage.partial_history || 0)} partial · ${Number(coverage.stale || 0)} stale · ${Number(coverage.unavailable || 0)} unavailable`;
+      document.getElementById('dashboardScreenerBenchmark').textContent =
+        formatScreenerNumber(result.benchmark_return_20d_pct, 2, true, '%');
+      document.getElementById('dashboardScreenerHighest').textContent = highest.symbol
+        ? `${highest.symbol} ${formatScreenerNumber(highest.excess_20d_vs_nifty_pct, 2, true, ' pt')}`
+        : 'Unavailable';
+      document.getElementById('dashboardScreenerLowest').textContent = lowest.symbol
+        ? `${lowest.symbol} ${formatScreenerNumber(lowest.excess_20d_vs_nifty_pct, 2, true, ' pt')}`
+        : 'Unavailable';
+      const ready = Number(coverage.ready || 0);
+      document.getElementById('dashboardScreenerCopy').textContent = ready
+        ? `${Number(observations.positive_20d || 0)} of ${ready} ready equities have a positive 20-session return; ${Number(observations.outperforming_nifty_20d || 0)} outperformed Nifty 50 over the same window.`
+        : 'No calculation-ready local equity rows are available.';
+      document.getElementById('dashboardScreenerNote').textContent =
+        `${result.contract_version || 'Local screen'} · current EOD counts and extremes only. They are not recommendations, validated ranks, or risk-adjusted alpha.`;
+    }
+
+    async function loadDashboardScreenerSummary(showSuccess = false) {
+      refreshDashboardScreenerButton.disabled = true;
+      refreshDashboardScreenerButton.textContent = 'Refreshing…';
+      const status = document.getElementById('dashboardScreenerStatus');
+      status.textContent = 'Loading local screen';
+      status.className = 'workspace-summary-status';
+      try {
+        const response = await fetch('/api/dashboard/screener-summary', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) throw new Error('summary_unavailable');
+        renderDashboardScreenerSummary(result);
+        if (showSuccess) showNotice(`Screener summary refreshed through ${formatDisplayDate(result.as_of_date)}.`);
+        return true;
+      } catch (_error) {
+        status.textContent = 'Summary unavailable';
+        status.className = 'workspace-summary-status unavailable';
+        document.getElementById('dashboardScreenerCopy').textContent = 'The stored Screener summary could not be calculated.';
+        return false;
+      } finally {
+        refreshDashboardScreenerButton.disabled = false;
+        refreshDashboardScreenerButton.textContent = 'Refresh summary';
+      }
+    }
+
+    function updateSeasonalityIndexReadiness(rows, universe) {
+      const byInstrument = new Map(rows.map((row) => [row.instrument, row]));
+      [dashboardSeasonalityIndexSelect, seasonalityIndexSelect].forEach((select) => {
+        Array.from(select.options).forEach((option) => {
+          const row = byInstrument.get(option.value);
+          if (!row) return;
+          const readiness = row.status === 'historical_evidence_ready'
+            ? `${Number(row.completed_sessions).toLocaleString('en-IN')} sessions`
+            : row.status === 'partial_history'
+              ? `${Number(row.completed_sessions).toLocaleString('en-IN')} sessions · partial`
+              : 'history unavailable';
+          option.textContent = `${row.instrument} — ${readiness}`;
+        });
+      });
+      seasonalitySelectionNote.textContent =
+        `${Number(universe.available || 0)}/${Number(universe.total || rows.length)} supported indices have local history; ${Number(universe.ready || 0)} have complete calendar and holdout coverage. Short-history indices remain selectable and visibly partial.`;
+    }
+
+    function renderDashboardSeasonalitySummary(result, universe = {}) {
+      const status = document.getElementById('dashboardSeasonalityStatus');
+      document.getElementById('dashboardSeasonalityUniverse').textContent =
+        `${Number(universe.ready || 0)} ready · ${Number(universe.partial || 0)} partial · ${Number(universe.unavailable || 0)} unavailable`;
+      if (!result || result.ok !== true) {
+        status.textContent = 'History unavailable';
+        status.className = 'workspace-summary-status unavailable';
+        document.getElementById('dashboardSeasonalityStrongest').textContent = '—';
+        document.getElementById('dashboardSeasonalityWeakest').textContent = '—';
+        document.getElementById('dashboardSeasonalitySessions').textContent = '0';
+        document.getElementById('dashboardSeasonalitySurvived').textContent = '—';
+        document.getElementById('dashboardSeasonalityAsOf').textContent = '—';
+        document.getElementById('dashboardSeasonalityHistory').textContent = 'Not stored';
+        document.getElementById('dashboardSeasonalityCoverage').textContent = '0/12 months';
+        document.getElementById('dashboardSeasonalityTurn').textContent = 'Unavailable';
+        document.getElementById('dashboardSeasonalityCopy').textContent =
+          `${result && result.instrument ? result.instrument : 'This index'} has no usable local seasonality history yet.`;
+        document.getElementById('dashboardSeasonalityNote').textContent =
+          'Run EOD update while Kite is connected to synchronize this index. Nifty 50 evidence is not substituted.';
+        return;
+      }
       const strongest = result.strongest_month || {};
       const weakest = result.weakest_month || {};
       const holdout = result.holdout || {};
       const turn = result.turn_of_month_test || {};
-      const status = document.getElementById('dashboardSeasonalityStatus');
       status.textContent = result.status === 'historical_evidence_ready' ? 'Historical evidence ready' : 'Partial history';
       status.className = `workspace-summary-status ${result.status === 'historical_evidence_ready' ? 'ready' : ''}`.trim();
       document.getElementById('dashboardSeasonalityStrongest').textContent = strongest.period
@@ -2544,7 +2892,13 @@
         ? `${strongest.period} has the highest historical average (${formatSeasonalityPercentage(strongest.average_return_pct, true)}, ${strongest.count} observations); ${weakest.period} has the lowest (${formatSeasonalityPercentage(weakest.average_return_pct, true)}, ${weakest.count} observations).`
         : 'Month-of-year evidence is still building.';
       document.getElementById('dashboardSeasonalityNote').textContent =
-        `${Number(holdout.same_direction || 0)}/12 months kept the same direction across the chronological split; ${Number(holdout.survived || 0)} survived both halves. Historical evidence only—not a forecast.`;
+        `${result.instrument}: ${Number(holdout.same_direction || 0)}/12 months kept the same direction across the chronological split; ${Number(holdout.survived || 0)} survived both halves. Historical evidence only—not a forecast.`;
+    }
+
+    function renderSelectedDashboardSeasonality() {
+      const instrument = dashboardSeasonalityIndexSelect.value || 'Nifty 50';
+      const selected = dashboardSeasonalityRows.find((row) => row.instrument === instrument);
+      renderDashboardSeasonalitySummary(selected, dashboardSeasonalityUniverse);
     }
 
     async function loadDashboardSeasonalitySummary(showSuccess = false) {
@@ -2557,13 +2911,21 @@
         const response = await fetch('/api/dashboard/seasonality-summary', { cache: 'no-store' });
         const result = await response.json();
         if (!response.ok || result.ok !== true) throw new Error('summary_unavailable');
-        renderDashboardSeasonalitySummary(result);
-        if (showSuccess) showNotice(`Seasonality summary refreshed through ${formatDisplayDate(result.as_of_date)}.`);
+        dashboardSeasonalityRows = Array.isArray(result.indices) ? result.indices : [];
+        dashboardSeasonalityUniverse = result.universe || {};
+        updateSeasonalityIndexReadiness(dashboardSeasonalityRows, dashboardSeasonalityUniverse);
+        renderSelectedDashboardSeasonality();
+        const selected = dashboardSeasonalityRows.find((row) => row.instrument === dashboardSeasonalityIndexSelect.value);
+        if (showSuccess) showNotice(
+          selected && selected.as_of_date
+            ? `${selected.instrument} seasonality refreshed through ${formatDisplayDate(selected.as_of_date)}.`
+            : 'All-index seasonality readiness refreshed.'
+        );
         return true;
       } catch (_error) {
         status.textContent = 'Summary unavailable';
         status.className = 'workspace-summary-status unavailable';
-        document.getElementById('dashboardSeasonalityCopy').textContent = 'The stored Nifty 50 seasonality summary could not be calculated.';
+        document.getElementById('dashboardSeasonalityCopy').textContent = 'The stored all-index seasonality summary could not be calculated.';
         return false;
       } finally {
         refreshDashboardSeasonalityButton.disabled = false;
@@ -3077,6 +3439,222 @@
         .replaceAll("'", '&#039;');
     }
 
+    function formatScreenerNumber(value, digits = 2, signed = false, suffix = '') {
+      if (value === null || value === undefined) return '—';
+      const number = Number(value);
+      return `${signed && number > 0 ? '+' : ''}${number.toFixed(digits)}${suffix}`;
+    }
+
+    function filteredScreenerRows() {
+      const search = screenerSearchInput.value.trim().toUpperCase();
+      const readiness = screenerReadinessSelect.value;
+      const evidence = screenerEvidenceSelect.value;
+      const matchesEvidence = (row) => {
+        if (evidence === 'positive_20d') return row.return_20d_pct !== null && row.return_20d_pct > 0;
+        if (evidence === 'negative_20d') return row.return_20d_pct !== null && row.return_20d_pct < 0;
+        if (evidence === 'above_200dma') return row.vs_200dma_pct !== null && row.vs_200dma_pct > 0;
+        if (evidence === 'below_200dma') return row.vs_200dma_pct !== null && row.vs_200dma_pct < 0;
+        return true;
+      };
+      const rows = screenerRows.filter((row) =>
+        (!search || row.symbol.includes(search))
+        && (readiness === 'all' || row.status === readiness)
+        && matchesEvidence(row)
+      );
+      const sortValue = (row, key) => row[key] === null || row[key] === undefined ? -Infinity : Number(row[key]);
+      rows.sort((left, right) => {
+        if (screenerSortSelect.value === 'symbol_asc') return left.symbol.localeCompare(right.symbol);
+        if (screenerSortSelect.value === 'volatility_asc') {
+          const leftValue = left.realised_volatility_20d_pct;
+          const rightValue = right.realised_volatility_20d_pct;
+          if (leftValue === null) return 1;
+          if (rightValue === null) return -1;
+          return Number(leftValue) - Number(rightValue) || left.symbol.localeCompare(right.symbol);
+        }
+        const key = screenerSortSelect.value === 'return_desc'
+          ? 'return_20d_pct'
+          : screenerSortSelect.value === 'dma200_desc'
+            ? 'vs_200dma_pct'
+            : 'excess_20d_vs_nifty_pct';
+        return sortValue(right, key) - sortValue(left, key) || left.symbol.localeCompare(right.symbol);
+      });
+      return rows;
+    }
+
+    function renderScreenerRows() {
+      const rows = filteredScreenerRows();
+      const labels = {
+        ready: 'Ready',
+        partial_history: 'Partial',
+        stale: 'Stale',
+        unavailable: 'Unavailable',
+      };
+      document.getElementById('screenerTableBody').innerHTML = rows.length
+        ? rows.map((row) => `<tr>
+            <td>${escapeHtml(row.symbol)}</td>
+            <td><span class="screener-status ${escapeHtml(row.status)}" title="${escapeHtml(row.reason)}">${labels[row.status] || escapeHtml(row.status)}</span></td>
+            <td>${Number(row.sessions).toLocaleString('en-IN')}</td>
+            <td>${formatScreenerNumber(row.close)}</td>
+            <td>${formatScreenerNumber(row.return_20d_pct, 2, true, '%')}</td>
+            <td>${formatScreenerNumber(row.excess_20d_vs_nifty_pct, 2, true, ' pt')}</td>
+            <td>${formatScreenerNumber(row.vs_20dma_pct, 2, true, '%')}</td>
+            <td>${formatScreenerNumber(row.vs_50dma_pct, 2, true, '%')}</td>
+            <td>${formatScreenerNumber(row.vs_200dma_pct, 2, true, '%')}</td>
+            <td>${formatScreenerNumber(row.position_52w_pct, 1, false, '%')}</td>
+            <td>${formatScreenerNumber(row.drawdown_52w_pct, 2, true, '%')}</td>
+            <td>${formatScreenerNumber(row.realised_volatility_20d_pct, 2, false, '%')}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="12">No rows match the current filters.</td></tr>';
+      document.getElementById('screenerFilterStatus').textContent =
+        `${rows.length.toLocaleString('en-IN')} of ${screenerRows.length.toLocaleString('en-IN')} rows shown · descriptive evidence only.`;
+    }
+
+    function renderScreener(result) {
+      screenerPayload = result;
+      screenerRows = Array.isArray(result.rows) ? result.rows : [];
+      const coverage = result.coverage || {};
+      const freshness = result.freshness || {};
+      const contract = result.contract || {};
+      document.getElementById('screenerUniverseValue').textContent = Number(coverage.total || 0).toLocaleString('en-IN');
+      document.getElementById('screenerReadyValue').textContent = Number(coverage.ready || 0).toLocaleString('en-IN');
+      document.getElementById('screenerPartialValue').textContent = Number(
+        (coverage.partial_history || 0) + (coverage.stale || 0) + (coverage.unavailable || 0)
+      ).toLocaleString('en-IN');
+      document.getElementById('screenerAsOfValue').textContent = formatDisplayDate(result.as_of_date);
+      document.getElementById('screenerDataStatus').textContent =
+        `${freshness.state === 'fresh' ? 'Fresh' : 'Stale'} local EOD · ${Number(coverage.ready || 0)}/${Number(coverage.total || 0)} ready`;
+      document.getElementById('screenerSourceNote').textContent =
+        `Local NSE F&O equity universe · benchmark ${result.benchmark} ${formatSeasonalityPercentage(result.benchmark_return_20d_pct, true)} over 20 sessions · expected through ${formatDisplayDate(freshness.expected_through)}.`;
+      document.getElementById('screenerTableNote').textContent =
+        `As of ${formatDisplayDate(result.as_of_date)}. Ready requires ${Number(contract.minimum_ready_sessions || 252)} aligned sessions. Missing values remain unavailable.`;
+      const formulas = contract.formulas || {};
+      const limitations = Array.isArray(contract.limitations) ? contract.limitations : [];
+      document.getElementById('screenerContractNote').innerHTML =
+        `<strong>${escapeHtml(contract.version || 'local-stock-screener-v1')}</strong><br>`
+        + Object.entries(formulas).map(([key, value]) => `${escapeHtml(key)}: ${escapeHtml(value)}`).join('<br>')
+        + `<br><br>${limitations.map((item) => `• ${escapeHtml(item)}`).join('<br>')}`;
+      renderScreenerRows();
+    }
+
+    async function loadLocalScreener(showSuccess = false) {
+      refreshScreenerButton.disabled = true;
+      refreshScreenerButton.textContent = 'Refreshing…';
+      document.getElementById('screenerDataStatus').textContent = 'Calculating local factors…';
+      try {
+        const response = await fetch('/api/screener/local', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) throw new Error('screener_unavailable');
+        renderScreener(result);
+        if (showSuccess) showNotice(`Local screener refreshed through ${formatDisplayDate(result.as_of_date)}.`);
+        return true;
+      } catch (_error) {
+        document.getElementById('screenerDataStatus').textContent = 'Local screen unavailable';
+        document.getElementById('screenerTableBody').innerHTML = '<tr><td colspan="12">Stored stock history could not be evaluated.</td></tr>';
+        return false;
+      } finally {
+        refreshScreenerButton.disabled = false;
+        refreshScreenerButton.textContent = 'Refresh local screen';
+      }
+    }
+
+    let macroEventRows = [];
+
+    function formatEventDate(value) {
+      if (!value) return '—';
+      return formatDisplayDate(String(value).slice(0, 10));
+    }
+
+    function renderMacroEventRows() {
+      const region = eventRegionSelect.value;
+      const category = eventCategorySelect.value;
+      const rows = macroEventRows.filter((event) =>
+        (region === 'all' || event.region === region)
+        && (category === 'all' || event.category === category)
+      );
+      const categoryLabels = {
+        central_bank: 'Central bank',
+        inflation: 'Inflation',
+        growth: 'Growth / production',
+      };
+      document.getElementById('macroEventsBody').innerHTML = rows.length
+        ? rows.map((event) => {
+          const dateWindow = event.end_at
+            ? `${formatDisplayDate(event.start_at)} to ${formatDisplayDate(event.end_at)}`
+            : formatEventDate(event.start_at);
+          return `<tr>
+            <td>${dateWindow}</td>
+            <td>${escapeHtml(event.title)}</td>
+            <td>${escapeHtml(event.region)}</td>
+            <td>${categoryLabels[event.category] || escapeHtml(event.category)}</td>
+            <td>${event.india_time ? `${formatDisplayDateTime(event.india_time)} IST` : 'Time not specified'}</td>
+            <td>${Number(event.days_until)}</td>
+            <td><a class="official-source-link" href="${escapeHtml(event.source_url)}" target="_blank" rel="noreferrer">${escapeHtml(event.source_label)}</a></td>
+            <td>${escapeHtml(event.note || 'Verify official source before the event.')}</td>
+          </tr>`;
+        }).join('')
+        : '<tr><td colspan="8">No upcoming events match the selected filters.</td></tr>';
+      document.getElementById('eventFilterStatus').textContent =
+        `${rows.length} of ${macroEventRows.length} upcoming events shown · scheduled macro events only.`;
+    }
+
+    function renderMacroEventsCalendar(result) {
+      const coverage = result.coverage || {};
+      const contract = result.contract || {};
+      const sources = Array.isArray(result.sources) ? result.sources : [];
+      const limitations = Array.isArray(result.limitations) ? result.limitations : [];
+      macroEventRows = Array.isArray(result.events) ? result.events : [];
+      document.getElementById('newsEventsStatus').textContent =
+        `Official calendar snapshot · reviewed ${formatDisplayDate(result.as_of_date)}`;
+      document.getElementById('eventsUpcomingValue').textContent = Number(coverage.upcoming_events || 0).toLocaleString('en-IN');
+      document.getElementById('eventsSevenDayValue').textContent = Number(coverage.next_7_days || 0).toLocaleString('en-IN');
+      document.getElementById('eventsIndiaValue').textContent = Number(coverage.india_events || 0).toLocaleString('en-IN');
+      document.getElementById('eventsUsValue').textContent = Number(coverage.us_events || 0).toLocaleString('en-IN');
+      const next = result.next_event || {};
+      document.getElementById('eventNextNote').textContent = next.title
+        ? `Next: ${next.title} · ${formatEventDate(next.start_at)} · ${Number(next.days_until)} days away.`
+        : 'No upcoming event is stored in the reviewed snapshot.';
+      document.getElementById('newsEventsIntroNote').textContent =
+        `${contract.version || 'macro-events-calendar-v1'} · scheduled macro events only. Automated sync, unscheduled news, and impact scoring remain off.`;
+      document.getElementById('macroEventSourcesBody').innerHTML = sources.map((source) => {
+        const verified = source.status === 'verified_snapshot';
+        const label = verified ? 'Verified snapshot' : 'Date confirmation required';
+        return `<tr>
+          <td>${escapeHtml(source.label)}</td>
+          <td>${escapeHtml(source.authority)}</td>
+          <td>${escapeHtml(source.region)}</td>
+          <td><span class="screener-status ${verified ? 'ready' : ''}">${label}</span></td>
+          <td>${escapeHtml(source.note)}</td>
+          <td><a class="official-source-link" href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">Open official page</a></td>
+        </tr>`;
+      }).join('');
+      document.getElementById('newsEventsContractNote').innerHTML =
+        `<strong>${escapeHtml(contract.version || 'macro-events-calendar-v1')}</strong><br>`
+        + `Automated sync: ${contract.automated_sync_enabled ? 'enabled' : 'off'} · unscheduled news: ${contract.unscheduled_news_enabled ? 'enabled' : 'off'} · impact scoring: ${contract.impact_scoring_enabled ? 'enabled' : 'off'}`
+        + `<br><br>${limitations.map((item) => `• ${escapeHtml(item)}`).join('<br>')}`;
+      renderMacroEventRows();
+    }
+
+    async function loadMacroEventsCalendar(showSuccess = false) {
+      refreshNewsEventsButton.disabled = true;
+      refreshNewsEventsButton.textContent = 'Refreshing…';
+      document.getElementById('newsEventsStatus').textContent = 'Loading macro calendar…';
+      try {
+        const response = await fetch('/api/events/calendar', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) throw new Error('event_calendar_unavailable');
+        renderMacroEventsCalendar(result);
+        if (showSuccess) showNotice(`Macro calendar refreshed · ${Number(result.coverage.upcoming_events || 0)} upcoming events.`);
+        return true;
+      } catch (_error) {
+        document.getElementById('newsEventsStatus').textContent = 'Macro calendar unavailable';
+        document.getElementById('macroEventsBody').innerHTML = '<tr><td colspan="8">The local macro-event snapshot could not be loaded.</td></tr>';
+        return false;
+      } finally {
+        refreshNewsEventsButton.disabled = false;
+        refreshNewsEventsButton.textContent = 'Refresh calendar';
+      }
+    }
+
     function formatSeasonalityPercentage(value, signed = false) {
       if (value === null || value === undefined) return '—';
       const number = Number(value);
@@ -3155,7 +3733,11 @@
         ? `${strongest.period} ${formatSeasonalityPercentage(strongest.average_return_pct, true)}`
         : '—';
       seasonalitySessionsValue.textContent = Number(result.completed_sessions).toLocaleString('en-IN');
-      seasonalityDataStatus.textContent = `${result.local_only ? 'Local' : 'Kite'} EOD through ${formatDisplayDate(result.as_of_date)}`;
+      const readiness = result.readiness || {};
+      const readinessText = readiness.status === 'partial_history'
+        ? `Partial history · ${Number(readiness.populated_months || populatedMonths.length)}/12 months`
+        : 'Historical evidence ready';
+      seasonalityDataStatus.textContent = `${readinessText} · ${result.local_only ? 'local' : 'Kite'} EOD through ${formatDisplayDate(result.as_of_date)}`;
       const cacheText = result.local_only
         ? ' · local stored history'
         : result.cache_hit
@@ -3163,7 +3745,7 @@
         : result.local_history_reused
           ? ` · local history reused · ${result.new_sessions} new sessions`
           : ` · ${result.new_sessions || 0} sessions saved locally`;
-      seasonalityLoadStatus.textContent = `${formatDisplayDate(result.from_date)} to ${formatDisplayDate(result.as_of_date)}${cacheText}`;
+      seasonalityLoadStatus.textContent = `${formatDisplayDate(result.from_date)} to ${formatDisplayDate(result.as_of_date)} · ${readinessText}${cacheText}`;
       seasonalityMonthNote.textContent = 'Return: close-to-close. Range: (monthly high − monthly low) / monthly low. The current incomplete month is excluded.';
       seasonalityWeekdayNote.textContent = 'Completed daily sessions grouped by exchange weekday. Return: close-to-close; range: (high − low) / low.';
     }
@@ -3184,6 +3766,7 @@
         return true;
       } catch (_error) {
         resetSeasonalityData();
+        seasonalityDataStatus.textContent = 'History unavailable for this selection';
         seasonalityLoadStatus.textContent = 'Stored history is unavailable for this selection. Connect Kite to synchronize it.';
         return false;
       }
@@ -3841,10 +4424,31 @@
     viewFnoButton.addEventListener('click', () => {
       document.querySelector('.nav-button[data-page="F&O"]').click();
     });
+    refreshDashboardScreenerButton.addEventListener('click', () => loadDashboardScreenerSummary(true));
+    viewScreenerButton.addEventListener('click', () => {
+      document.querySelector('.nav-button[data-page="Screener"]').click();
+    });
     refreshDashboardSeasonalityButton.addEventListener('click', () => loadDashboardSeasonalitySummary(true));
+    dashboardSeasonalityIndexSelect.addEventListener('change', renderSelectedDashboardSeasonality);
     viewSeasonalityButton.addEventListener('click', () => {
+      const instrument = dashboardSeasonalityIndexSelect.value;
+      if (instrument) {
+        seasonalityIndexSelect.value = instrument;
+        seasonalityStockSelect.value = '';
+        seasonalityInstrumentLabel.textContent = instrument;
+        seasonalityCaption.textContent = `${instrument} · completed EOD sessions`;
+        resetSeasonalityData();
+      }
       document.querySelector('.nav-button[data-page="Seasonality Analysis"]').click();
     });
+    refreshScreenerButton.addEventListener('click', () => loadLocalScreener(true));
+    screenerSearchInput.addEventListener('input', renderScreenerRows);
+    screenerReadinessSelect.addEventListener('change', renderScreenerRows);
+    screenerEvidenceSelect.addEventListener('change', renderScreenerRows);
+    screenerSortSelect.addEventListener('change', renderScreenerRows);
+    refreshNewsEventsButton.addEventListener('click', () => loadMacroEventsCalendar(true));
+    eventRegionSelect.addEventListener('change', renderMacroEventRows);
+    eventCategorySelect.addEventListener('change', renderMacroEventRows);
     regimeValidationIndexSelect.addEventListener('change', () => updateRegimeValidationSelection(true));
     regimeValidationBenchmarkSelect.addEventListener('change', () => {
       const benchmark = regimeValidationBenchmarkSelect.value === 'none' ? 'No relative benchmark' : 'Nifty 50 benchmark';
@@ -3898,16 +4502,21 @@
         const isDashboard = button.dataset.page === 'Dashboard';
         const isMarketSentiment = button.dataset.page === 'Market Sentiment';
         const isFno = button.dataset.page === 'F&O';
+        const isScreener = button.dataset.page === 'Screener';
         const isSeasonality = button.dataset.page === 'Seasonality Analysis';
+        const isNewsEvents = button.dataset.page === 'Events Calendar';
         dashboardView.hidden = !isDashboard;
         marketSentimentView.hidden = !isMarketSentiment;
         fnoView.hidden = !isFno;
+        screenerView.hidden = !isScreener;
         seasonalityView.hidden = !isSeasonality;
-        emptyView.hidden = isDashboard || isMarketSentiment || isFno || isSeasonality;
-        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isSeasonality ? '' : button.dataset.page;
+        newsEventsView.hidden = !isNewsEvents;
+        emptyView.hidden = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents;
+        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents ? '' : button.dataset.page;
         if (isDashboard) {
           loadDashboardMarketSentimentSummary(false);
           loadDashboardFnoSummary(false);
+          loadDashboardScreenerSummary(false);
           loadDashboardSeasonalitySummary(false);
         }
         if ((isMarketSentiment || isFno) && document.getElementById('sentimentAsOfValue').textContent === '—') {
@@ -3920,8 +4529,12 @@
           window.requestAnimationFrame(drawPriceStrengthChart);
         } else if (isFno) {
           renderFuturesOiTable();
+        } else if (isScreener && !screenerRows.length) {
+          loadLocalScreener(false);
         } else if (isSeasonality && seasonalityDataStatus.textContent === 'Historical data not loaded') {
           loadLocalSeasonality(false);
+        } else if (isNewsEvents && document.getElementById('newsEventsStatus').textContent === 'Event calendar not loaded') {
+          loadMacroEventsCalendar(false);
         }
         if (window.innerWidth <= 700) setNavigation(false);
       });
@@ -3942,6 +4555,7 @@
     restoreKiteStatus();
     loadDashboardMarketSentimentSummary(false);
     loadDashboardFnoSummary(false);
+    loadDashboardScreenerSummary(false);
     loadDashboardSeasonalitySummary(false);
   </script>
 </body>

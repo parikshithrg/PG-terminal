@@ -115,6 +115,204 @@ REGIME_VALIDATION_EVENTS = (
         "end": date(2024, 6, 10),
     },
 )
+NEWS_EVENT_SOURCES = (
+    {
+        "key": "nse_corporate_filings",
+        "label": "NSE corporate filings",
+        "category": "company_disclosures",
+        "authority": "National Stock Exchange of India",
+        "url": "https://www.nseindia.com/companies-listing/corporate-filings-announcements",
+        "terms_url": "https://www.nseindia.com/static/nse-terms-of-use",
+        "coverage": "Issuer-filed announcements, board meetings, actions, and results",
+    },
+    {
+        "key": "bse_corporate_announcements",
+        "label": "BSE corporate announcements",
+        "category": "company_disclosures",
+        "authority": "BSE India",
+        "url": "https://www.bseindia.com/corporates/ann.html",
+        "coverage": "Issuer-filed corporate announcements and attachments",
+    },
+    {
+        "key": "sebi_press_releases",
+        "label": "SEBI press releases",
+        "category": "regulatory",
+        "authority": "Securities and Exchange Board of India",
+        "url": "https://www.sebi.gov.in/sebiweb/home/HomeAction.do?doListing=yes&sid=6&ssid=23",
+        "coverage": "Regulatory press releases and market-structure updates",
+    },
+    {
+        "key": "rbi_press_releases",
+        "label": "RBI press releases",
+        "category": "macro_policy",
+        "authority": "Reserve Bank of India",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx",
+        "coverage": "Monetary-policy, liquidity, banking, and sovereign-market releases",
+    },
+)
+MACRO_EVENT_SOURCES = (
+    {
+        "key": "rbi_policy_releases",
+        "label": "RBI policy and press releases",
+        "authority": "Reserve Bank of India",
+        "region": "India",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx",
+        "status": "date_confirmation_required",
+        "note": "Current 2026-27 MPC dates require confirmation from an official RBI schedule before display.",
+    },
+    {
+        "key": "mospi_release_calendar",
+        "label": "MoSPI advance release calendar 2026-27",
+        "authority": "Ministry of Statistics and Programme Implementation",
+        "region": "India",
+        "url": "https://www.mospi.gov.in/uploads/documents/releaseCalender/1779709510470-ADVANCE%20RELEASE%20CALENDAR%202026-27%20Updated%2025.05.2026.pdf",
+        "status": "verified_snapshot",
+        "note": "Official PDF updated 25-May-2026; dates may change in exigencies or for holidays.",
+    },
+    {
+        "key": "fomc_calendar",
+        "label": "Federal Reserve FOMC calendar",
+        "authority": "Board of Governors of the Federal Reserve System",
+        "region": "United States",
+        "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+        "status": "verified_snapshot",
+        "note": "Official 2026 meeting calendar; meeting dates are tentative until confirmed by the preceding meeting.",
+    },
+    {
+        "key": "bls_cpi_schedule",
+        "label": "BLS CPI release schedule",
+        "authority": "U.S. Bureau of Labor Statistics",
+        "region": "United States",
+        "url": "https://www.bls.gov/schedule/news_release/cpi.htm",
+        "status": "verified_snapshot",
+        "note": "Official 2026 CPI schedule; release times are Eastern Time.",
+    },
+)
+MACRO_EVENTS = (
+    {
+        "key": "india_cpi_2026_10",
+        "title": "India CPI release",
+        "region": "India",
+        "category": "inflation",
+        "start_at": "2026-10-12",
+        "timezone": "Asia/Kolkata",
+        "source_key": "mospi_release_calendar",
+    },
+    {
+        "key": "us_cpi_2026_10",
+        "title": "U.S. CPI release — September 2026",
+        "region": "United States",
+        "category": "inflation",
+        "start_at": "2026-10-14T08:30:00-04:00",
+        "timezone": "America/New_York",
+        "source_key": "bls_cpi_schedule",
+    },
+    {
+        "key": "fomc_2026_10",
+        "title": "Federal Reserve FOMC meeting",
+        "region": "United States",
+        "category": "central_bank",
+        "start_at": "2026-10-27",
+        "end_at": "2026-10-28",
+        "decision_at": "2026-10-28T14:00:00-04:00",
+        "timezone": "America/New_York",
+        "source_key": "fomc_calendar",
+    },
+    {
+        "key": "india_iip_2026_10",
+        "title": "India IIP release",
+        "region": "India",
+        "category": "growth",
+        "start_at": "2026-10-28",
+        "timezone": "Asia/Kolkata",
+        "source_key": "mospi_release_calendar",
+    },
+    {
+        "key": "us_cpi_2026_11",
+        "title": "U.S. CPI release — October 2026",
+        "region": "United States",
+        "category": "inflation",
+        "start_at": "2026-11-10T08:30:00-05:00",
+        "timezone": "America/New_York",
+        "source_key": "bls_cpi_schedule",
+    },
+    {
+        "key": "india_cpi_2026_11",
+        "title": "India CPI release",
+        "region": "India",
+        "category": "inflation",
+        "start_at": "2026-11-12",
+        "timezone": "Asia/Kolkata",
+        "source_key": "mospi_release_calendar",
+    },
+    {
+        "key": "fomc_minutes_2026_11",
+        "title": "Federal Reserve FOMC minutes — October meeting",
+        "region": "United States",
+        "category": "central_bank",
+        "start_at": "2026-11-18T14:00:00-05:00",
+        "timezone": "America/New_York",
+        "source_key": "fomc_calendar",
+    },
+    {
+        "key": "india_iip_2026_11",
+        "title": "India IIP release",
+        "region": "India",
+        "category": "growth",
+        "start_at": "2026-11-28",
+        "timezone": "Asia/Kolkata",
+        "source_key": "mospi_release_calendar",
+        "note": "Falls on a weekend; the official calendar says holiday releases move to the next working day.",
+    },
+    {
+        "key": "india_gdp_2026_q2",
+        "title": "India GDP release — Q2 FY 2026-27",
+        "region": "India",
+        "category": "growth",
+        "start_at": "2026-11-30",
+        "timezone": "Asia/Kolkata",
+        "source_key": "mospi_release_calendar",
+    },
+    {
+        "key": "fomc_2026_12",
+        "title": "Federal Reserve FOMC meeting",
+        "region": "United States",
+        "category": "central_bank",
+        "start_at": "2026-12-08",
+        "end_at": "2026-12-09",
+        "decision_at": "2026-12-09T14:00:00-05:00",
+        "timezone": "America/New_York",
+        "source_key": "fomc_calendar",
+    },
+    {
+        "key": "us_cpi_2026_12",
+        "title": "U.S. CPI release — November 2026",
+        "region": "United States",
+        "category": "inflation",
+        "start_at": "2026-12-10T08:30:00-05:00",
+        "timezone": "America/New_York",
+        "source_key": "bls_cpi_schedule",
+    },
+    {
+        "key": "india_cpi_2026_12",
+        "title": "India CPI release",
+        "region": "India",
+        "category": "inflation",
+        "start_at": "2026-12-12",
+        "timezone": "Asia/Kolkata",
+        "source_key": "mospi_release_calendar",
+        "note": "Falls on a weekend; the official calendar says holiday releases move to the next working day.",
+    },
+    {
+        "key": "india_iip_2026_12",
+        "title": "India IIP release",
+        "region": "India",
+        "category": "growth",
+        "start_at": "2026-12-28",
+        "timezone": "Asia/Kolkata",
+        "source_key": "mospi_release_calendar",
+    },
+)
 REGIME_LABEL_THRESHOLDS = {
     "positive_market": 0.55,
     "cautiously_positive": 0.20,
@@ -187,6 +385,7 @@ MAX_INSTRUMENT_BYTES = 8 * 1024 * 1024
 MAX_NFO_INSTRUMENT_BYTES = 32 * 1024 * 1024
 MAX_QUOTE_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_CONSTITUENT_BYTES = 128 * 1024
+MAX_NEWS_IMPORT_BYTES = 2 * 1024 * 1024
 REQUEST_TIMEOUT_SECONDS = 10
 BREADTH_CACHE_SECONDS = 15 * 60
 SEASONALITY_CACHE_SECONDS = 15 * 60
@@ -195,6 +394,7 @@ SEASONALITY_LOOKBACK_YEARS = 10
 SEASONALITY_HISTORY_CHUNK_DAYS = 1800
 HISTORICAL_REQUEST_INTERVAL_SECONDS = 0.36
 FNO_UNIVERSE_EXPECTED = 210
+SCREENER_READY_SESSIONS = 252
 PRICE_STRENGTH_SERIES_SESSIONS = 126
 FUTURES_PRICE_NOISE_PCT = 0.25
 FUTURES_OI_NOISE_PCT = 1.0
@@ -4297,9 +4497,15 @@ def build_dashboard_seasonality_summary(
         (row for row in turn_rows if isinstance(row, dict) and row.get("period") == "Test"),
         None,
     )
+    validation_ready = bool(seasonality_payload.get("holdout_split_date"))
+    status = (
+        "historical_evidence_ready"
+        if len(populated) == 12 and validation_ready
+        else "partial_history"
+    )
     return {
         "ok": True,
-        "status": "historical_evidence_ready" if len(populated) == 12 else "partial_history",
+        "status": status,
         "scope": "historical_not_forecast",
         "instrument": seasonality_payload.get("instrument"),
         "kind": seasonality_payload.get("kind"),
@@ -4307,6 +4513,11 @@ def build_dashboard_seasonality_summary(
         "as_of_date": seasonality_payload.get("as_of_date"),
         "completed_sessions": int(seasonality_payload.get("completed_sessions") or 0),
         "populated_months": len(populated),
+        "minimum_month_observations": min(
+            (int(row.get("count") or 0) for row in populated),
+            default=0,
+        ),
+        "validation_ready": validation_ready,
         "strongest_month": strongest,
         "weakest_month": weakest,
         "holdout": {
@@ -4318,6 +4529,607 @@ def build_dashboard_seasonality_summary(
         "limitations": [
             "Historical averages and holdout checks are descriptive, not forecasts.",
             "The current incomplete calendar month is excluded from month-of-year evidence.",
+        ],
+    }
+
+
+def build_dashboard_seasonality_universe_summary(
+    summaries: dict[str, dict[str, object]],
+    *,
+    supported_indices: tuple[str, ...] = SEASONALITY_INDICES,
+) -> dict[str, object]:
+    """Expose every supported index, including honest unavailable states."""
+    rows: list[dict[str, object]] = []
+    for instrument in supported_indices:
+        summary = summaries.get(instrument)
+        if summary is None:
+            rows.append(
+                {
+                    "ok": False,
+                    "instrument": instrument,
+                    "kind": "index",
+                    "status": "history_unavailable",
+                    "completed_sessions": 0,
+                    "populated_months": 0,
+                    "minimum_month_observations": 0,
+                    "validation_ready": False,
+                }
+            )
+            continue
+        rows.append(summary)
+    available = [row for row in rows if row.get("ok") is True]
+    ready = [
+        row
+        for row in available
+        if row.get("status") == "historical_evidence_ready"
+    ]
+    return {
+        "ok": True,
+        "scope": "all_supported_indices",
+        "indices": rows,
+        "universe": {
+            "total": len(rows),
+            "available": len(available),
+            "ready": len(ready),
+            "partial": len(available) - len(ready),
+            "unavailable": len(rows) - len(available),
+        },
+        "limitations": [
+            "Each index is calculated independently from its own stored history.",
+            "Short-history and unavailable indices remain visible and are not replaced with Nifty 50 evidence.",
+            "Historical averages and holdout checks are descriptive, not forecasts.",
+        ],
+    }
+
+
+def calculate_stock_screener(
+    stock_histories: dict[str, list[dict[str, object]]],
+    benchmark_candles: list[dict[str, object]],
+    *,
+    expected_through: date,
+) -> dict[str, object]:
+    """Build transparent, descriptive stock factors from validated local EOD data."""
+    benchmark = sorted(benchmark_candles, key=lambda item: item["date"])
+    if len(benchmark) < 21:
+        raise ValueError("screener_benchmark_unavailable")
+    as_of = benchmark[-1]["date"]
+    benchmark_closes = [float(row["close"]) for row in benchmark]
+    benchmark_return_20d = ((benchmark_closes[-1] / benchmark_closes[-21]) - 1) * 100
+
+    def relative_pct(value: float, reference: float) -> float:
+        return ((value / reference) - 1) * 100
+
+    rows: list[dict[str, object]] = []
+    for symbol, history in sorted(stock_histories.items()):
+        ordered = sorted(history, key=lambda item: item["date"])
+        sessions = len(ordered)
+        latest_session = ordered[-1]["date"] if ordered else None
+        if not ordered:
+            status = "unavailable"
+            reason = "No validated local candles are stored."
+        elif latest_session != as_of:
+            status = "stale"
+            reason = "The latest stored session is not aligned with the benchmark."
+        elif sessions < SCREENER_READY_SESSIONS:
+            status = "partial_history"
+            reason = f"{SCREENER_READY_SESSIONS} aligned sessions are required for full factor coverage."
+        else:
+            status = "ready"
+            reason = "At least 252 aligned completed sessions are available."
+
+        closes = [float(row["close"]) for row in ordered]
+        aligned = latest_session == as_of
+        latest_close = closes[-1] if closes else None
+
+        def versus_average(window: int) -> float | None:
+            if len(closes) < window or latest_close is None:
+                return None
+            return relative_pct(latest_close, sum(closes[-window:]) / window)
+
+        return_20d = (
+            relative_pct(latest_close, closes[-21])
+            if latest_close is not None and len(closes) >= 21
+            else None
+        )
+        return_60d = (
+            relative_pct(latest_close, closes[-61])
+            if latest_close is not None and len(closes) >= 61
+            else None
+        )
+        realised_volatility = None
+        if len(closes) >= 21:
+            recent_returns = [
+                math.log(current / previous)
+                for previous, current in zip(closes[-21:-1], closes[-20:])
+            ]
+            variance = _sample_variance(recent_returns)
+            if variance is not None:
+                realised_volatility = math.sqrt(variance * 252) * 100
+        position_52w = None
+        drawdown_52w = None
+        if len(closes) >= SCREENER_READY_SESSIONS and latest_close is not None:
+            window = closes[-SCREENER_READY_SESSIONS:]
+            low = min(window)
+            high = max(window)
+            position_52w = 100.0 if high == low else 100 * (latest_close - low) / (high - low)
+            drawdown_52w = relative_pct(latest_close, high)
+
+        rows.append(
+            {
+                "symbol": symbol,
+                "status": status,
+                "reason": reason,
+                "sessions": sessions,
+                "first_session": ordered[0]["date"].isoformat() if ordered else None,
+                "last_session": latest_session.isoformat() if latest_session else None,
+                "close": round(latest_close, 2) if latest_close is not None else None,
+                "return_20d_pct": round(return_20d, 2) if return_20d is not None else None,
+                "return_60d_pct": round(return_60d, 2) if return_60d is not None else None,
+                "excess_20d_vs_nifty_pct": (
+                    round(return_20d - benchmark_return_20d, 2)
+                    if return_20d is not None and aligned else None
+                ),
+                "vs_20dma_pct": (
+                    round(value, 2) if (value := versus_average(20)) is not None else None
+                ),
+                "vs_50dma_pct": (
+                    round(value, 2) if (value := versus_average(50)) is not None else None
+                ),
+                "vs_200dma_pct": (
+                    round(value, 2) if (value := versus_average(200)) is not None else None
+                ),
+                "position_52w_pct": round(position_52w, 1) if position_52w is not None else None,
+                "drawdown_52w_pct": round(drawdown_52w, 2) if drawdown_52w is not None else None,
+                "realised_volatility_20d_pct": (
+                    round(realised_volatility, 2) if realised_volatility is not None else None
+                ),
+            }
+        )
+
+    counts = {
+        state: sum(row["status"] == state for row in rows)
+        for state in ("ready", "partial_history", "stale", "unavailable")
+    }
+    freshness_state = "fresh" if as_of >= expected_through else "stale"
+    return {
+        "ok": True,
+        "scope": "locally_stored_nse_fno_equities",
+        "as_of_date": as_of.isoformat(),
+        "benchmark": "Nifty 50",
+        "benchmark_return_20d_pct": round(benchmark_return_20d, 2),
+        "rows": rows,
+        "coverage": {"total": len(rows), **counts},
+        "freshness": {
+            "state": freshness_state,
+            "expected_through": expected_through.isoformat(),
+            "latest_session": as_of.isoformat(),
+        },
+        "contract": {
+            "version": "local-stock-screener-v1",
+            "minimum_ready_sessions": SCREENER_READY_SESSIONS,
+            "default_sort": "excess_20d_vs_nifty_pct_desc",
+            "formulas": {
+                "return_20d_pct": "close / close_20_sessions_ago - 1",
+                "return_60d_pct": "close / close_60_sessions_ago - 1",
+                "excess_20d_vs_nifty_pct": "stock_20d_return - Nifty_50_20d_return",
+                "vs_dma_pct": "close / simple_moving_average - 1",
+                "position_52w_pct": "(close - 252_session_low) / (252_session_high - 252_session_low)",
+                "drawdown_52w_pct": "close / 252_session_high - 1",
+                "realised_volatility_20d_pct": "sample_stddev(log_daily_returns_20d) * sqrt(252)",
+            },
+            "limitations": [
+                "Descriptive EOD evidence only; rows are not buy, sell, or portfolio instructions.",
+                "The universe is the locally stored NSE F&O equity list, not the whole cash market.",
+                "Current storage has no volume, valuation, quality, earnings, revision, or sector-relative factors.",
+                "Relative strength is a return difference versus Nifty 50, not risk-adjusted alpha.",
+                "Filters and sorting do not constitute a backtest or validated ranking model.",
+            ],
+        },
+    }
+
+
+def build_dashboard_screener_summary(
+    screener_payload: dict[str, object],
+) -> dict[str, object]:
+    """Condense transparent local stock factors into a descriptive Dashboard card."""
+    if screener_payload.get("ok") is not True:
+        raise ValueError("dashboard_screener_summary_unavailable")
+    rows = screener_payload.get("rows")
+    coverage = screener_payload.get("coverage")
+    freshness = screener_payload.get("freshness")
+    contract = screener_payload.get("contract")
+    if not isinstance(rows, list) or not isinstance(coverage, dict):
+        raise ValueError("dashboard_screener_summary_unavailable")
+    freshness = freshness if isinstance(freshness, dict) else {}
+    contract = contract if isinstance(contract, dict) else {}
+    ready_rows = [
+        row
+        for row in rows
+        if isinstance(row, dict) and row.get("status") == "ready"
+    ]
+
+    def numeric_rows(key: str) -> list[dict[str, object]]:
+        return [
+            row
+            for row in ready_rows
+            if isinstance(row.get(key), (int, float))
+        ]
+
+    excess_rows = numeric_rows("excess_20d_vs_nifty_pct")
+    positive_20d = sum(
+        float(row["return_20d_pct"]) > 0
+        for row in numeric_rows("return_20d_pct")
+    )
+    above_200dma = sum(
+        float(row["vs_200dma_pct"]) > 0
+        for row in numeric_rows("vs_200dma_pct")
+    )
+    outperforming = sum(
+        float(row["excess_20d_vs_nifty_pct"]) > 0
+        for row in excess_rows
+    )
+    highest_excess = max(
+        excess_rows,
+        key=lambda row: float(row["excess_20d_vs_nifty_pct"]),
+        default=None,
+    )
+    lowest_excess = min(
+        excess_rows,
+        key=lambda row: float(row["excess_20d_vs_nifty_pct"]),
+        default=None,
+    )
+    total = int(coverage.get("total") or len(rows))
+    ready = int(coverage.get("ready") or len(ready_rows))
+    freshness_state = str(freshness.get("state") or "unavailable")
+    if not ready:
+        status = "screen_unavailable"
+    elif ready < total:
+        status = "partial_history"
+    elif freshness_state == "fresh":
+        status = "evidence_ready"
+    else:
+        status = "stale_evidence"
+
+    def observation(row: dict[str, object] | None) -> dict[str, object] | None:
+        if row is None:
+            return None
+        return {
+            "symbol": row.get("symbol"),
+            "excess_20d_vs_nifty_pct": row.get("excess_20d_vs_nifty_pct"),
+            "return_20d_pct": row.get("return_20d_pct"),
+        }
+
+    return {
+        "ok": True,
+        "status": status,
+        "scope": "descriptive_local_screen_only",
+        "as_of_date": screener_payload.get("as_of_date"),
+        "benchmark": screener_payload.get("benchmark"),
+        "benchmark_return_20d_pct": screener_payload.get(
+            "benchmark_return_20d_pct"
+        ),
+        "coverage": {
+            "total": total,
+            "ready": ready,
+            "partial_history": int(coverage.get("partial_history") or 0),
+            "stale": int(coverage.get("stale") or 0),
+            "unavailable": int(coverage.get("unavailable") or 0),
+        },
+        "freshness": {
+            "state": freshness_state,
+            "latest_session": freshness.get("latest_session"),
+            "expected_through": freshness.get("expected_through"),
+        },
+        "observations": {
+            "positive_20d": positive_20d,
+            "above_200dma": above_200dma,
+            "outperforming_nifty_20d": outperforming,
+            "highest_20d_excess": observation(highest_excess),
+            "lowest_20d_excess": observation(lowest_excess),
+        },
+        "contract_version": contract.get("version"),
+        "limitations": [
+            "Counts and extremes describe the current local EOD screen; they are not recommendations.",
+            "The universe is the locally stored NSE F&O equity list, not the whole cash market.",
+            "Twenty-session excess return is a simple difference versus Nifty 50, not risk-adjusted alpha.",
+        ],
+    }
+
+
+def build_news_events_workspace(
+    *,
+    reviewed_on: date,
+    live_items: list[dict[str, object]] | None = None,
+    sources: tuple[dict[str, object], ...] = NEWS_EVENT_SOURCES,
+    event_windows: tuple[dict[str, object], ...] = REGIME_VALIDATION_EVENTS,
+) -> dict[str, object]:
+    """Expose an honest source-readiness contract before live news ingestion."""
+    imported_items = live_items if isinstance(live_items, list) else []
+    source_rows = [
+        {
+            "key": str(source["key"]),
+            "label": str(source["label"]),
+            "category": str(source["category"]),
+            "authority": str(source["authority"]),
+            "url": str(source["url"]),
+            "terms_url": str(source.get("terms_url") or ""),
+            "coverage": str(source["coverage"]),
+            "status": (
+                "manual_file_imported"
+                if source["key"] == "nse_corporate_filings" and imported_items
+                else "manual_csv_ready"
+                if source["key"] == "nse_corporate_filings"
+                else "not_connected"
+            ),
+            "permission_state": (
+                "manual_download_only_automated_collection_prohibited"
+                if source["key"] == "nse_corporate_filings"
+                else "ingestion_review_required"
+            ),
+            "last_item_at": (
+                max(
+                    (
+                        str(item.get("published_at"))
+                        for item in imported_items
+                        if item.get("source_key") == "nse_corporate_filings_manual_csv"
+                    ),
+                    default=None,
+                )
+                if source["key"] == "nse_corporate_filings"
+                else None
+            ),
+        }
+        for source in sources
+    ]
+    historical_events = []
+    for event in event_windows:
+        start = event.get("start")
+        end = event.get("end")
+        if not isinstance(start, date) or not isinstance(end, date) or end < start:
+            continue
+        historical_events.append(
+            {
+                "key": str(event.get("key") or "historical_event"),
+                "label": str(event.get("label") or "Historical event window"),
+                "category": "retrospective_stress_window",
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "status": "available_in_market_sentiment",
+                "source": "Fixed internal validation window",
+                "selection_note": "Selected retrospectively with hindsight; not a live event signal.",
+            }
+        )
+    return {
+        "ok": True,
+        "status": "manual_import_ready",
+        "scope": "official_source_registry_and_local_event_windows",
+        "reviewed_on": reviewed_on.isoformat(),
+        "contract": {
+            "version": "news-events-foundation-v1",
+            "live_ingestion_enabled": False,
+            "manual_csv_import_enabled": True,
+            "nse_automated_collection_allowed": False,
+            "headline_sentiment_enabled": False,
+            "automated_impact_score_enabled": False,
+        },
+        "coverage": {
+            "official_sources_reviewed": len(source_rows),
+            "connected_sources": 0,
+            "manually_imported_sources": 1 if imported_items else 0,
+            "live_items": len(imported_items),
+            "local_historical_events": len(historical_events),
+        },
+        "sources": source_rows,
+        "live_items": imported_items,
+        "historical_events": historical_events,
+        "limitations": [
+            "NSE automated collection is disabled because its published terms prohibit systematic or automated website collection.",
+            "NSE records may be imported only from a CSV the user manually downloads from the official page.",
+            "Source permissions, rate limits, identifiers, revision handling, and attachment retention must be approved before collection.",
+            "Historical stress windows were selected retrospectively with hindsight and are not upcoming-event forecasts.",
+            "No headline sentiment, materiality score, trade signal, or portfolio instruction is generated.",
+        ],
+    }
+
+
+def parse_nse_announcement_csv(csv_payload: str) -> list[dict[str, object]]:
+    """Normalize a user-downloaded NSE announcement CSV without fetching NSE."""
+    if not isinstance(csv_payload, str) or not csv_payload.strip():
+        raise ValueError("invalid_nse_announcement_csv")
+    reader = csv.DictReader(io.StringIO(csv_payload.lstrip("\ufeff")))
+    if reader.fieldnames is None:
+        raise ValueError("invalid_nse_announcement_csv")
+
+    def normalized_header(value: str) -> str:
+        return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+
+    header_lookup = {
+        normalized_header(header): header
+        for header in reader.fieldnames
+        if isinstance(header, str)
+    }
+
+    def find_header(aliases: tuple[str, ...], *, required: bool = True) -> str | None:
+        for alias in aliases:
+            header = header_lookup.get(normalized_header(alias))
+            if header is not None:
+                return header
+        if required:
+            raise ValueError("unsupported_nse_announcement_csv_columns")
+        return None
+
+    symbol_header = find_header(("symbol", "nse symbol", "nse_symbol"))
+    company_header = find_header(("company name", "company", "company_name"))
+    headline_header = find_header(("subject", "headline", "purpose", "description"))
+    published_header = find_header(
+        (
+            "broadcast date/time",
+            "broadcast datetime",
+            "broadcast date",
+            "announcement date",
+            "submission date",
+            "date",
+        )
+    )
+    attachment_header = find_header(
+        ("attachment url", "attachment", "file url", "document url"),
+        required=False,
+    )
+
+    def parse_published(value: str) -> str:
+        cleaned = value.strip()
+        try:
+            parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
+        except ValueError:
+            parsed = None
+        if parsed is None:
+            for pattern in (
+                "%d-%b-%Y %H:%M:%S",
+                "%d-%b-%Y %H:%M",
+                "%d-%m-%Y %H:%M:%S",
+                "%d-%m-%Y %H:%M",
+                "%d-%m-%Y",
+                "%d-%b-%Y",
+            ):
+                try:
+                    parsed = datetime.strptime(cleaned, pattern)
+                    break
+                except ValueError:
+                    continue
+        if parsed is None:
+            raise ValueError("invalid_nse_announcement_date")
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=INDIA_TIMEZONE)
+        return parsed.isoformat(timespec="seconds")
+
+    rows: list[dict[str, object]] = []
+    for raw_row in reader:
+        if not isinstance(raw_row, dict) or not any(str(value or "").strip() for value in raw_row.values()):
+            continue
+        symbol = str(raw_row.get(symbol_header) or "").strip().upper()
+        company_name = str(raw_row.get(company_header) or "").strip()
+        headline = str(raw_row.get(headline_header) or "").strip()
+        published_text = str(raw_row.get(published_header) or "").strip()
+        if (
+            not re.fullmatch(r"[A-Z0-9&.\-]{1,32}", symbol)
+            or not company_name
+            or len(company_name) > 240
+            or not headline
+            or len(headline) > 2000
+            or not published_text
+        ):
+            raise ValueError("invalid_nse_announcement_row")
+        attachment_url = None
+        if attachment_header is not None:
+            candidate = str(raw_row.get(attachment_header) or "").strip()
+            if candidate:
+                parsed_url = urllib.parse.urlsplit(candidate)
+                if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+                    raise ValueError("invalid_nse_announcement_attachment")
+                attachment_url = candidate
+        rows.append(
+            {
+                "source_key": "nse_corporate_filings_manual_csv",
+                "published_at": parse_published(published_text),
+                "symbol": symbol,
+                "company_name": company_name,
+                "category": "corporate_announcement",
+                "headline": headline,
+                "attachment_url": attachment_url,
+                "raw": {
+                    str(key): str(value or "")
+                    for key, value in raw_row.items()
+                    if key is not None
+                },
+            }
+        )
+        if len(rows) > 5000:
+            raise ValueError("nse_announcement_csv_too_many_rows")
+    if not rows:
+        raise ValueError("nse_announcement_csv_empty")
+    return rows
+
+
+def build_macro_events_calendar(
+    *,
+    today: date,
+    events: tuple[dict[str, object], ...] = MACRO_EVENTS,
+    sources: tuple[dict[str, object], ...] = MACRO_EVENT_SOURCES,
+) -> dict[str, object]:
+    """Build a frozen, source-linked calendar without scraping live news feeds."""
+    source_lookup = {str(source["key"]): source for source in sources}
+    rows: list[dict[str, object]] = []
+    for event in events:
+        start_text = str(event.get("start_at") or "")
+        try:
+            start_date = date.fromisoformat(start_text[:10])
+        except ValueError as error:
+            raise ValueError("invalid_macro_event_calendar") from error
+        if start_date < today:
+            continue
+        source_key = str(event.get("source_key") or "")
+        source = source_lookup.get(source_key)
+        if source is None or source.get("status") != "verified_snapshot":
+            raise ValueError("invalid_macro_event_calendar")
+
+        def india_time(value: object) -> str | None:
+            if not isinstance(value, str) or "T" not in value:
+                return None
+            parsed = datetime.fromisoformat(value)
+            if parsed.tzinfo is None:
+                raise ValueError("invalid_macro_event_calendar")
+            return parsed.astimezone(INDIA_TIMEZONE).isoformat(timespec="minutes")
+
+        rows.append(
+            {
+                "key": str(event["key"]),
+                "title": str(event["title"]),
+                "region": str(event["region"]),
+                "category": str(event["category"]),
+                "start_at": start_text,
+                "end_at": event.get("end_at"),
+                "decision_at": event.get("decision_at"),
+                "india_time": india_time(event.get("decision_at") or start_text),
+                "timezone": str(event["timezone"]),
+                "days_until": (start_date - today).days,
+                "source_key": source_key,
+                "source_label": source["label"],
+                "source_url": source["url"],
+                "source_status": source["status"],
+                "note": event.get("note"),
+            }
+        )
+    rows.sort(key=lambda row: (str(row["start_at"]), str(row["title"])))
+    verified_sources = [source for source in sources if source.get("status") == "verified_snapshot"]
+    pending_sources = [source for source in sources if source.get("status") != "verified_snapshot"]
+    return {
+        "ok": True,
+        "status": "official_calendar_snapshot_ready",
+        "scope": "scheduled_macro_events_only",
+        "as_of_date": today.isoformat(),
+        "contract": {
+            "version": "macro-events-calendar-v1",
+            "automated_sync_enabled": False,
+            "unscheduled_news_enabled": False,
+            "impact_scoring_enabled": False,
+        },
+        "coverage": {
+            "upcoming_events": len(rows),
+            "next_7_days": sum(int(row["days_until"]) <= 7 for row in rows),
+            "next_30_days": sum(int(row["days_until"]) <= 30 for row in rows),
+            "india_events": sum(row["region"] == "India" for row in rows),
+            "us_events": sum(row["region"] == "United States" for row in rows),
+            "verified_sources": len(verified_sources),
+            "pending_sources": len(pending_sources),
+        },
+        "next_event": rows[0] if rows else None,
+        "events": rows,
+        "sources": list(sources),
+        "limitations": [
+            "This is a reviewed calendar snapshot, not an automatically synchronized feed.",
+            "Dates can change; verify the linked official source before relying on an event time.",
+            "RBI events remain date-pending until a current official 2026-27 schedule is verified.",
+            "No unscheduled news, consensus estimate, surprise, sentiment, or trade impact score is shown.",
         ],
     }
 
@@ -4440,8 +5252,20 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         if path == "/api/dashboard/seasonality-summary":
             self._send_dashboard_seasonality_summary()
             return
+        if path == "/api/dashboard/screener-summary":
+            self._send_dashboard_screener_summary()
+            return
         if path == "/api/seasonality/local":
             self._send_local_seasonality(urllib.parse.urlsplit(self.path).query)
+            return
+        if path == "/api/screener/local":
+            self._send_local_screener()
+            return
+        if path == "/api/news-events/local":
+            self._send_local_news_events()
+            return
+        if path == "/api/events/calendar":
+            self._send_macro_events_calendar()
             return
         if path == "/api/kite/seasonality":
             self._send_seasonality(urllib.parse.urlsplit(self.path).query)
@@ -4501,12 +5325,26 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             )
 
     def _send_dashboard_seasonality_summary(self) -> None:
-        try:
-            payload = build_dashboard_seasonality_summary(
-                self._calculate_local_seasonality_payload(
-                    kind="index",
-                    instrument="Nifty 50",
+        summaries: dict[str, dict[str, object]] = {}
+        for instrument in SEASONALITY_INDICES:
+            try:
+                summaries[instrument] = build_dashboard_seasonality_summary(
+                    self._calculate_local_seasonality_payload(
+                        kind="index",
+                        instrument=instrument,
+                    )
                 )
+            except ValueError:
+                continue
+        self._send_json(
+            HTTPStatus.OK,
+            build_dashboard_seasonality_universe_summary(summaries),
+        )
+
+    def _send_dashboard_screener_summary(self) -> None:
+        try:
+            payload = build_dashboard_screener_summary(
+                self._calculate_local_screener_payload()
             )
             self._send_json(HTTPStatus.OK, payload)
         except ValueError as error:
@@ -4532,6 +5370,49 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 HTTPStatus.SERVICE_UNAVAILABLE,
                 {"ok": False, "reason": str(error)},
             )
+
+    def _send_local_screener(self) -> None:
+        try:
+            payload = self._calculate_local_screener_payload()
+            self._send_json(HTTPStatus.OK, payload)
+        except ValueError as error:
+            self._send_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"ok": False, "reason": str(error)},
+            )
+
+    def _send_local_news_events(self) -> None:
+        live_items = _get_eod_store().load_news_event_records()
+        self._send_json(
+            HTTPStatus.OK,
+            build_news_events_workspace(
+                reviewed_on=datetime.now(INDIA_TIMEZONE).date(),
+                live_items=live_items,
+            ),
+        )
+
+    def _send_macro_events_calendar(self) -> None:
+        self._send_json(
+            HTTPStatus.OK,
+            build_macro_events_calendar(today=datetime.now(INDIA_TIMEZONE).date()),
+        )
+
+    @staticmethod
+    def _calculate_local_screener_payload() -> dict[str, object]:
+        store = _get_eod_store()
+        stock_inventory = store.list_instruments(kind="stock")
+        stock_histories = {
+            str(item["display_name"]): store.load_candles(
+                kind="stock",
+                display_name=str(item["display_name"]),
+            )
+            for item in stock_inventory
+        }
+        return calculate_stock_screener(
+            stock_histories,
+            store.load_candles(kind="index", display_name="Nifty 50"),
+            expected_through=completed_history_date(datetime.now(INDIA_TIMEZONE)),
+        )
 
     @staticmethod
     def _calculate_local_seasonality_payload(
@@ -4563,7 +5444,50 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         if len(candles) < 2:
             raise ValueError("no_completed_historical_data")
         month_rows, weekday_rows = calculate_seasonality(candles, today=now.date())
-        validation = calculate_seasonality_validation(candles, today=now.date())
+        try:
+            validation = calculate_seasonality_validation(candles, today=now.date())
+            validation_ready = True
+        except ValueError as error:
+            if str(error) != "no_completed_historical_data":
+                raise
+            turn = _turn_of_month_analysis(candles)
+            month_names = (
+                "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+            )
+            validation = {
+                "turn_rows": turn["rows"],
+                "turn_edge_pct": turn["edge_pct"],
+                "turn_t_statistic": turn["t_statistic"],
+                "turn_p_value": turn["p_value"],
+                "holdout_split_date": None,
+                "held_out_rows": [
+                    {
+                        "period": period,
+                        "train_count": 0,
+                        "train_excess_pct": None,
+                        "train_significant": False,
+                        "test_count": 0,
+                        "test_excess_pct": None,
+                        "same_direction": False,
+                        "survived": False,
+                    }
+                    for period in month_names
+                ],
+                "held_out_summary": {
+                    "same_direction": 0,
+                    "train_significant": 0,
+                    "survived": 0,
+                },
+                "turn_held_out_rows": [],
+            }
+            validation_ready = False
+        populated_months = sum(int(row.get("count") or 0) > 0 for row in month_rows)
+        readiness_status = (
+            "historical_evidence_ready"
+            if populated_months == 12 and validation_ready
+            else "partial_history"
+        )
         return {
             "ok": True,
             "instrument": instrument,
@@ -4572,6 +5496,11 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             "from_date": candles[0]["date"].isoformat(),
             "as_of_date": candles[-1]["date"].isoformat(),
             "completed_sessions": len(candles),
+            "readiness": {
+                "status": readiness_status,
+                "populated_months": populated_months,
+                "validation_ready": validation_ready,
+            },
             "historical_requests": 0,
             "persistent_store": True,
             "stored_sessions_before_sync": len(candles),
@@ -6358,6 +7287,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         )
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler name
+        if self.path == "/api/news-events/nse-manual-import":
+            payload = self._read_json_payload(MAX_NEWS_IMPORT_BYTES)
+            if payload is not None:
+                self._send_nse_manual_import(payload)
+            return
+
         if self.path == "/api/market-sentiment/factor-snapshot":
             payload = self._read_json_payload()
             if payload is not None:
@@ -6676,7 +7611,44 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             return "authentication_failed"
         return "provider_rejected_request"
 
-    def _read_json_payload(self) -> dict[str, object] | None:
+    def _send_nse_manual_import(self, payload: dict[str, object]) -> None:
+        file_name = payload.get("file_name")
+        csv_text = payload.get("csv_text")
+        if (
+            not isinstance(file_name, str)
+            or not re.fullmatch(r"[A-Za-z0-9._ -]{1,128}\.csv", file_name)
+            or not isinstance(csv_text, str)
+        ):
+            self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "reason": "invalid_nse_announcement_import"},
+            )
+            return
+        try:
+            parsed = parse_nse_announcement_csv(csv_text)
+            store = _get_eod_store()
+            write_result = store.append_news_event_records(
+                parsed,
+                source_file_name=file_name,
+            )
+            workspace = build_news_events_workspace(
+                reviewed_on=datetime.now(INDIA_TIMEZONE).date(),
+                live_items=store.load_news_event_records(),
+            )
+        except ValueError as error:
+            self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "reason": str(error)},
+            )
+            return
+        self._send_json(
+            HTTPStatus.OK,
+            {**workspace, "write_result": write_result},
+        )
+
+    def _read_json_payload(
+        self, maximum_bytes: int = MAX_REQUEST_BYTES
+    ) -> dict[str, object] | None:
         content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
         if content_type != "application/json":
             self._send_json(
@@ -6689,7 +7661,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             content_length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             content_length = -1
-        if content_length <= 0 or content_length > MAX_REQUEST_BYTES:
+        if content_length <= 0 or content_length > maximum_bytes:
             self._send_json(
                 HTTPStatus.BAD_REQUEST,
                 {"ok": False, "reason": "invalid_request_size"},

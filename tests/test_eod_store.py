@@ -252,6 +252,43 @@ class EODStoreTest(unittest.TestCase):
         self.assertEqual(len(loaded), 2)
         self.assertNotEqual(loaded[0]["evidence_hash"], loaded[1]["evidence_hash"])
 
+    def test_manual_news_import_is_append_only_and_idempotent(self):
+        rows = [
+            {
+                "source_key": "nse_corporate_filings_manual_csv",
+                "published_at": "2026-10-05T15:42:10+05:30",
+                "symbol": "INFY",
+                "company_name": "Infosys Limited",
+                "category": "corporate_announcement",
+                "headline": "Board meeting outcome",
+                "attachment_url": "https://example.test/filing.pdf",
+                "raw": {"SYMBOL": "INFY", "SUBJECT": "Board meeting outcome"},
+            }
+        ]
+        first = self.store.append_news_event_records(
+            rows,
+            source_file_name="nse-announcements.csv",
+            imported_at="2026-10-06T10:00:00+00:00",
+        )
+        duplicate = self.store.append_news_event_records(
+            rows,
+            source_file_name="nse-announcements.csv",
+            imported_at="2026-10-06T10:05:00+00:00",
+        )
+        revised = [dict(rows[0], headline="Revised board meeting outcome")]
+        revision = self.store.append_news_event_records(
+            revised,
+            source_file_name="nse-announcements-revised.csv",
+            imported_at="2026-10-06T10:10:00+00:00",
+        )
+        self.assertEqual(first, {"inserted": 1, "duplicates": 0})
+        self.assertEqual(duplicate, {"inserted": 0, "duplicates": 1})
+        self.assertEqual(revision, {"inserted": 1, "duplicates": 0})
+        loaded = self.store.load_news_event_records()
+        self.assertEqual(len(loaded), 2)
+        self.assertEqual(loaded[0]["symbol"], "INFY")
+        self.assertNotEqual(loaded[0]["event_hash"], loaded[1]["event_hash"])
+
     def test_macro_snapshots_are_append_only_and_preserve_instrument_label(self):
         rows = [
             {"date": date(2026, 9, 24), "metric_key": "usd_inr", "value": 95.9099, "unit": "INR per USD", "instrument_label": "USD/INR"},

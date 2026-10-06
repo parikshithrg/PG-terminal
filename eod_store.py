@@ -204,6 +204,24 @@ class EODStore:
 
                     CREATE INDEX IF NOT EXISTS sentiment_factor_snapshot_date_idx
                     ON sentiment_factor_snapshots(as_of_date, created_at);
+
+                    CREATE TABLE IF NOT EXISTS news_event_records (
+                        event_hash TEXT PRIMARY KEY,
+                        source_key TEXT NOT NULL,
+                        published_at TEXT NOT NULL,
+                        symbol TEXT NOT NULL,
+                        company_name TEXT NOT NULL,
+                        category TEXT NOT NULL,
+                        headline TEXT NOT NULL,
+                        attachment_url TEXT,
+                        source_file_name TEXT NOT NULL,
+                        raw_json TEXT NOT NULL,
+                        imported_at TEXT NOT NULL,
+                        schema_version INTEGER NOT NULL
+                    );
+
+                    CREATE INDEX IF NOT EXISTS news_event_records_published_idx
+                    ON news_event_records(published_at, symbol);
                     """
                 )
 
@@ -852,6 +870,111 @@ class EODStore:
             }
             for row in rows
         ]
+
+    def append_news_event_records(
+        self,
+        rows: list[dict[str, object]],
+        *,
+        source_file_name: str,
+        imported_at: str | None = None,
+    ) -> dict[str, int]:
+        if (
+            not isinstance(rows, list)
+            or not rows
+            or not isinstance(source_file_name, str)
+            or not re.fullmatch(r"[A-Za-z0-9._ -]{1,128}\.csv", source_file_name)
+        ):
+            raise ValueError("invalid_news_event_import")
+        timestamp = imported_at or datetime.now(timezone.utc).isoformat()
+        prepared: list[tuple[object, ...]] = []
+        for row in rows:
+            required = (
+                "source_key",
+                "published_at",
+                "symbol",
+                "company_name",
+                "category",
+                "headline",
+            )
+            if not isinstance(row, dict) or any(not isinstance(row.get(key), str) for key in required):
+                raise ValueError("invalid_news_event_import")
+            canonical_record = {
+                key: row.get(key)
+                for key in (*required, "attachment_url")
+            }
+            try:
+                canonical = json.dumps(
+                    canonical_record,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                )
+                raw_json = json.dumps(
+                    row.get("raw") if isinstance(row.get("raw"), dict) else {},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                )
+            except (TypeError, ValueError) as error:
+                raise ValueError("invalid_news_event_import") from error
+            event_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+            prepared.append(
+                (
+                    event_hash,
+                    row["source_key"],
+                    row["published_at"],
+                    row["symbol"],
+                    row["company_name"],
+                    row["category"],
+                    row["headline"],
+                    row.get("attachment_url"),
+                    source_file_name,
+                    raw_json,
+                    timestamp,
+                    SCHEMA_VERSION,
+                )
+            )
+        inserted = 0
+        duplicates = 0
+        with closing(self._connect()) as connection:
+            with connection:
+                for record in prepared:
+                    existing = connection.execute(
+                        "SELECT 1 FROM news_event_records WHERE event_hash = ?",
+                        (record[0],),
+                    ).fetchone()
+                    if existing is not None:
+                        duplicates += 1
+                        continue
+                    connection.execute(
+                        """
+                        INSERT INTO news_event_records (
+                            event_hash, source_key, published_at, symbol,
+                            company_name, category, headline, attachment_url,
+                            source_file_name, raw_json, imported_at, schema_version
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        record,
+                    )
+                    inserted += 1
+        return {"inserted": inserted, "duplicates": duplicates}
+
+    def load_news_event_records(self, *, limit: int = 500) -> list[dict[str, object]]:
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 5000:
+            raise ValueError("invalid_news_event_limit")
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                """
+                SELECT event_hash, source_key, published_at, symbol,
+                       company_name, category, headline, attachment_url,
+                       source_file_name, imported_at
+                FROM news_event_records
+                ORDER BY published_at DESC, symbol, event_hash
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def append_macro_snapshots(
         self,
