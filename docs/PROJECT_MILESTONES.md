@@ -220,10 +220,16 @@ point-in-time-universe validation are next.
    exclusions, and the active noise safeguards. Rollover baselines remain
    visibly withheld rather than compared across contracts, and `View details`
    opens the descriptive F&O workspace.
-19. **Next executable step:** add the Seasonality Dashboard summary card. Surface
-   the selected instrument's strongest/weakest calendar evidence, observation
-   coverage, as-of/readiness, and a route to the full validation tables without
-   presenting seasonal averages as forecasts.
+19. **Dashboard summary layer — Seasonality slice complete.** The Dashboard now
+   summarizes Nifty 50's strongest/weakest historical calendar months, completed
+   session and month coverage, chronological holdout survival, and the held-out
+   turn-of-month result. `View details` loads the complete locally stored month,
+   weekday, turn-of-month, and holdout tables without requiring a Kite session.
+   All language keeps historical averages separate from forecasts.
+20. **Next executable step:** establish the Screener workspace contract before
+   adding its Dashboard card. Define the locally supported universe, filters,
+   result columns, freshness/readiness states, and evidence limitations so the
+   Dashboard can summarize a real screen rather than an empty placeholder.
 
 ## Approved product-integration milestones
 

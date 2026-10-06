@@ -26,17 +26,17 @@ Updated: 2026-10-06
 - Node.js is not installed and is not required at runtime. The live page loaded
   successfully; repeat an optional Node-based JavaScript syntax check only if a
   future frontend change warrants it.
-- Candidate risk controls and the Market Sentiment/F&O Dashboard summary slices
-  are complete. Resume from the Seasonality Dashboard summary item below.
-  Preserve the analysis-only boundary and reconnect Kite manually only when the
-  owner explicitly chooses a workflow that requires it.
+- Candidate risk controls and the Market Sentiment/F&O/Seasonality Dashboard
+  summary slices are complete. Resume from the Screener workspace-contract item
+  below. Preserve the analysis-only boundary and reconnect Kite manually only
+  when the owner explicitly chooses a workflow that requires it.
 
 ## Saved state
 
 - Branch: `main`
 - Baseline pushed commit before this session: `f4c494d` — Add walk-forward and multi-index regime validation
 - Phase 4 foundation commit: `d7fcb23` — Start versioned sentiment validation snapshots
-- Verification at handoff: 71 automated tests passed; Python compilation and
+- Verification at handoff: 72 automated tests passed; Python compilation and
   live-browser milestone checks passed.
 
 ## Current milestone
@@ -145,6 +145,13 @@ orders or position sizing.
   noise safeguards. The 05-Oct-26 live check showed 210/210 latest contracts and
   two stored sessions, but all 210 were rollover baselines, so classifications
   were correctly withheld rather than compared across contracts.
+- Added a Nifty 50 Seasonality card to the Dashboard. It exposes the strongest
+  and weakest month averages, completed-session/calendar coverage, chronological
+  holdout survival, and held-out turn-of-month evidence. A read-only local
+  seasonality route now fills the complete analysis tables without a Kite login.
+  The 05-Oct-26 live check used 2,478 sessions from 05-Oct-16 through 05-Oct-26:
+  April averaged +3.71%, March averaged -1.39%, and zero month effects survived
+  both chronological holdout halves.
 - The latest verified stored-session board (28-Sep-26) showed Nifty Auto as the
   sole long research match, Nifty Financial Services and Nifty PSU Bank as
   countertrend watches, the two MidSmall indices as tactical watches, eleven
@@ -181,9 +188,9 @@ orders or position sizing.
 
 ## Next work
 
-1. Continue the Dashboard summary layer with a Seasonality card that shows
-   strongest/weakest calendar evidence, observation coverage, readiness, and a
-   route to the full validation tables.
+1. Define and build the Screener workspace contract—local universe, filters,
+   result columns, freshness/readiness, and evidence limitations—before adding
+   its Dashboard summary card.
 2. Continue daily collection for institutional flows, macro context, global risk,
    and futures/OI; freeze their directional thresholds only after adequate
    coverage, then test them out of sample.

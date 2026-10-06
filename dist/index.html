@@ -1004,6 +1004,38 @@
           </div>
         </section>
 
+        <section class="dashboard-section" aria-labelledby="dashboardSeasonalityTitle">
+          <div class="workspace-summary-card">
+            <div class="workspace-summary-head">
+              <div>
+                <div class="workspace-summary-kicker">Workspace summary · Nifty 50</div>
+                <h2 class="workspace-summary-headline" id="dashboardSeasonalityTitle">Seasonality</h2>
+              </div>
+              <span class="workspace-summary-status" id="dashboardSeasonalityStatus">Loading local history</span>
+            </div>
+            <p class="workspace-summary-copy" id="dashboardSeasonalityCopy">Calculating month-of-year evidence and chronological holdout checks from stored EOD history.</p>
+            <div class="workspace-summary-metrics" aria-label="Seasonality summary">
+              <div class="workspace-summary-metric"><strong id="dashboardSeasonalityStrongest">—</strong><span>Strongest month average</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardSeasonalityWeakest">—</strong><span>Weakest month average</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardSeasonalitySessions">—</strong><span>Completed sessions</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardSeasonalitySurvived">—</strong><span>Held-out months survived</span></div>
+            </div>
+            <div class="workspace-summary-readiness">
+              <span><strong>As of</strong> <span id="dashboardSeasonalityAsOf">—</span></span>
+              <span><strong>History</strong> <span id="dashboardSeasonalityHistory">—</span></span>
+              <span><strong>Calendar coverage</strong> <span id="dashboardSeasonalityCoverage">—</span></span>
+              <span><strong>Turn-of-month test</strong> <span id="dashboardSeasonalityTurn">—</span></span>
+            </div>
+            <div class="workspace-summary-actions">
+              <div class="workspace-summary-note" id="dashboardSeasonalityNote">Historical averages and holdout checks are descriptive, not forecasts.</div>
+              <div class="workspace-summary-buttons">
+                <button class="panel-button" id="refreshDashboardSeasonalityButton" type="button">Refresh summary</button>
+                <button class="panel-button primary" id="viewSeasonalityButton" type="button">View details</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section aria-labelledby="marketSnapshotTitle">
           <div class="section-heading-row">
             <h2 class="section-title" id="marketSnapshotTitle">Market snapshot</h2>
@@ -1670,6 +1702,8 @@
     const viewMarketSentimentButton = document.getElementById('viewMarketSentimentButton');
     const refreshDashboardFnoButton = document.getElementById('refreshDashboardFnoButton');
     const viewFnoButton = document.getElementById('viewFnoButton');
+    const refreshDashboardSeasonalityButton = document.getElementById('refreshDashboardSeasonalityButton');
+    const viewSeasonalityButton = document.getElementById('viewSeasonalityButton');
     const marketSentimentView = document.getElementById('marketSentimentView');
     const refreshSentimentButton = document.getElementById('refreshSentimentButton');
     const regimeValidationIndexSelect = document.getElementById('regimeValidationIndexSelect');
@@ -2484,6 +2518,59 @@
       }
     }
 
+    function renderDashboardSeasonalitySummary(result) {
+      const strongest = result.strongest_month || {};
+      const weakest = result.weakest_month || {};
+      const holdout = result.holdout || {};
+      const turn = result.turn_of_month_test || {};
+      const status = document.getElementById('dashboardSeasonalityStatus');
+      status.textContent = result.status === 'historical_evidence_ready' ? 'Historical evidence ready' : 'Partial history';
+      status.className = `workspace-summary-status ${result.status === 'historical_evidence_ready' ? 'ready' : ''}`.trim();
+      document.getElementById('dashboardSeasonalityStrongest').textContent = strongest.period
+        ? `${strongest.period} ${formatSeasonalityPercentage(strongest.average_return_pct, true)}`
+        : '—';
+      document.getElementById('dashboardSeasonalityWeakest').textContent = weakest.period
+        ? `${weakest.period} ${formatSeasonalityPercentage(weakest.average_return_pct, true)}`
+        : '—';
+      document.getElementById('dashboardSeasonalitySessions').textContent = Number(result.completed_sessions || 0).toLocaleString('en-IN');
+      document.getElementById('dashboardSeasonalitySurvived').textContent = `${Number(holdout.survived || 0)}/12`;
+      document.getElementById('dashboardSeasonalityAsOf').textContent = formatDisplayDate(result.as_of_date);
+      document.getElementById('dashboardSeasonalityHistory').textContent = `${formatDisplayDate(result.from_date)} to ${formatDisplayDate(result.as_of_date)}`;
+      document.getElementById('dashboardSeasonalityCoverage').textContent = `${Number(result.populated_months || 0)}/12 months`;
+      document.getElementById('dashboardSeasonalityTurn').textContent = turn.period
+        ? `${formatSeasonalityPercentage(turn.edge_pct, true)} per day · ${turn.significant ? 'significant' : 'not significant'}`
+        : 'Unavailable';
+      document.getElementById('dashboardSeasonalityCopy').textContent = strongest.period && weakest.period
+        ? `${strongest.period} has the highest historical average (${formatSeasonalityPercentage(strongest.average_return_pct, true)}, ${strongest.count} observations); ${weakest.period} has the lowest (${formatSeasonalityPercentage(weakest.average_return_pct, true)}, ${weakest.count} observations).`
+        : 'Month-of-year evidence is still building.';
+      document.getElementById('dashboardSeasonalityNote').textContent =
+        `${Number(holdout.same_direction || 0)}/12 months kept the same direction across the chronological split; ${Number(holdout.survived || 0)} survived both halves. Historical evidence only—not a forecast.`;
+    }
+
+    async function loadDashboardSeasonalitySummary(showSuccess = false) {
+      refreshDashboardSeasonalityButton.disabled = true;
+      refreshDashboardSeasonalityButton.textContent = 'Refreshing…';
+      const status = document.getElementById('dashboardSeasonalityStatus');
+      status.textContent = 'Loading local history';
+      status.className = 'workspace-summary-status';
+      try {
+        const response = await fetch('/api/dashboard/seasonality-summary', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) throw new Error('summary_unavailable');
+        renderDashboardSeasonalitySummary(result);
+        if (showSuccess) showNotice(`Seasonality summary refreshed through ${formatDisplayDate(result.as_of_date)}.`);
+        return true;
+      } catch (_error) {
+        status.textContent = 'Summary unavailable';
+        status.className = 'workspace-summary-status unavailable';
+        document.getElementById('dashboardSeasonalityCopy').textContent = 'The stored Nifty 50 seasonality summary could not be calculated.';
+        return false;
+      } finally {
+        refreshDashboardSeasonalityButton.disabled = false;
+        refreshDashboardSeasonalityButton.textContent = 'Refresh summary';
+      }
+    }
+
     async function loadDomesticSentiment(showSuccess = true) {
       refreshSentimentButton.disabled = true;
       refreshSentimentButton.textContent = 'Refreshing…';
@@ -3068,8 +3155,10 @@
         ? `${strongest.period} ${formatSeasonalityPercentage(strongest.average_return_pct, true)}`
         : '—';
       seasonalitySessionsValue.textContent = Number(result.completed_sessions).toLocaleString('en-IN');
-      seasonalityDataStatus.textContent = `Kite EOD through ${formatDisplayDate(result.as_of_date)}`;
-      const cacheText = result.cache_hit
+      seasonalityDataStatus.textContent = `${result.local_only ? 'Local' : 'Kite'} EOD through ${formatDisplayDate(result.as_of_date)}`;
+      const cacheText = result.local_only
+        ? ' · local stored history'
+        : result.cache_hit
         ? ' · memory cache'
         : result.local_history_reused
           ? ` · local history reused · ${result.new_sessions} new sessions`
@@ -3077,6 +3166,27 @@
       seasonalityLoadStatus.textContent = `${formatDisplayDate(result.from_date)} to ${formatDisplayDate(result.as_of_date)}${cacheText}`;
       seasonalityMonthNote.textContent = 'Return: close-to-close. Range: (monthly high − monthly low) / monthly low. The current incomplete month is excluded.';
       seasonalityWeekdayNote.textContent = 'Completed daily sessions grouped by exchange weekday. Return: close-to-close; range: (high − low) / low.';
+    }
+
+    async function loadLocalSeasonality(showSuccess = false) {
+      const kind = seasonalityStockSelect.value ? 'stock' : 'index';
+      const instrument = kind === 'stock' ? seasonalityStockSelect.value : seasonalityIndexSelect.value;
+      if (!instrument) return false;
+      seasonalityDataStatus.textContent = 'Loading local history…';
+      seasonalityLoadStatus.textContent = 'Reading validated completed sessions from the local store…';
+      try {
+        const query = new URLSearchParams({ kind, instrument });
+        const response = await fetch(`/api/seasonality/local?${query}`, { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) throw new Error('local_history_unavailable');
+        renderSeasonality(result);
+        if (showSuccess) showNotice(`Local seasonality loaded for ${instrument}.`);
+        return true;
+      } catch (_error) {
+        resetSeasonalityData();
+        seasonalityLoadStatus.textContent = 'Stored history is unavailable for this selection. Connect Kite to synchronize it.';
+        return false;
+      }
     }
 
     async function loadSeasonality() {
@@ -3731,6 +3841,10 @@
     viewFnoButton.addEventListener('click', () => {
       document.querySelector('.nav-button[data-page="F&O"]').click();
     });
+    refreshDashboardSeasonalityButton.addEventListener('click', () => loadDashboardSeasonalitySummary(true));
+    viewSeasonalityButton.addEventListener('click', () => {
+      document.querySelector('.nav-button[data-page="Seasonality Analysis"]').click();
+    });
     regimeValidationIndexSelect.addEventListener('change', () => updateRegimeValidationSelection(true));
     regimeValidationBenchmarkSelect.addEventListener('change', () => {
       const benchmark = regimeValidationBenchmarkSelect.value === 'none' ? 'No relative benchmark' : 'Nifty 50 benchmark';
@@ -3794,6 +3908,7 @@
         if (isDashboard) {
           loadDashboardMarketSentimentSummary(false);
           loadDashboardFnoSummary(false);
+          loadDashboardSeasonalitySummary(false);
         }
         if ((isMarketSentiment || isFno) && document.getElementById('sentimentAsOfValue').textContent === '—') {
           loadDomesticSentiment(false);
@@ -3805,6 +3920,8 @@
           window.requestAnimationFrame(drawPriceStrengthChart);
         } else if (isFno) {
           renderFuturesOiTable();
+        } else if (isSeasonality && seasonalityDataStatus.textContent === 'Historical data not loaded') {
+          loadLocalSeasonality(false);
         }
         if (window.innerWidth <= 700) setNavigation(false);
       });
@@ -3825,6 +3942,7 @@
     restoreKiteStatus();
     loadDashboardMarketSentimentSummary(false);
     loadDashboardFnoSummary(false);
+    loadDashboardSeasonalitySummary(false);
   </script>
 </body>
 </html>

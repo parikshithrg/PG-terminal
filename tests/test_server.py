@@ -22,6 +22,7 @@ from server import (
     calculate_regime_walk_forward_validation,
     build_dashboard_market_sentiment_summary,
     build_dashboard_fno_summary,
+    build_dashboard_seasonality_summary,
     build_index_futures_confirmation,
     build_regime_external_cluster_readiness,
     apply_recovering_market_state,
@@ -446,6 +447,47 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(summary["positioning"]["bullish"], 105)
         self.assertEqual(summary["positioning"]["bearish"], 65)
         self.assertFalse(summary["safeguards"]["regime_score_enabled"])
+
+    def test_dashboard_seasonality_summary_keeps_holdout_and_forecast_boundary(self):
+        month_rows = [
+            {
+                "period": period,
+                "count": 8,
+                "average_return_pct": float(index - 5),
+                "average_range_pct": 4.0,
+                "highest_return_pct": 10.0,
+                "lowest_return_pct": -8.0,
+            }
+            for index, period in enumerate(
+                ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+            )
+        ]
+        summary = build_dashboard_seasonality_summary(
+            {
+                "ok": True,
+                "instrument": "Nifty 50",
+                "kind": "index",
+                "from_date": "2017-01-02",
+                "as_of_date": "2026-10-05",
+                "completed_sessions": 2400,
+                "month_rows": month_rows,
+                "held_out_summary": {
+                    "same_direction": 7,
+                    "train_significant": 2,
+                    "survived": 1,
+                },
+                "turn_held_out_rows": [
+                    {"period": "Train", "edge_pct": 0.1, "significant": False},
+                    {"period": "Test", "edge_pct": 0.2, "significant": True},
+                ],
+            }
+        )
+        self.assertEqual(summary["scope"], "historical_not_forecast")
+        self.assertEqual(summary["status"], "historical_evidence_ready")
+        self.assertEqual(summary["strongest_month"]["period"], "Dec")
+        self.assertEqual(summary["weakest_month"]["period"], "Jan")
+        self.assertEqual(summary["holdout"]["survived"], 1)
+        self.assertEqual(summary["turn_of_month_test"]["period"], "Test")
 
     def test_external_cluster_readiness_requires_complete_dated_sessions(self):
         dates = [date(2025, 1, 1) + timedelta(days=index) for index in range(252)]

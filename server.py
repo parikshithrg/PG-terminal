@@ -4264,6 +4264,57 @@ def build_dashboard_fno_summary(
     }
 
 
+def build_dashboard_seasonality_summary(
+    seasonality_payload: dict[str, object],
+) -> dict[str, object]:
+    """Condense historical seasonality and holdout evidence for the Dashboard."""
+    if seasonality_payload.get("ok") is not True:
+        raise ValueError("dashboard_seasonality_summary_unavailable")
+    month_rows = seasonality_payload.get("month_rows")
+    if not isinstance(month_rows, list):
+        raise ValueError("dashboard_seasonality_summary_unavailable")
+    populated = [
+        row
+        for row in month_rows
+        if isinstance(row, dict)
+        and int(row.get("count") or 0) > 0
+        and isinstance(row.get("average_return_pct"), (int, float))
+    ]
+    strongest = max(populated, key=lambda row: float(row["average_return_pct"]), default=None)
+    weakest = min(populated, key=lambda row: float(row["average_return_pct"]), default=None)
+    held_out = seasonality_payload.get("held_out_summary")
+    held_out = held_out if isinstance(held_out, dict) else {}
+    turn_rows = seasonality_payload.get("turn_held_out_rows")
+    turn_rows = turn_rows if isinstance(turn_rows, list) else []
+    turn_test = next(
+        (row for row in turn_rows if isinstance(row, dict) and row.get("period") == "Test"),
+        None,
+    )
+    return {
+        "ok": True,
+        "status": "historical_evidence_ready" if len(populated) == 12 else "partial_history",
+        "scope": "historical_not_forecast",
+        "instrument": seasonality_payload.get("instrument"),
+        "kind": seasonality_payload.get("kind"),
+        "from_date": seasonality_payload.get("from_date"),
+        "as_of_date": seasonality_payload.get("as_of_date"),
+        "completed_sessions": int(seasonality_payload.get("completed_sessions") or 0),
+        "populated_months": len(populated),
+        "strongest_month": strongest,
+        "weakest_month": weakest,
+        "holdout": {
+            "same_direction": int(held_out.get("same_direction") or 0),
+            "train_significant": int(held_out.get("train_significant") or 0),
+            "survived": int(held_out.get("survived") or 0),
+        },
+        "turn_of_month_test": turn_test,
+        "limitations": [
+            "Historical averages and holdout checks are descriptive, not forecasts.",
+            "The current incomplete calendar month is excluded from month-of-year evidence.",
+        ],
+    }
+
+
 def normalize_index_name(value: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", value.upper().replace("&", "AND"))
 
@@ -4379,6 +4430,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         if path == "/api/dashboard/fno-summary":
             self._send_dashboard_fno_summary()
             return
+        if path == "/api/dashboard/seasonality-summary":
+            self._send_dashboard_seasonality_summary()
+            return
+        if path == "/api/seasonality/local":
+            self._send_local_seasonality(urllib.parse.urlsplit(self.path).query)
+            return
         if path == "/api/kite/seasonality":
             self._send_seasonality(urllib.parse.urlsplit(self.path).query)
             return
@@ -4435,6 +4492,94 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 HTTPStatus.SERVICE_UNAVAILABLE,
                 {"ok": False, "reason": str(error)},
             )
+
+    def _send_dashboard_seasonality_summary(self) -> None:
+        try:
+            payload = build_dashboard_seasonality_summary(
+                self._calculate_local_seasonality_payload(
+                    kind="index",
+                    instrument="Nifty 50",
+                )
+            )
+            self._send_json(HTTPStatus.OK, payload)
+        except ValueError as error:
+            self._send_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"ok": False, "reason": str(error)},
+            )
+
+    def _send_local_seasonality(self, raw_query: str) -> None:
+        try:
+            query = urllib.parse.parse_qs(raw_query, keep_blank_values=True)
+            kinds = query.get("kind", [])
+            instruments = query.get("instrument", [])
+            if len(kinds) != 1 or len(instruments) != 1:
+                raise ValueError("invalid_seasonality_request")
+            payload = self._calculate_local_seasonality_payload(
+                kind=kinds[0],
+                instrument=instruments[0],
+            )
+            self._send_json(HTTPStatus.OK, payload)
+        except ValueError as error:
+            self._send_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"ok": False, "reason": str(error)},
+            )
+
+    @staticmethod
+    def _calculate_local_seasonality_payload(
+        *,
+        kind: str,
+        instrument: str,
+    ) -> dict[str, object]:
+        if kind not in {"index", "stock"} or not instrument or len(instrument) > 64:
+            raise ValueError("invalid_seasonality_request")
+        store = _get_eod_store()
+        if kind == "index":
+            if instrument not in SEASONALITY_INDICES:
+                raise ValueError("instrument_not_available")
+        else:
+            available_stocks = {
+                str(item["display_name"])
+                for item in store.list_instruments(kind="stock")
+            }
+            if instrument not in available_stocks:
+                raise ValueError("instrument_not_available")
+        now = datetime.now(INDIA_TIMEZONE)
+        completed_through = completed_history_date(now)
+        candles = store.load_candles(
+            kind=kind,
+            display_name=instrument,
+            start=historical_lookback_start(completed_through),
+            end=completed_through,
+        )
+        if len(candles) < 2:
+            raise ValueError("no_completed_historical_data")
+        month_rows, weekday_rows = calculate_seasonality(candles, today=now.date())
+        validation = calculate_seasonality_validation(candles, today=now.date())
+        return {
+            "ok": True,
+            "instrument": instrument,
+            "kind": kind,
+            "retrieved_at": datetime.now(timezone.utc).isoformat(),
+            "from_date": candles[0]["date"].isoformat(),
+            "as_of_date": candles[-1]["date"].isoformat(),
+            "completed_sessions": len(candles),
+            "historical_requests": 0,
+            "persistent_store": True,
+            "stored_sessions_before_sync": len(candles),
+            "new_sessions": 0,
+            "duplicate_sessions": 0,
+            "local_history_reused": True,
+            "local_only": True,
+            "sync_from_date": None,
+            "month_rows": month_rows,
+            "weekday_rows": weekday_rows,
+            **validation,
+            "return_definition": "close-to-close percentage change",
+            "range_definition": "(high - low) / low * 100",
+            "price_source": "Validated local Kite EOD candles",
+        }
 
     def _send_regime_validation(self, query: str) -> None:
         try:
