@@ -1,6 +1,6 @@
 # Session handoff
 
-Updated: 2026-09-29
+Updated: 2026-10-06
 
 ## Linux migration checkpoint — 2026-10-05
 
@@ -26,17 +26,18 @@ Updated: 2026-09-29
 - Node.js is not installed and is not required at runtime. The live page loaded
   successfully; repeat an optional Node-based JavaScript syntax check only if a
   future frontend change warrants it.
-- Resume development from the existing **Next work** item below: candidate risk
-  controls and horizon-specific validation. Preserve the analysis-only boundary
-  and reconnect Kite manually only when the owner explicitly chooses a workflow
-  that requires it.
+- Candidate risk controls and horizon-specific validation are now complete for
+  research. Resume from the Dashboard summary-layer item below. Preserve the
+  analysis-only boundary and reconnect Kite manually only when the owner
+  explicitly chooses a workflow that requires it.
 
 ## Saved state
 
 - Branch: `main`
 - Baseline pushed commit before this session: `f4c494d` — Add walk-forward and multi-index regime validation
 - Phase 4 foundation commit: `d7fcb23` — Start versioned sentiment validation snapshots
-- Verification at handoff: 67 automated tests passed; Python and embedded browser JavaScript syntax checks passed.
+- Verification at handoff: 69 automated tests passed; Python compilation and
+  live-browser milestone checks passed.
 
 ## Current milestone
 
@@ -120,6 +121,20 @@ orders or position sizing.
   sample—and is joined only to its own historical state evidence. The board can
   show simultaneous long, short, tactical/countertrend watch, avoid, and
   insufficient rows; Nifty 50 is context only.
+- Added horizon-specific candidate evidence: 20-session long research and
+  five-session downside-continuation research. Each matched state now includes
+  tail position outcome, adverse excursion, and adverse-distance breach rates.
+  These are historical risk diagnostics and are not presented as stops or
+  position-sizing instructions.
+- Added a conservative futures/OI confirmation gate for historical short
+  candidates. It requires 252 complete history sessions, current same-session
+  observations, adequate index-constituent coverage, and bearish quadrant
+  breadth before a short can be published. The current two stored futures/OI
+  sessions remain explicitly in history-building status.
+- The latest live board (05-Oct-26) showed 17 eligible rows: zero long
+  candidates, zero confirmed shorts, seven watch rows, nine avoid rows, and
+  Nifty 50 as market context. This is a changing research snapshot, not a saved
+  recommendation.
 - The latest verified stored-session board (28-Sep-26) showed Nifty Auto as the
   sole long research match, Nifty Financial Services and Nifty PSU Bank as
   countertrend watches, the two MidSmall indices as tactical watches, eleven
@@ -156,9 +171,8 @@ orders or position sizing.
 
 ## Next work
 
-1. Add candidate risk controls and horizon-specific validation: slower long
-   setups, shorter downside-continuation tests, tail-loss/stop-distance evidence,
-   and futures/OI confirmation when enough snapshots accumulate.
+1. Build the Dashboard summary layer, starting with a Market Sentiment card that
+   shows the current decision mix, freshness/readiness, and a route to details.
 2. Continue daily collection for institutional flows, macro context, global risk,
    and futures/OI; freeze their directional thresholds only after adequate
    coverage, then test them out of sample.

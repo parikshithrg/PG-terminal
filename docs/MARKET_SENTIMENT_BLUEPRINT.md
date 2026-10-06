@@ -337,8 +337,11 @@ These are review prompts, not target weights or automated transactions.
   map so long, short, watch, avoid, and insufficient-evidence candidates coexist.
   Calculate current state separately from the forward-outcome cutoff and keep
   Nifty 50 as context only.
-- [ ] Add candidate-level risk controls, shorter-horizon downside-continuation
-  tests, and futures/OI confirmation before treating the board as actionable.
+- [x] Add candidate-level risk evidence and horizon-specific validation: use
+  20-session long outcomes and five-session downside-continuation outcomes;
+  expose tail position returns, adverse excursions, and 2%/3%/5% distance-breach
+  rates; require mature same-session bearish futures/OI breadth before promoting
+  a short. These controls remain research evidence, not execution instructions.
 - Publish the evidence table and limitations before activating a composite label.
 
 #### Multi-index extension

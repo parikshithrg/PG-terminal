@@ -201,10 +201,18 @@ point-in-time-universe validation are next.
    from the 60-session-truncated outcome sample, then joined to its own validated
    state history. The board ranks simultaneous long, short, countertrend/tactical
    watch, avoid, and insufficient-evidence rows. Nifty 50 is context only.
-16. **Next executable step:** add candidate risk controls and signal horizons.
-   Separate slower 20-session long setups from shorter downside-continuation
-   research, expose tail loss/stop-distance evidence, and require futures/OI
-   confirmation for short candidates once sufficient history exists.
+16. **Candidate risk controls and signal horizons — complete for research.**
+   Long evidence now uses 20-session outcomes while downside-continuation
+   evidence uses five sessions. The board exposes the 10th-percentile oriented
+   outcome, 90th-percentile adverse excursion, and 2%/3%/5% adverse-distance
+   breach rates as historical risk evidence, not stop or sizing advice. Short
+   candidates additionally require at least 252 complete futures/OI sessions,
+   same-session coverage, and bearish index-constituent breadth; sparse history
+   remains visibly unconfirmed and cannot promote a short.
+17. **Next executable step:** build the Dashboard summary layer described below.
+   Start with a Market Sentiment summary card that exposes the current
+   cross-sectional decision mix, data freshness/readiness, and a route to the
+   detailed evidence without duplicating the full analysis.
 
 ## Approved product-integration milestones
 

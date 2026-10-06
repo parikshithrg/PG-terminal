@@ -79,6 +79,13 @@ REGIME_DIRECTIONAL_MINIMUM_STATE_SESSIONS = 60
 REGIME_DIRECTIONAL_RETURN_THRESHOLD_PCT = 1.0
 REGIME_DIRECTIONAL_POSITIVE_RATE_THRESHOLD_PCT = 60.0
 REGIME_DIRECTIONAL_EXCESS_THRESHOLD_PCT = 0.5
+REGIME_LONG_HORIZON_SESSIONS = 20
+REGIME_SHORT_HORIZON_SESSIONS = 5
+REGIME_RISK_TAIL_PERCENTILE = 10.0
+REGIME_ADVERSE_DISTANCE_LEVELS_PCT = (2.0, 3.0, 5.0)
+REGIME_FUTURES_SHORT_MINIMUM_STATE_COUNT = 5
+REGIME_FUTURES_SHORT_MINIMUM_COVERAGE_PCT = 50.0
+REGIME_FUTURES_SHORT_BEARISH_SHARE_THRESHOLD_PCT = 55.0
 REGIME_RECOVERY_INCREMENTAL_RETURN_PCT = 0.5
 REGIME_RECOVERY_INCREMENTAL_POSITIVE_RATE_PCT = 5.0
 REGIME_RECOVERY_DRAWDOWN_TOLERANCE_PCT = 2.0
@@ -698,6 +705,85 @@ def calculate_futures_oi_summary(rows: list[dict[str, object]]) -> dict[str, obj
     }
 
 
+def build_index_futures_confirmation(
+    constituent_symbols: list[str],
+    *,
+    fno_constituent_count: int,
+    futures_summary: dict[str, object],
+    history_ready: bool,
+    current_state_date: str | None,
+) -> dict[str, object]:
+    """Gate short research with mature history and same-session bearish F&O breadth."""
+    states = futures_summary.get("states")
+    states = states if isinstance(states, list) else []
+    constituents = set(constituent_symbols)
+    selected = [
+        item
+        for item in states
+        if isinstance(item, dict) and str(item.get("underlying") or "") in constituents
+    ]
+    clear_states = [item for item in selected if item.get("state") != "no_clear_signal"]
+    bearish_states = [
+        item
+        for item in clear_states
+        if item.get("state") in {"short_build_up", "long_unwinding"}
+    ]
+    bullish_states = [
+        item
+        for item in clear_states
+        if item.get("state") in {"long_build_up", "short_covering"}
+    ]
+    denominator = max(1, int(fno_constituent_count))
+    coverage_pct = 100 * len(selected) / denominator
+    bearish_share_pct = (
+        100 * len(bearish_states) / len(clear_states) if clear_states else 0.0
+    )
+    same_session = bool(
+        current_state_date
+        and futures_summary.get("as_of_date") == current_state_date
+    )
+    current_confirmation_ready = bool(
+        same_session
+        and len(clear_states) >= REGIME_FUTURES_SHORT_MINIMUM_STATE_COUNT
+        and coverage_pct >= REGIME_FUTURES_SHORT_MINIMUM_COVERAGE_PCT
+    )
+    bearish_confirmation = bool(
+        current_confirmation_ready
+        and bearish_share_pct >= REGIME_FUTURES_SHORT_BEARISH_SHARE_THRESHOLD_PCT
+    )
+    if not history_ready:
+        status = "history_accumulating"
+    elif not current_confirmation_ready:
+        status = "current_confirmation_unavailable"
+    elif bearish_confirmation:
+        status = "bearish_confirmation_present"
+    else:
+        status = "bearish_confirmation_absent"
+    return {
+        "history_ready": bool(history_ready),
+        "current_confirmation_ready": current_confirmation_ready,
+        "bearish_confirmation": bearish_confirmation,
+        "short_gate_passed": bool(history_ready and bearish_confirmation),
+        "status": status,
+        "as_of_date": futures_summary.get("as_of_date"),
+        "same_session_as_current_state": same_session,
+        "eligible_constituent_states": len(selected),
+        "clear_directional_states": len(clear_states),
+        "bearish_states": len(bearish_states),
+        "bullish_states": len(bullish_states),
+        "coverage_pct": round(coverage_pct, 1),
+        "bearish_share_pct": round(bearish_share_pct, 1),
+        "contract": {
+            "minimum_history_sessions": REGIME_EXTERNAL_HISTORY_SESSIONS,
+            "minimum_clear_constituent_states": REGIME_FUTURES_SHORT_MINIMUM_STATE_COUNT,
+            "minimum_constituent_coverage_pct": REGIME_FUTURES_SHORT_MINIMUM_COVERAGE_PCT,
+            "minimum_bearish_share_pct": REGIME_FUTURES_SHORT_BEARISH_SHARE_THRESHOLD_PCT,
+            "bearish_states": ["short_build_up", "long_unwinding"],
+            "status": "confirmation_gate_not_trading_signal",
+        },
+    }
+
+
 def parse_dashboard_index_tokens(csv_payload: str) -> dict[str, str]:
     reader = csv.DictReader(io.StringIO(csv_payload))
     required = {"instrument_token", "tradingsymbol", "name", "segment", "exchange"}
@@ -927,6 +1013,86 @@ def _sample_variance(values: list[float]) -> float | None:
         return None
     average = sum(values) / len(values)
     return sum((value - average) ** 2 for value in values) / (len(values) - 1)
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values or not 0 <= percentile <= 100:
+        raise ValueError("invalid_percentile_input")
+    ordered = sorted(float(value) for value in values)
+    if len(ordered) == 1:
+        return ordered[0]
+    rank = (len(ordered) - 1) * percentile / 100
+    lower = math.floor(rank)
+    upper = math.ceil(rank)
+    if lower == upper:
+        return ordered[lower]
+    weight = rank - lower
+    return ordered[lower] * (1 - weight) + ordered[upper] * weight
+
+
+def build_regime_risk_profile(
+    observations: list[dict[str, object]],
+    *,
+    horizon_sessions: int,
+    orientation: str,
+) -> dict[str, object]:
+    """Summarize outcome tails and entry-relative adverse distance without sizing advice."""
+    if horizon_sessions <= 0 or orientation not in {"long", "short"}:
+        raise ValueError("invalid_regime_risk_profile_contract")
+    key = str(horizon_sessions)
+    return_key = "forward_returns_pct"
+    adverse_key = (
+        "forward_long_adverse_excursions_pct"
+        if orientation == "long"
+        else "forward_short_adverse_excursions_pct"
+    )
+    position_returns: list[float] = []
+    adverse_distances: list[float] = []
+    for observation in observations:
+        raw_returns = observation.get(return_key)
+        raw_adverse = observation.get(adverse_key)
+        if not isinstance(raw_returns, dict) or not isinstance(raw_adverse, dict):
+            continue
+        outcome = raw_returns.get(key)
+        adverse = raw_adverse.get(key)
+        if not isinstance(outcome, (int, float)) or not isinstance(adverse, (int, float)):
+            continue
+        position_returns.append(float(outcome) if orientation == "long" else -float(outcome))
+        adverse_distances.append(float(adverse))
+    if not position_returns:
+        return {
+            "available": False,
+            "orientation": orientation,
+            "horizon_sessions": horizon_sessions,
+            "observations": 0,
+        }
+    breach_rates = {
+        f"{distance:g}": round(
+            100 * sum(value >= distance for value in adverse_distances) / len(adverse_distances),
+            1,
+        )
+        for distance in REGIME_ADVERSE_DISTANCE_LEVELS_PCT
+    }
+    return {
+        "available": True,
+        "orientation": orientation,
+        "horizon_sessions": horizon_sessions,
+        "observations": len(position_returns),
+        "tail_percentile": REGIME_RISK_TAIL_PERCENTILE,
+        "tail_position_return_pct": round(
+            _percentile(position_returns, REGIME_RISK_TAIL_PERCENTILE), 2
+        ),
+        "median_position_return_pct": round(median(position_returns), 2),
+        "worst_position_return_pct": round(min(position_returns), 2),
+        "median_adverse_excursion_pct": round(median(adverse_distances), 2),
+        "tail_adverse_excursion_pct": round(
+            _percentile(adverse_distances, 100 - REGIME_RISK_TAIL_PERCENTILE), 2
+        ),
+        "worst_adverse_excursion_pct": round(max(adverse_distances), 2),
+        "adverse_distance_breach_rates_pct": breach_rates,
+        "distance_levels_pct": list(REGIME_ADVERSE_DISTANCE_LEVELS_PCT),
+        "status": "historical_risk_evidence_not_stop_recommendation",
+    }
 
 
 def _beta_continued_fraction(a: float, b: float, x: float) -> float:
@@ -2770,11 +2936,22 @@ def calculate_regime_walk_forward_validation(
 
         forward_returns: dict[str, float] = {}
         forward_drawdowns: dict[str, float] = {}
+        forward_long_adverse_excursions: dict[str, float] = {}
+        forward_short_adverse_excursions: dict[str, float] = {}
         forward_excess_returns: dict[str, float | None] = {}
         forward_relative_drawdowns: dict[str, float | None] = {}
         for horizon in horizons:
             future_path = index_closes[position : position + horizon + 1]
             forward_returns[str(horizon)] = (future_path[-1] / close - 1) * 100
+            entry_relative_path = [
+                (future_close / close - 1) * 100 for future_close in future_path[1:]
+            ]
+            forward_long_adverse_excursions[str(horizon)] = max(
+                0.0, -min(entry_relative_path, default=0.0)
+            )
+            forward_short_adverse_excursions[str(horizon)] = max(
+                0.0, max(entry_relative_path, default=0.0)
+            )
             peak = future_path[0]
             worst_drawdown = 0.0
             for future_close in future_path[1:]:
@@ -2806,6 +2983,8 @@ def calculate_regime_walk_forward_validation(
             {
                 "forward_returns_pct": forward_returns,
                 "forward_drawdowns_pct": forward_drawdowns,
+                "forward_long_adverse_excursions_pct": forward_long_adverse_excursions,
+                "forward_short_adverse_excursions_pct": forward_short_adverse_excursions,
                 "forward_excess_returns_pct": forward_excess_returns,
                 "forward_relative_drawdowns_pct": forward_relative_drawdowns,
             }
@@ -2971,58 +3150,67 @@ def calculate_regime_walk_forward_validation(
     ]
     directional_evidence: list[dict[str, object]] = []
     for state in transition_analysis["by_state"]:
-        metrics = state["horizons"]["20"]
+        state_key = str(state["label_key"])
+        state_group = transition_grouped[state_key]
+        long_metrics = state["horizons"][str(REGIME_LONG_HORIZON_SESSIONS)]
+        short_metrics = state["horizons"][str(REGIME_SHORT_HORIZON_SESSIONS)]
         sessions = int(state["sessions"])
-        median_return = float(metrics["median_return_pct"])
-        positive_rate = float(metrics["positive_rate_pct"])
-        median_excess = metrics.get("median_excess_return_pct")
-        outperformance_rate = metrics.get("outperformance_rate_pct")
         sample_ready = sessions >= REGIME_DIRECTIONAL_MINIMUM_STATE_SESSIONS
+        long_median_excess = long_metrics.get("median_excess_return_pct")
+        long_outperformance_rate = long_metrics.get("outperformance_rate_pct")
+        short_median_excess = short_metrics.get("median_excess_return_pct")
+        short_outperformance_rate = short_metrics.get("outperformance_rate_pct")
         relative_long_ready = (
             not use_benchmark
             or (
-                median_excess is not None
-                and float(median_excess) >= REGIME_DIRECTIONAL_EXCESS_THRESHOLD_PCT
-                and outperformance_rate is not None
-                and float(outperformance_rate) >= 55.0
+                long_median_excess is not None
+                and float(long_median_excess) >= REGIME_DIRECTIONAL_EXCESS_THRESHOLD_PCT
+                and long_outperformance_rate is not None
+                and float(long_outperformance_rate) >= 55.0
             )
         )
         relative_short_ready = (
             not use_benchmark
             or (
-                median_excess is not None
-                and float(median_excess) <= -REGIME_DIRECTIONAL_EXCESS_THRESHOLD_PCT
-                and outperformance_rate is not None
-                and float(outperformance_rate) <= 45.0
+                short_median_excess is not None
+                and float(short_median_excess) <= -REGIME_DIRECTIONAL_EXCESS_THRESHOLD_PCT
+                and short_outperformance_rate is not None
+                and float(short_outperformance_rate) <= 45.0
             )
         )
-        long_state_eligible = state["label_key"] in {
+        long_state_eligible = state_key in {
             "positive_market",
             "cautiously_positive",
             "recovering_market",
         }
-        short_state_eligible = state["label_key"] in {
+        short_state_eligible = state_key in {
             "weak_market",
             "high_risk_market",
         }
-        if (
+        long_case_passed = bool(
             sample_ready
-            and median_return >= REGIME_DIRECTIONAL_RETURN_THRESHOLD_PCT
-            and positive_rate >= REGIME_DIRECTIONAL_POSITIVE_RATE_THRESHOLD_PCT
+            and float(long_metrics["median_return_pct"])
+            >= REGIME_DIRECTIONAL_RETURN_THRESHOLD_PCT
+            and float(long_metrics["positive_rate_pct"])
+            >= REGIME_DIRECTIONAL_POSITIVE_RATE_THRESHOLD_PCT
             and relative_long_ready
-        ):
+        )
+        short_case_passed = bool(
+            sample_ready
+            and float(short_metrics["median_return_pct"])
+            <= -REGIME_DIRECTIONAL_RETURN_THRESHOLD_PCT
+            and float(short_metrics["positive_rate_pct"])
+            <= 100 - REGIME_DIRECTIONAL_POSITIVE_RATE_THRESHOLD_PCT
+            and relative_short_ready
+        )
+        if long_case_passed:
             if long_state_eligible:
                 research_bias = "long_research_candidate"
             elif short_state_eligible:
                 research_bias = "countertrend_rebound_study"
             else:
                 research_bias = "tactical_rebound_study"
-        elif (
-            sample_ready
-            and median_return <= -REGIME_DIRECTIONAL_RETURN_THRESHOLD_PCT
-            and positive_rate <= 100 - REGIME_DIRECTIONAL_POSITIVE_RATE_THRESHOLD_PCT
-            and relative_short_ready
-        ):
+        elif short_case_passed:
             research_bias = (
                 "short_research_candidate"
                 if short_state_eligible else "reversal_short_study"
@@ -3031,19 +3219,67 @@ def calculate_regime_walk_forward_validation(
             research_bias = "insufficient_sample"
         else:
             research_bias = "no_consistent_edge"
+        selected_orientation = (
+            "short"
+            if research_bias in {"short_research_candidate", "reversal_short_study"}
+            or (
+                research_bias in {"insufficient_sample", "no_consistent_edge"}
+                and short_state_eligible
+            )
+            else "long"
+        )
+        selected_horizon = (
+            REGIME_SHORT_HORIZON_SESSIONS
+            if selected_orientation == "short" else REGIME_LONG_HORIZON_SESSIONS
+        )
+        metrics = short_metrics if selected_orientation == "short" else long_metrics
+        median_excess = metrics.get("median_excess_return_pct")
+        outperformance_rate = metrics.get("outperformance_rate_pct")
+        long_risk = build_regime_risk_profile(
+            state_group,
+            horizon_sessions=REGIME_LONG_HORIZON_SESSIONS,
+            orientation="long",
+        )
+        short_risk = build_regime_risk_profile(
+            state_group,
+            horizon_sessions=REGIME_SHORT_HORIZON_SESSIONS,
+            orientation="short",
+        )
+        selected_risk = short_risk if selected_orientation == "short" else long_risk
         directional_evidence.append(
             {
-                "label_key": state["label_key"],
+                "label_key": state_key,
                 "label": state["label"],
                 "sessions": sessions,
                 "sample_ready": sample_ready,
                 "research_bias": research_bias,
+                "orientation": selected_orientation,
+                "horizon_sessions": selected_horizon,
                 "median_return_pct": metrics["median_return_pct"],
                 "positive_rate_pct": metrics["positive_rate_pct"],
                 "median_excess_return_pct": median_excess,
                 "outperformance_rate_pct": outperformance_rate,
                 "worst_return_pct": metrics["worst_return_pct"],
                 "worst_max_drawdown_pct": metrics["worst_max_drawdown_pct"],
+                "risk_profile": selected_risk,
+                "long_case": {
+                    "horizon_sessions": REGIME_LONG_HORIZON_SESSIONS,
+                    "passed": long_case_passed,
+                    "median_return_pct": long_metrics["median_return_pct"],
+                    "positive_rate_pct": long_metrics["positive_rate_pct"],
+                    "median_excess_return_pct": long_median_excess,
+                    "outperformance_rate_pct": long_outperformance_rate,
+                    "risk_profile": long_risk,
+                },
+                "short_case": {
+                    "horizon_sessions": REGIME_SHORT_HORIZON_SESSIONS,
+                    "passed": short_case_passed,
+                    "median_return_pct": short_metrics["median_return_pct"],
+                    "positive_rate_pct": short_metrics["positive_rate_pct"],
+                    "median_excess_return_pct": short_median_excess,
+                    "outperformance_rate_pct": short_outperformance_rate,
+                    "risk_profile": short_risk,
+                },
             }
         )
     transition_analysis["directional_state_evidence"] = directional_evidence
@@ -3056,6 +3292,10 @@ def calculate_regime_walk_forward_validation(
         "relative_median_excess_threshold_pct": REGIME_DIRECTIONAL_EXCESS_THRESHOLD_PCT,
         "relative_outperformance_long_threshold_pct": 55.0,
         "relative_outperformance_short_threshold_pct": 45.0,
+        "long_horizon_sessions": REGIME_LONG_HORIZON_SESSIONS,
+        "short_horizon_sessions": REGIME_SHORT_HORIZON_SESSIONS,
+        "tail_percentile": REGIME_RISK_TAIL_PERCENTILE,
+        "adverse_distance_levels_pct": list(REGIME_ADVERSE_DISTANCE_LEVELS_PCT),
         "status": "historical_research_only",
     }
 
@@ -4035,6 +4275,22 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             "global": global_risk_rows,
             "futures": futures_snapshot_rows,
         }
+        external_readiness = build_regime_external_cluster_readiness(
+            institutional_flow_rows=institutional_flow_rows,
+            confirmed_fpi_rows=confirmed_fpi_rows,
+            macro_snapshot_rows=macro_snapshot_rows,
+            global_risk_rows=global_risk_rows,
+            futures_snapshot_rows=futures_snapshot_rows,
+        )
+        futures_history_row = next(
+            (
+                item
+                for item in external_readiness["rows"]
+                if item["key"] == "kite_futures_oi"
+            ),
+            {},
+        )
+        futures_oi_summary = calculate_futures_oi_summary(futures_snapshot_rows)
         cache_contract = {
             "rule_version": REGIME_RULE_VERSION,
             "recovery_contract": (
@@ -4046,6 +4302,13 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 REGIME_DIRECTIONAL_RETURN_THRESHOLD_PCT,
                 REGIME_DIRECTIONAL_POSITIVE_RATE_THRESHOLD_PCT,
                 REGIME_DIRECTIONAL_EXCESS_THRESHOLD_PCT,
+                REGIME_LONG_HORIZON_SESSIONS,
+                REGIME_SHORT_HORIZON_SESSIONS,
+                REGIME_RISK_TAIL_PERCENTILE,
+                REGIME_ADVERSE_DISTANCE_LEVELS_PCT,
+                REGIME_FUTURES_SHORT_MINIMUM_STATE_COUNT,
+                REGIME_FUTURES_SHORT_MINIMUM_COVERAGE_PCT,
+                REGIME_FUTURES_SHORT_BEARISH_SHARE_THRESHOLD_PCT,
             ),
             "constituent_snapshot_as_of": constituent_snapshot.get("as_of"),
             "constituent_membership_history": {
@@ -4184,6 +4447,18 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                     ),
                     None,
                 )
+                futures_confirmation = build_index_futures_confirmation(
+                    constituent_indices[name],
+                    fno_constituent_count=int(
+                        validation["breadth_universe"]["fno_constituent_count"]
+                    ),
+                    futures_summary=futures_oi_summary,
+                    history_ready=bool(futures_history_row.get("history_ready")),
+                    current_state_date=(
+                        str(current_state.get("as_of_date"))
+                        if current_state.get("as_of_date") else None
+                    ),
+                )
                 is_benchmark = name == "Nifty 50"
                 if is_benchmark:
                     current_decision = "market_context_only"
@@ -4194,7 +4469,14 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 elif matched_state_evidence.get("research_bias") == "long_research_candidate":
                     current_decision = "long_candidate"
                 elif matched_state_evidence.get("research_bias") == "short_research_candidate":
-                    current_decision = "short_candidate"
+                    if futures_confirmation["short_gate_passed"]:
+                        current_decision = "short_candidate"
+                    elif not futures_confirmation["history_ready"]:
+                        current_decision = "short_watch_history_building"
+                    elif not futures_confirmation["current_confirmation_ready"]:
+                        current_decision = "short_watch_unconfirmed"
+                    else:
+                        current_decision = "avoid_no_short_confirmation"
                 elif matched_state_evidence.get("research_bias") == "countertrend_rebound_study":
                     current_decision = "countertrend_watch"
                 elif matched_state_evidence.get("research_bias") == "tactical_rebound_study":
@@ -4275,6 +4557,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                         "historical_short_state": short_state,
                         "current_state": current_state,
                         "current_state_historical_evidence": matched_state_evidence,
+                        "futures_short_confirmation": futures_confirmation,
                         "current_decision": current_decision,
                     }
                 )
@@ -4290,12 +4573,15 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             decision_priority = {
                 "long_candidate": 0,
                 "short_candidate": 1,
-                "countertrend_watch": 2,
-                "tactical_watch": 3,
-                "reversal_watch": 4,
-                "avoid_no_validated_edge": 5,
-                "insufficient_evidence": 6,
-                "market_context_only": 7,
+                "short_watch_unconfirmed": 2,
+                "short_watch_history_building": 3,
+                "countertrend_watch": 4,
+                "tactical_watch": 5,
+                "reversal_watch": 6,
+                "avoid_no_short_confirmation": 7,
+                "avoid_no_validated_edge": 8,
+                "insufficient_evidence": 9,
+                "market_context_only": 10,
             }
             decision_rows = sorted(
                 rows,
@@ -4350,11 +4636,27 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                     "positive_rate_short_threshold_pct": 100
                     - REGIME_DIRECTIONAL_POSITIVE_RATE_THRESHOLD_PCT,
                     "relative_median_excess_threshold_pct": REGIME_DIRECTIONAL_EXCESS_THRESHOLD_PCT,
+                    "long_horizon_sessions": REGIME_LONG_HORIZON_SESSIONS,
+                    "short_horizon_sessions": REGIME_SHORT_HORIZON_SESSIONS,
+                    "tail_percentile": REGIME_RISK_TAIL_PERCENTILE,
+                    "adverse_distance_levels_pct": list(REGIME_ADVERSE_DISTANCE_LEVELS_PCT),
                     "status": "historical_research_only_not_live_signal",
+                },
+                "futures_short_confirmation_contract": {
+                    "history_sessions_required": REGIME_EXTERNAL_HISTORY_SESSIONS,
+                    "stored_history_sessions": int(
+                        futures_history_row.get("stored_sessions") or 0
+                    ),
+                    "history_ready": bool(futures_history_row.get("history_ready")),
+                    "minimum_clear_constituent_states": REGIME_FUTURES_SHORT_MINIMUM_STATE_COUNT,
+                    "minimum_constituent_coverage_pct": REGIME_FUTURES_SHORT_MINIMUM_COVERAGE_PCT,
+                    "minimum_bearish_share_pct": REGIME_FUTURES_SHORT_BEARISH_SHARE_THRESHOLD_PCT,
+                    "status": "confirmation_gate_not_trading_signal",
                 },
                 "excluded": excluded,
                 "limitations": [
-                    "Ranks describe historical 20-session outcomes and are not current trade signals.",
+                    "Long research uses 20-session outcomes; downside-continuation research uses 5-session outcomes. Neither is a trade signal.",
+                    "Tail loss, adverse excursion, and distance-breach rates are historical risk evidence, not stop or position-size recommendations.",
                     "Breadth uses current constituents within the current liquid F&O universe and carries survivorship bias.",
                     "Overlapping forward windows are descriptive rather than independent observations.",
                 ],
@@ -4412,6 +4714,10 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 REGIME_DIRECTIONAL_RETURN_THRESHOLD_PCT,
                 REGIME_DIRECTIONAL_POSITIVE_RATE_THRESHOLD_PCT,
                 REGIME_DIRECTIONAL_EXCESS_THRESHOLD_PCT,
+                REGIME_LONG_HORIZON_SESSIONS,
+                REGIME_SHORT_HORIZON_SESSIONS,
+                REGIME_RISK_TAIL_PERCENTILE,
+                REGIME_ADVERSE_DISTANCE_LEVELS_PCT,
             ),
             "target_index": target_index,
             "benchmark_index": benchmark_index,

@@ -1143,8 +1143,8 @@
             <p class="section-note">Each index's latest completed-session state is matched only with that index's validated historical state evidence. Nifty 50 is displayed as context, not as the universal direction.</p>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Decision</th><th>Index</th><th>Current state</th><th>State score</th><th>Stock coverage</th><th>As of</th><th>Historical state sample</th><th>20d median</th><th>20d positive</th><th>20d excess vs Nifty 50</th><th>Worst 20d drawdown</th><th>Current evidence</th></tr></thead>
-                <tbody id="currentIndexDecisionBody"><tr><td colspan="12">Build the comparison to calculate current index candidates.</td></tr></tbody>
+                <thead><tr><th>Decision</th><th>Index</th><th>Current state</th><th>State score</th><th>Stock coverage</th><th>As of</th><th>Historical state sample</th><th>Research horizon</th><th>Median outcome</th><th>Positive</th><th>Excess vs Nifty 50</th><th>Tail 10% outcome</th><th>90th-pct adverse distance</th><th>3% distance breach</th><th>F&O short confirmation</th><th>Current evidence</th></tr></thead>
+                <tbody id="currentIndexDecisionBody"><tr><td colspan="16">Build the comparison to calculate current index candidates.</td></tr></tbody>
               </table>
             </div>
             <div class="analysis-note" id="currentIndexDecisionNote">Long and short candidates may coexist. Missing or historically unsupported states remain visible as avoid or insufficient evidence.</div>
@@ -1168,7 +1168,7 @@
             <p class="section-note">This maps which validated state has historically supported each index's strongest long or short research case. It is not a live signal; the next stage must join it with each index's current state.</p>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Index</th><th>Long-side state</th><th>Long sample</th><th>Long 20d median</th><th>Long excess</th><th>Short-side state</th><th>Short sample</th><th>Short 20d median</th><th>Short excess</th></tr></thead>
+                <thead><tr><th>Index</th><th>Long-side state</th><th>Long sample</th><th>Long 20d median</th><th>Long 20d excess</th><th>Short-side state</th><th>Short sample</th><th>Short 5d median</th><th>Short 5d excess</th></tr></thead>
                 <tbody id="crossIndexDirectionalBody"><tr><td colspan="9">Build the cross-index comparison to create the historical research map.</td></tr></tbody>
               </table>
             </div>
@@ -2552,6 +2552,9 @@
         countertrend_watch: 'Countertrend watch',
         tactical_watch: 'Tactical rebound watch',
         reversal_watch: 'Reversal watch',
+        short_watch_unconfirmed: 'Short watch · confirmation unavailable',
+        short_watch_history_building: 'Short watch · F&O history building',
+        avoid_no_short_confirmation: 'Avoid · no F&O short confirmation',
         avoid_no_validated_edge: 'Avoid · no validated edge',
         insufficient_evidence: 'Insufficient evidence',
         market_context_only: 'Market context only',
@@ -2562,6 +2565,9 @@
         ? decisionRows.map((row) => {
           const current = row.current_state || {};
           const historical = row.current_state_historical_evidence || {};
+          const risk = historical.risk_profile || {};
+          const breaches = risk.adverse_distance_breach_rates_pct || {};
+          const futures = row.futures_short_confirmation || {};
           const evidence = current.evidence || {};
           return `<tr>
             <td>${escapeHtml(decisionLabels[row.current_decision] || row.current_decision || 'Insufficient evidence')}</td>
@@ -2571,20 +2577,24 @@
             <td>${current.stock_coverage_pct == null ? '—' : validationPercent(current.stock_coverage_pct)}</td>
             <td>${current.as_of_date ? formatDisplayDate(current.as_of_date) : '—'}${Number(current.session_lag || 0) ? ` · ${current.session_lag} sessions stale` : ''}</td>
             <td>${historical.sessions == null ? '—' : Number(historical.sessions).toLocaleString('en-IN')}</td>
+            <td>${historical.horizon_sessions == null ? '—' : `${escapeHtml(historical.orientation || 'research')} · ${historical.horizon_sessions} sessions`}</td>
             <td>${validationPercent(historical.median_return_pct, true)}</td>
             <td>${validationPercent(historical.positive_rate_pct)}</td>
             <td>${row.is_benchmark ? 'Baseline' : validationPercent(historical.median_excess_return_pct, true)}</td>
-            <td>${validationPercent(historical.worst_max_drawdown_pct, true)}</td>
+            <td>${validationPercent(risk.tail_position_return_pct, true)}</td>
+            <td>${validationPercent(risk.tail_adverse_excursion_pct)}</td>
+            <td>${validationPercent(breaches['3'])}</td>
+            <td>${futures.status ? `${escapeHtml(String(futures.status).replaceAll('_', ' '))}${futures.bearish_share_pct == null ? '' : ` · ${validationPercent(futures.bearish_share_pct)} bearish`}` : '—'}</td>
             <td>Trend ${escapeHtml(evidence.trend_band || '—')} · breadth ${escapeHtml(evidence.breadth_band || '—')} · strength ${escapeHtml(evidence.price_strength_band || '—')} · volatility ${escapeHtml(evidence.volatility_band || '—')}</td>
           </tr>`;
         }).join('')
-        : '<tr><td colspan="12">Current index candidates are unavailable.</td></tr>';
+        : '<tr><td colspan="16">Current index candidates are unavailable.</td></tr>';
       const decisionCounts = decisionRows.reduce((counts, row) => {
         counts[row.current_decision] = (counts[row.current_decision] || 0) + 1;
         return counts;
       }, {});
       document.getElementById('currentIndexDecisionNote').textContent =
-        `${Number(decisionCounts.long_candidate || 0).toLocaleString('en-IN')} long · ${Number(decisionCounts.short_candidate || 0).toLocaleString('en-IN')} short · ${Number((decisionCounts.countertrend_watch || 0) + (decisionCounts.tactical_watch || 0) + (decisionCounts.reversal_watch || 0)).toLocaleString('en-IN')} watch · ${Number(decisionCounts.avoid_no_validated_edge || 0).toLocaleString('en-IN')} avoid · ${Number(decisionCounts.insufficient_evidence || 0).toLocaleString('en-IN')} insufficient. Candidates are evidence matches, not orders; position sizing, liquidity, stops, and futures/OI confirmation are not yet applied.`;
+        `${Number(decisionCounts.long_candidate || 0).toLocaleString('en-IN')} long · ${Number(decisionCounts.short_candidate || 0).toLocaleString('en-IN')} confirmed short · ${Number((decisionCounts.short_watch_unconfirmed || 0) + (decisionCounts.short_watch_history_building || 0) + (decisionCounts.countertrend_watch || 0) + (decisionCounts.tactical_watch || 0) + (decisionCounts.reversal_watch || 0)).toLocaleString('en-IN')} watch · ${Number((decisionCounts.avoid_no_short_confirmation || 0) + (decisionCounts.avoid_no_validated_edge || 0)).toLocaleString('en-IN')} avoid · ${Number(decisionCounts.insufficient_evidence || 0).toLocaleString('en-IN')} insufficient. Long research uses 20 sessions; downside continuation uses 5. Tail and adverse-distance statistics are historical risk evidence, not stop or sizing advice. Shorts require mature, same-session bearish futures/OI confirmation.`;
       const body = document.getElementById('crossIndexComparisonBody');
       body.innerHTML = result.rows.map((row) => `<tr>
         <td>${row.rank}</td>
@@ -2643,14 +2653,14 @@
       }).join('');
       const directionalContract = result.directional_research_contract || {};
       document.getElementById('crossIndexDirectionalNote').textContent =
-        `Historical research gate: at least ${Number(directionalContract.minimum_state_sessions || 60).toLocaleString('en-IN')} state observations, ±${Number(directionalContract.absolute_median_return_threshold_pct || 1).toFixed(1)}% median return, and ${Number(directionalContract.positive_rate_long_threshold_pct || 60).toFixed(0)}%/40% positive-rate confirmation. Sector/index candidates must also clear the Nifty 50-relative gate. Broad-market state remains context, not a universal signal.`;
+        `Historical research gate: at least ${Number(directionalContract.minimum_state_sessions || 60).toLocaleString('en-IN')} state observations. Long evidence uses ${Number(directionalContract.long_horizon_sessions || 20)} sessions; downside continuation uses ${Number(directionalContract.short_horizon_sessions || 5)}. Both require ±${Number(directionalContract.absolute_median_return_threshold_pct || 1).toFixed(1)}% median return, ${Number(directionalContract.positive_rate_long_threshold_pct || 60).toFixed(0)}%/40% positive-rate confirmation, and the Nifty 50-relative gate. Broad-market state remains context.`;
     }
 
     async function loadCrossIndexComparison() {
       const button = document.getElementById('loadCrossIndexComparisonButton');
       button.disabled = true;
       button.textContent = 'Building…';
-      document.getElementById('currentIndexDecisionBody').innerHTML = '<tr><td colspan="12">Calculating latest state and matching historical evidence for every eligible index…</td></tr>';
+      document.getElementById('currentIndexDecisionBody').innerHTML = '<tr><td colspan="16">Calculating latest state, horizon-specific risk, and futures/OI confirmation for every eligible index…</td></tr>';
       document.getElementById('crossIndexComparisonBody').innerHTML = '<tr><td colspan="10">Calculating validated outcomes across eligible indices…</td></tr>';
       document.getElementById('crossIndexRecoveryBody').innerHTML = '<tr><td colspan="14">Calculating recovery-state stability across eligible indices…</td></tr>';
       document.getElementById('crossIndexDirectionalBody').innerHTML = '<tr><td colspan="9">Building the historical long/short research map…</td></tr>';
@@ -2659,18 +2669,18 @@
         const result = await response.json();
         if (!response.ok || result.ok !== true) {
           document.getElementById('crossIndexComparisonBody').innerHTML = '<tr><td colspan="10">Cross-index comparison is unavailable.</td></tr>';
-          document.getElementById('currentIndexDecisionBody').innerHTML = '<tr><td colspan="12">Current cross-sectional candidates are unavailable.</td></tr>';
+          document.getElementById('currentIndexDecisionBody').innerHTML = '<tr><td colspan="16">Current cross-sectional candidates are unavailable.</td></tr>';
           document.getElementById('crossIndexRecoveryBody').innerHTML = '<tr><td colspan="14">Cross-index recovery comparison is unavailable.</td></tr>';
           document.getElementById('crossIndexDirectionalBody').innerHTML = '<tr><td colspan="9">Historical long/short research map is unavailable.</td></tr>';
           showNotice('Cross-index comparison needs sufficient validated local history.');
           return false;
         }
         renderCrossIndexComparison(result);
-        showNotice(`Compared ${result.rows.length} eligible indices using historical 20-session outcomes.`);
+        showNotice(`Compared ${result.rows.length} eligible indices using 20-session long and 5-session downside-continuation evidence.`);
         return true;
       } catch (_error) {
         document.getElementById('crossIndexComparisonBody').innerHTML = '<tr><td colspan="10">The local comparison service is unavailable.</td></tr>';
-        document.getElementById('currentIndexDecisionBody').innerHTML = '<tr><td colspan="12">The local decision service is unavailable.</td></tr>';
+        document.getElementById('currentIndexDecisionBody').innerHTML = '<tr><td colspan="16">The local decision service is unavailable.</td></tr>';
         document.getElementById('crossIndexRecoveryBody').innerHTML = '<tr><td colspan="14">The local recovery comparison service is unavailable.</td></tr>';
         document.getElementById('crossIndexDirectionalBody').innerHTML = '<tr><td colspan="9">The local directional research service is unavailable.</td></tr>';
         showNotice('The local cross-index comparison service is unavailable.');

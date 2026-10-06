@@ -20,6 +20,7 @@ from server import (
     calculate_candidate_regime,
     calculate_domestic_sentiment_core,
     calculate_regime_walk_forward_validation,
+    build_index_futures_confirmation,
     build_regime_external_cluster_readiness,
     apply_recovering_market_state,
     build_regime_validation_universe,
@@ -272,6 +273,83 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         )
         self.assertTrue(positive_state["sample_ready"])
         self.assertEqual(positive_state["research_bias"], "long_research_candidate")
+        self.assertEqual(positive_state["orientation"], "long")
+        self.assertEqual(positive_state["horizon_sessions"], 20)
+        self.assertTrue(positive_state["risk_profile"]["available"])
+        self.assertGreater(positive_state["risk_profile"]["tail_position_return_pct"], 0)
+        self.assertEqual(
+            positive_state["risk_profile"]["adverse_distance_breach_rates_pct"]["3"],
+            0.0,
+        )
+
+    def test_regime_downside_continuation_uses_shorter_horizon_and_short_risk(self):
+        start = date(2024, 1, 1)
+        dates = [start + timedelta(days=index) for index in range(400)]
+
+        def falling(multiplier):
+            return [
+                {
+                    "date": session_date,
+                    "open": 1000.0 - index * multiplier,
+                    "high": 1001.0 - index * multiplier,
+                    "low": 999.0 - index * multiplier,
+                    "close": 1000.0 - index * multiplier,
+                }
+                for index, session_date in enumerate(dates)
+            ]
+
+        result = calculate_regime_walk_forward_validation(
+            falling(2.0),
+            {name: falling(1.5) for name in ("A", "B", "C", "D", "E")},
+        )
+        directional = result["transition_analysis"]["directional_state_evidence"]
+        risk_state = next(
+            row
+            for row in directional
+            if row["label_key"] in {"weak_market", "high_risk_market"}
+        )
+        self.assertEqual(risk_state["research_bias"], "short_research_candidate")
+        self.assertEqual(risk_state["orientation"], "short")
+        self.assertEqual(risk_state["horizon_sessions"], 5)
+        self.assertEqual(risk_state["short_case"]["horizon_sessions"], 5)
+        self.assertTrue(risk_state["short_case"]["passed"])
+        self.assertGreater(risk_state["risk_profile"]["tail_position_return_pct"], 0)
+
+    def test_index_futures_confirmation_requires_history_same_session_and_bearish_breadth(self):
+        states = [
+            {"underlying": f"S{index}", "state": "short_build_up"}
+            for index in range(4)
+        ] + [
+            {"underlying": "S4", "state": "long_unwinding"},
+            {"underlying": "S5", "state": "long_build_up"},
+        ]
+        summary = {
+            "available": True,
+            "as_of_date": "2026-10-05",
+            "states": states,
+        }
+        pending = build_index_futures_confirmation(
+            [f"S{index}" for index in range(10)],
+            fno_constituent_count=10,
+            futures_summary=summary,
+            history_ready=False,
+            current_state_date="2026-10-05",
+        )
+        self.assertEqual(pending["status"], "history_accumulating")
+        self.assertFalse(pending["short_gate_passed"])
+
+        confirmed = build_index_futures_confirmation(
+            [f"S{index}" for index in range(10)],
+            fno_constituent_count=10,
+            futures_summary=summary,
+            history_ready=True,
+            current_state_date="2026-10-05",
+        )
+        self.assertTrue(confirmed["current_confirmation_ready"])
+        self.assertTrue(confirmed["bearish_confirmation"])
+        self.assertTrue(confirmed["short_gate_passed"])
+        self.assertEqual(confirmed["coverage_pct"], 60.0)
+        self.assertEqual(confirmed["bearish_share_pct"], 83.3)
 
     def test_external_cluster_readiness_requires_complete_dated_sessions(self):
         dates = [date(2025, 1, 1) + timedelta(days=index) for index in range(252)]
