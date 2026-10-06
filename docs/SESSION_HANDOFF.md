@@ -26,17 +26,17 @@ Updated: 2026-10-06
 - Node.js is not installed and is not required at runtime. The live page loaded
   successfully; repeat an optional Node-based JavaScript syntax check only if a
   future frontend change warrants it.
-- Candidate risk controls and horizon-specific validation are now complete for
-  research. Resume from the Dashboard summary-layer item below. Preserve the
-  analysis-only boundary and reconnect Kite manually only when the owner
-  explicitly chooses a workflow that requires it.
+- Candidate risk controls and the first Dashboard summary slice are complete.
+  Resume from the F&O Dashboard summary item below. Preserve the analysis-only
+  boundary and reconnect Kite manually only when the owner explicitly chooses a
+  workflow that requires it.
 
 ## Saved state
 
 - Branch: `main`
 - Baseline pushed commit before this session: `f4c494d` — Add walk-forward and multi-index regime validation
 - Phase 4 foundation commit: `d7fcb23` — Start versioned sentiment validation snapshots
-- Verification at handoff: 69 automated tests passed; Python compilation and
+- Verification at handoff: 70 automated tests passed; Python compilation and
   live-browser milestone checks passed.
 
 ## Current milestone
@@ -135,6 +135,10 @@ orders or position sizing.
   candidates, zero confirmed shorts, seven watch rows, nine avoid rows, and
   Nifty 50 as market context. This is a changing research snapshot, not a saved
   recommendation.
+- Added a Market Sentiment workspace card to the Dashboard. It summarizes long,
+  confirmed-short, watch, and avoid counts; data freshness; evidence-cluster and
+  eligible-index coverage; and futures/OI history readiness. The card reads from
+  a compact server-side contract and routes to the full Market Sentiment page.
 - The latest verified stored-session board (28-Sep-26) showed Nifty Auto as the
   sole long research match, Nifty Financial Services and Nifty PSU Bank as
   countertrend watches, the two MidSmall indices as tactical watches, eleven
@@ -171,8 +175,8 @@ orders or position sizing.
 
 ## Next work
 
-1. Build the Dashboard summary layer, starting with a Market Sentiment card that
-   shows the current decision mix, freshness/readiness, and a route to details.
+1. Continue the Dashboard summary layer with an F&O card that shows descriptive
+   positioning, contract coverage, as-of/readiness, and a route to details.
 2. Continue daily collection for institutional flows, macro context, global risk,
    and futures/OI; freeze their directional thresholds only after adequate
    coverage, then test them out of sample.

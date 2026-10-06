@@ -4067,6 +4067,111 @@ def calculate_domestic_sentiment_core(
     return payload
 
 
+def build_dashboard_market_sentiment_summary(
+    domestic_payload: dict[str, object],
+    cross_index_payload: dict[str, object],
+) -> dict[str, object]:
+    """Condense validated sentiment evidence into a read-only dashboard contract."""
+    if domestic_payload.get("ok") is not True or cross_index_payload.get("ok") is not True:
+        raise ValueError("dashboard_market_sentiment_summary_unavailable")
+    decision_rows = cross_index_payload.get("current_decision_rows")
+    if not isinstance(decision_rows, list):
+        raise ValueError("dashboard_market_sentiment_summary_unavailable")
+
+    research_rows = [
+        row
+        for row in decision_rows
+        if isinstance(row, dict) and not bool(row.get("is_benchmark"))
+    ]
+    watch_decisions = {
+        "short_watch_unconfirmed",
+        "short_watch_history_building",
+        "countertrend_watch",
+        "tactical_watch",
+        "reversal_watch",
+    }
+    avoid_decisions = {
+        "avoid_no_short_confirmation",
+        "avoid_no_validated_edge",
+    }
+
+    def count(decisions: set[str]) -> int:
+        return sum(str(row.get("current_decision")) in decisions for row in research_rows)
+
+    decision_counts = {
+        "long": count({"long_candidate"}),
+        "confirmed_short": count({"short_candidate"}),
+        "watch": count(watch_decisions),
+        "avoid": count(avoid_decisions),
+        "insufficient": count({"insufficient_evidence"}),
+    }
+    candidate_count = decision_counts["long"] + decision_counts["confirmed_short"]
+    if candidate_count:
+        board_status = "research_candidates_present"
+    elif decision_counts["watch"]:
+        board_status = "watch_only"
+    else:
+        board_status = "no_validated_candidates"
+
+    current_dates = [
+        str((row.get("current_state") or {}).get("as_of_date"))
+        for row in research_rows
+        if isinstance(row.get("current_state"), dict)
+        and (row.get("current_state") or {}).get("as_of_date")
+    ]
+    leading_watch = next(
+        (
+            {
+                "index": row.get("index"),
+                "decision": row.get("current_decision"),
+            }
+            for row in research_rows
+            if str(row.get("current_decision")) in watch_decisions
+        ),
+        None,
+    )
+    freshness = domestic_payload.get("freshness")
+    freshness = freshness if isinstance(freshness, dict) else {}
+    futures_contract = cross_index_payload.get("futures_short_confirmation_contract")
+    futures_contract = futures_contract if isinstance(futures_contract, dict) else {}
+    excluded = cross_index_payload.get("excluded")
+    excluded = excluded if isinstance(excluded, list) else []
+    return {
+        "ok": True,
+        "status": board_status,
+        "scope": "cross_sectional_research_only",
+        "as_of_date": max(current_dates, default=domestic_payload.get("as_of_date")),
+        "domestic_tape": domestic_payload.get("domestic_tape"),
+        "freshness": {
+            "state": freshness.get("state"),
+            "latest_session": freshness.get("latest_session"),
+            "expected_through": freshness.get("expected_through"),
+            "lag_days": freshness.get("lag_days"),
+        },
+        "evidence": {
+            "available_clusters": int(domestic_payload.get("available_clusters") or 0),
+            "total_clusters": int(domestic_payload.get("total_clusters") or 0),
+            "eligible_indices": len(research_rows),
+            "excluded_indices": len(excluded),
+        },
+        "decision_counts": decision_counts,
+        "leading_watch": leading_watch,
+        "futures_short_confirmation": {
+            "stored_history_sessions": int(
+                futures_contract.get("stored_history_sessions") or 0
+            ),
+            "history_sessions_required": int(
+                futures_contract.get("history_sessions_required") or 0
+            ),
+            "history_ready": bool(futures_contract.get("history_ready")),
+        },
+        "limitations": [
+            "Research evidence only; no order, position size, or stop is generated.",
+            "Short candidates remain unavailable until the futures/OI history and same-session confirmation gates pass.",
+        ],
+    }
+
+
 def normalize_index_name(value: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", value.upper().replace("&", "AND"))
 
@@ -4176,6 +4281,9 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         if path == "/api/kite/market-breadth":
             self._send_market_breadth()
             return
+        if path == "/api/dashboard/market-sentiment-summary":
+            self._send_dashboard_market_sentiment_summary()
+            return
         if path == "/api/kite/seasonality":
             self._send_seasonality(urllib.parse.urlsplit(self.path).query)
             return
@@ -4199,6 +4307,19 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             self._send_json(HTTPStatus.OK, payload)
         except ValueError as error:
             self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"ok": False, "reason": str(error)})
+
+    def _send_dashboard_market_sentiment_summary(self) -> None:
+        try:
+            payload = build_dashboard_market_sentiment_summary(
+                self._calculate_sentiment_payload(),
+                self._calculate_cross_index_validation_payload(),
+            )
+            self._send_json(HTTPStatus.OK, payload)
+        except ValueError as error:
+            self._send_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"ok": False, "reason": str(error)},
+            )
 
     def _send_regime_validation(self, query: str) -> None:
         try:

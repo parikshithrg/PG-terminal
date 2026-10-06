@@ -418,6 +418,35 @@
     .positive { color: var(--success); }
     .negative { color: var(--danger); }
 
+    .workspace-summary-card {
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+    }
+    .workspace-summary-head,
+    .workspace-summary-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+    .workspace-summary-kicker { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+    .workspace-summary-headline { margin: 5px 0 0; color: var(--heading); font-size: 21px; font-weight: 720; }
+    .workspace-summary-status { padding: 4px 8px; border-radius: 999px; color: #94620a; background: #fff4db; font-size: 12px; font-weight: 650; white-space: nowrap; }
+    .workspace-summary-status.ready { color: #187a42; background: #e8f7ee; }
+    .workspace-summary-status.unavailable { color: #a42f35; background: #fdebec; }
+    .workspace-summary-copy { margin: 10px 0 16px; color: var(--muted); font-size: 13px; }
+    .workspace-summary-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .workspace-summary-metric { padding: 12px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-soft); }
+    .workspace-summary-metric strong { display: block; color: var(--heading); font-size: 20px; }
+    .workspace-summary-metric span { color: var(--muted); font-size: 12px; }
+    .workspace-summary-readiness { display: flex; flex-wrap: wrap; gap: 7px 18px; margin: 14px 0; color: var(--muted); font-size: 12px; }
+    .workspace-summary-readiness strong { color: var(--text-soft); font-weight: 650; }
+    .workspace-summary-actions { padding-top: 14px; border-top: 1px solid var(--line); }
+    .workspace-summary-note { max-width: 700px; color: var(--muted); font-size: 12px; }
+    .workspace-summary-buttons { display: flex; gap: 8px; }
+
     .section-title {
       margin: 0 0 4px;
       color: #2b2e33;
@@ -747,6 +776,9 @@
     html[data-theme="dark"] .futures-state.long-build-up,
     html[data-theme="dark"] .futures-state.short-covering { color: #73d59a; background: #173525; }
     html[data-theme="dark"] .sentiment-band.mixed { color: #f0c56c; background: #423417; }
+    html[data-theme="dark"] .workspace-summary-status { color: #f0c56c; background: #423417; }
+    html[data-theme="dark"] .workspace-summary-status.ready { color: #73d59a; background: #173525; }
+    html[data-theme="dark"] .workspace-summary-status.unavailable { color: #f08d93; background: #432226; }
     html[data-theme="dark"] .sentiment-band.defensive,
     html[data-theme="dark"] .futures-state.short-build-up,
     html[data-theme="dark"] .futures-state.long-unwinding { color: #f08d93; background: #432226; }
@@ -757,6 +789,7 @@
 
     @media (max-width: 900px) {
       .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .workspace-summary-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .evidence-grid, .source-state-grid { grid-template-columns: 1fr; }
       .brand-note { display: none; }
       main { padding-inline: 22px; }
@@ -783,6 +816,7 @@
       .universe-source { grid-column: 1; }
       .score-guide-grid { grid-template-columns: 1fr; }
       .score-guide-status { display: none; }
+      .workspace-summary-actions { align-items: flex-start; flex-direction: column; }
     }
 
     @media (max-width: 430px) {
@@ -902,6 +936,38 @@
             <div class="summary-value" id="niftyEnergyValue">—</div>
             <div class="summary-meta" id="niftyEnergyMeta">Not loaded</div>
           </article>
+        </section>
+
+        <section class="dashboard-section" aria-labelledby="dashboardSentimentTitle">
+          <div class="workspace-summary-card">
+            <div class="workspace-summary-head">
+              <div>
+                <div class="workspace-summary-kicker">Workspace summary</div>
+                <h2 class="workspace-summary-headline" id="dashboardSentimentTitle">Market Sentiment</h2>
+              </div>
+              <span class="workspace-summary-status" id="dashboardSentimentStatus">Loading local evidence</span>
+            </div>
+            <p class="workspace-summary-copy" id="dashboardSentimentCopy">Building the latest cross-sectional research summary from stored EOD data.</p>
+            <div class="workspace-summary-metrics" aria-label="Market Sentiment decision counts">
+              <div class="workspace-summary-metric"><strong id="dashboardSentimentLongs">—</strong><span>Long research</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardSentimentShorts">—</strong><span>Confirmed shorts</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardSentimentWatches">—</strong><span>Watch rows</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardSentimentAvoids">—</strong><span>Avoid rows</span></div>
+            </div>
+            <div class="workspace-summary-readiness">
+              <span><strong>As of</strong> <span id="dashboardSentimentAsOf">—</span></span>
+              <span><strong>Freshness</strong> <span id="dashboardSentimentFreshness">—</span></span>
+              <span><strong>Evidence</strong> <span id="dashboardSentimentEvidence">—</span></span>
+              <span><strong>F&amp;O short gate</strong> <span id="dashboardSentimentFutures">—</span></span>
+            </div>
+            <div class="workspace-summary-actions">
+              <div class="workspace-summary-note" id="dashboardSentimentNote">Research evidence only. No trade, size, or stop is generated.</div>
+              <div class="workspace-summary-buttons">
+                <button class="panel-button" id="refreshDashboardSentimentButton" type="button">Refresh summary</button>
+                <button class="panel-button primary" id="viewMarketSentimentButton" type="button">View details</button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section aria-labelledby="marketSnapshotTitle">
@@ -1566,6 +1632,8 @@
     const menuButton = document.getElementById('menuButton');
     const scrim = document.getElementById('scrim');
     const dashboardView = document.getElementById('dashboardView');
+    const refreshDashboardSentimentButton = document.getElementById('refreshDashboardSentimentButton');
+    const viewMarketSentimentButton = document.getElementById('viewMarketSentimentButton');
     const marketSentimentView = document.getElementById('marketSentimentView');
     const refreshSentimentButton = document.getElementById('refreshSentimentButton');
     const regimeValidationIndexSelect = document.getElementById('regimeValidationIndexSelect');
@@ -2256,6 +2324,65 @@
         document.getElementById('futuresOiTableNote').textContent = 'Two observations of the same contract are required. These states do not affect the regime score.';
         document.getElementById('futuresOiSafeguards').textContent = 'Noise and coverage safeguards will appear with data.';
         renderFuturesOiTable();
+      }
+    }
+
+    function renderDashboardMarketSentimentSummary(result) {
+      const counts = result.decision_counts || {};
+      const evidence = result.evidence || {};
+      const freshness = result.freshness || {};
+      const futures = result.futures_short_confirmation || {};
+      const status = document.getElementById('dashboardSentimentStatus');
+      const statusLabels = {
+        research_candidates_present: 'Research candidates present',
+        watch_only: 'Watch-only board',
+        no_validated_candidates: 'No validated candidates',
+      };
+      status.textContent = statusLabels[result.status] || 'Research summary ready';
+      status.className = `workspace-summary-status ${result.status === 'research_candidates_present' ? 'ready' : ''}`.trim();
+      document.getElementById('dashboardSentimentLongs').textContent = Number(counts.long || 0).toLocaleString('en-IN');
+      document.getElementById('dashboardSentimentShorts').textContent = Number(counts.confirmed_short || 0).toLocaleString('en-IN');
+      document.getElementById('dashboardSentimentWatches').textContent = Number(counts.watch || 0).toLocaleString('en-IN');
+      document.getElementById('dashboardSentimentAvoids').textContent = Number(counts.avoid || 0).toLocaleString('en-IN');
+      document.getElementById('dashboardSentimentAsOf').textContent = formatDisplayDate(result.as_of_date);
+      const freshnessLabels = { fresh: 'Fresh', pending: 'Pending latest session', stale: 'Stale' };
+      document.getElementById('dashboardSentimentFreshness').textContent = freshnessLabels[freshness.state] || freshness.state || 'Unavailable';
+      document.getElementById('dashboardSentimentEvidence').textContent = `${Number(evidence.available_clusters || 0)}/${Number(evidence.total_clusters || 0)} clusters · ${Number(evidence.eligible_indices || 0)} indices`;
+      document.getElementById('dashboardSentimentFutures').textContent = futures.history_ready
+        ? 'History ready'
+        : `${Number(futures.stored_history_sessions || 0)}/${Number(futures.history_sessions_required || 0)} sessions`;
+      const candidates = Number(counts.long || 0) + Number(counts.confirmed_short || 0);
+      const watchLead = result.leading_watch && result.leading_watch.index ? ` Leading watch: ${result.leading_watch.index}.` : '';
+      document.getElementById('dashboardSentimentCopy').textContent = candidates
+        ? `${candidates} validated research candidate${candidates === 1 ? '' : 's'} across the latest independent index states.${watchLead}`
+        : `No validated directional candidate is active; ${Number(counts.watch || 0)} rows remain under watch.${watchLead}`;
+      document.getElementById('dashboardSentimentNote').textContent =
+        `Domestic tape: ${result.domestic_tape || 'Unavailable'} · ${Number(evidence.excluded_indices || 0)} indices excluded. Research evidence only; no trade, size, or stop is generated.`;
+    }
+
+    async function loadDashboardMarketSentimentSummary(showSuccess = false) {
+      refreshDashboardSentimentButton.disabled = true;
+      refreshDashboardSentimentButton.textContent = 'Refreshing…';
+      const status = document.getElementById('dashboardSentimentStatus');
+      status.textContent = 'Loading local evidence';
+      status.className = 'workspace-summary-status';
+      try {
+        const response = await fetch('/api/dashboard/market-sentiment-summary', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          throw new Error('summary_unavailable');
+        }
+        renderDashboardMarketSentimentSummary(result);
+        if (showSuccess) showNotice(`Dashboard summary refreshed through ${formatDisplayDate(result.as_of_date)}.`);
+        return true;
+      } catch (_error) {
+        status.textContent = 'Summary unavailable';
+        status.className = 'workspace-summary-status unavailable';
+        document.getElementById('dashboardSentimentCopy').textContent = 'The stored Market Sentiment summary could not be calculated.';
+        return false;
+      } finally {
+        refreshDashboardSentimentButton.disabled = false;
+        refreshDashboardSentimentButton.textContent = 'Refresh summary';
       }
     }
 
@@ -3498,6 +3625,10 @@
     refreshFnoButton.addEventListener('click', () => loadDomesticSentiment(true));
     refreshRegimeValidationButton.addEventListener('click', () => loadRegimeValidation(true));
     document.getElementById('loadCrossIndexComparisonButton').addEventListener('click', loadCrossIndexComparison);
+    refreshDashboardSentimentButton.addEventListener('click', () => loadDashboardMarketSentimentSummary(true));
+    viewMarketSentimentButton.addEventListener('click', () => {
+      document.querySelector('.nav-button[data-page="Market Sentiment"]').click();
+    });
     regimeValidationIndexSelect.addEventListener('change', () => updateRegimeValidationSelection(true));
     regimeValidationBenchmarkSelect.addEventListener('change', () => {
       const benchmark = regimeValidationBenchmarkSelect.value === 'none' ? 'No relative benchmark' : 'Nifty 50 benchmark';
@@ -3558,6 +3689,7 @@
         seasonalityView.hidden = !isSeasonality;
         emptyView.hidden = isDashboard || isMarketSentiment || isFno || isSeasonality;
         emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isSeasonality ? '' : button.dataset.page;
+        if (isDashboard) loadDashboardMarketSentimentSummary(false);
         if ((isMarketSentiment || isFno) && document.getElementById('sentimentAsOfValue').textContent === '—') {
           loadDomesticSentiment(false);
         }
@@ -3586,6 +3718,7 @@
 
     updateThemeControl();
     restoreKiteStatus();
+    loadDashboardMarketSentimentSummary(false);
   </script>
 </body>
 </html>

@@ -20,6 +20,7 @@ from server import (
     calculate_candidate_regime,
     calculate_domestic_sentiment_core,
     calculate_regime_walk_forward_validation,
+    build_dashboard_market_sentiment_summary,
     build_index_futures_confirmation,
     build_regime_external_cluster_readiness,
     apply_recovering_market_state,
@@ -350,6 +351,66 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertTrue(confirmed["short_gate_passed"])
         self.assertEqual(confirmed["coverage_pct"], 60.0)
         self.assertEqual(confirmed["bearish_share_pct"], 83.3)
+
+    def test_dashboard_market_sentiment_summary_is_compact_and_research_only(self):
+        domestic = {
+            "ok": True,
+            "as_of_date": "2026-10-05",
+            "domestic_tape": "Defensive",
+            "available_clusters": 5,
+            "total_clusters": 6,
+            "freshness": {
+                "state": "fresh",
+                "latest_session": "2026-10-05",
+                "expected_through": "2026-10-05",
+                "lag_days": 0,
+            },
+        }
+        cross_index = {
+            "ok": True,
+            "current_decision_rows": [
+                {
+                    "index": "Nifty Bank",
+                    "is_benchmark": False,
+                    "current_decision": "long_candidate",
+                    "current_state": {"as_of_date": "2026-10-05"},
+                },
+                {
+                    "index": "Nifty IT",
+                    "is_benchmark": False,
+                    "current_decision": "short_watch_history_building",
+                    "current_state": {"as_of_date": "2026-10-05"},
+                },
+                {
+                    "index": "Nifty Auto",
+                    "is_benchmark": False,
+                    "current_decision": "avoid_no_validated_edge",
+                    "current_state": {"as_of_date": "2026-10-05"},
+                },
+                {
+                    "index": "Nifty 50",
+                    "is_benchmark": True,
+                    "current_decision": "market_context_only",
+                    "current_state": {"as_of_date": "2026-10-05"},
+                },
+            ],
+            "excluded": [{"index": "Nifty Media", "reason": "thin_breadth"}],
+            "futures_short_confirmation_contract": {
+                "stored_history_sessions": 2,
+                "history_sessions_required": 252,
+                "history_ready": False,
+            },
+        }
+        summary = build_dashboard_market_sentiment_summary(domestic, cross_index)
+        self.assertEqual(summary["scope"], "cross_sectional_research_only")
+        self.assertEqual(summary["status"], "research_candidates_present")
+        self.assertEqual(
+            summary["decision_counts"],
+            {"long": 1, "confirmed_short": 0, "watch": 1, "avoid": 1, "insufficient": 0},
+        )
+        self.assertEqual(summary["evidence"]["eligible_indices"], 3)
+        self.assertEqual(summary["leading_watch"]["index"], "Nifty IT")
+        self.assertFalse(summary["futures_short_confirmation"]["history_ready"])
 
     def test_external_cluster_readiness_requires_complete_dated_sessions(self):
         dates = [date(2025, 1, 1) + timedelta(days=index) for index in range(252)]

@@ -209,10 +209,14 @@ point-in-time-universe validation are next.
    candidates additionally require at least 252 complete futures/OI sessions,
    same-session coverage, and bearish index-constituent breadth; sparse history
    remains visibly unconfirmed and cannot promote a short.
-17. **Next executable step:** build the Dashboard summary layer described below.
-   Start with a Market Sentiment summary card that exposes the current
-   cross-sectional decision mix, data freshness/readiness, and a route to the
-   detailed evidence without duplicating the full analysis.
+17. **Dashboard summary layer — Market Sentiment slice complete.** The Dashboard
+   now loads a compact server-side summary of the current cross-sectional
+   decision mix, domestic freshness, evidence-cluster/index coverage, and the
+   futures/OI short-history gate. Its `View details` action opens Market
+   Sentiment, and the card preserves the research-only/no-execution boundary.
+18. **Next executable step:** add the F&O Dashboard summary card. Reuse the same
+   headline, supporting-measures, as-of/readiness, and `View details` contract;
+   keep descriptive positioning separate from a trading recommendation.
 
 ## Approved product-integration milestones
 
