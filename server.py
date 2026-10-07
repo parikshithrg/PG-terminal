@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import csv
 import hashlib
 import io
@@ -17,6 +19,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
+import xml.etree.ElementTree as ET
 from collections import defaultdict, deque
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -152,13 +155,13 @@ NEWS_EVENT_SOURCES = (
 )
 MACRO_EVENT_SOURCES = (
     {
-        "key": "rbi_policy_releases",
-        "label": "RBI policy and press releases",
+        "key": "rbi_mpc_calendar",
+        "label": "RBI MPC meeting schedule 2026-27",
         "authority": "Reserve Bank of India",
         "region": "India",
-        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx",
-        "status": "date_confirmation_required",
-        "note": "Current 2026-27 MPC dates require confirmation from an official RBI schedule before display.",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=62422",
+        "status": "verified_snapshot",
+        "note": "Official schedule published 23-Mar-2026 under Section 45ZI; meeting dates are verified, but release times are not specified.",
     },
     {
         "key": "mospi_release_calendar",
@@ -189,6 +192,17 @@ MACRO_EVENT_SOURCES = (
     },
 )
 MACRO_EVENTS = (
+    {
+        "key": "rbi_mpc_2026_10",
+        "title": "RBI Monetary Policy Committee meeting",
+        "region": "India",
+        "category": "central_bank",
+        "start_at": "2026-10-05",
+        "end_at": "2026-10-07",
+        "timezone": "Asia/Kolkata",
+        "source_key": "rbi_mpc_calendar",
+        "note": "Official schedule confirms the meeting dates; it does not specify the policy-decision time.",
+    },
     {
         "key": "india_cpi_2026_10",
         "title": "India CPI release",
@@ -274,6 +288,17 @@ MACRO_EVENTS = (
         "source_key": "mospi_release_calendar",
     },
     {
+        "key": "rbi_mpc_2026_12",
+        "title": "RBI Monetary Policy Committee meeting",
+        "region": "India",
+        "category": "central_bank",
+        "start_at": "2026-12-02",
+        "end_at": "2026-12-04",
+        "timezone": "Asia/Kolkata",
+        "source_key": "rbi_mpc_calendar",
+        "note": "Official schedule confirms the meeting dates; it does not specify the policy-decision time.",
+    },
+    {
         "key": "fomc_2026_12",
         "title": "Federal Reserve FOMC meeting",
         "region": "United States",
@@ -311,6 +336,17 @@ MACRO_EVENTS = (
         "start_at": "2026-12-28",
         "timezone": "Asia/Kolkata",
         "source_key": "mospi_release_calendar",
+    },
+    {
+        "key": "rbi_mpc_2027_02",
+        "title": "RBI Monetary Policy Committee meeting",
+        "region": "India",
+        "category": "central_bank",
+        "start_at": "2027-02-03",
+        "end_at": "2027-02-05",
+        "timezone": "Asia/Kolkata",
+        "source_key": "rbi_mpc_calendar",
+        "note": "Official schedule confirms the meeting dates; it does not specify the policy-decision time.",
     },
 )
 REGIME_LABEL_THRESHOLDS = {
@@ -386,10 +422,16 @@ MAX_NFO_INSTRUMENT_BYTES = 32 * 1024 * 1024
 MAX_QUOTE_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_CONSTITUENT_BYTES = 128 * 1024
 MAX_NEWS_IMPORT_BYTES = 2 * 1024 * 1024
+MAX_EARNINGS_IMPORT_BYTES = 4 * 1024 * 1024
+MAX_PORTFOLIO_IMPORT_BYTES = 12 * 1024 * 1024
+MAX_PORTFOLIO_FILE_BYTES = 8 * 1024 * 1024
+MAX_PORTFOLIO_ROWS = 5000
+MAX_PORTFOLIO_COLUMNS = 100
 REQUEST_TIMEOUT_SECONDS = 10
 BREADTH_CACHE_SECONDS = 15 * 60
 SEASONALITY_CACHE_SECONDS = 15 * 60
 HISTORICAL_LOOKBACK_DAYS = 420
+NIFTY500_HISTORY_LOOKBACK_DAYS = 1800
 SEASONALITY_LOOKBACK_YEARS = 10
 SEASONALITY_HISTORY_CHUNK_DAYS = 1800
 HISTORICAL_REQUEST_INTERVAL_SECONDS = 0.36
@@ -568,19 +610,21 @@ def parse_nifty500_constituents(csv_payload: str) -> list[dict[str, str]]:
     seen: set[str] = set()
     for row in reader:
         symbol = (row.get("Symbol") or "").strip().upper()
+        company_name = (row.get("Company Name") or "").strip()
         industry = (row.get("Industry") or "").strip()
         series = (row.get("Series") or "").strip().upper()
         # The official NIFTY 500 universe includes listed REIT units in the
         # NSE ``RR`` series in addition to ordinary ``EQ``/``BE`` securities.
         if (
             not symbol
+            or not company_name
             or not industry
             or series not in {"EQ", "BE", "RR"}
             or symbol in seen
         ):
             raise ValueError("invalid_constituent_file")
         seen.add(symbol)
-        rows.append({"symbol": symbol, "sector": industry})
+        rows.append({"symbol": symbol, "name": company_name, "sector": industry})
     # NIFTY 500 is a 500-company index. Its official constituent file can
     # contain 501 securities when a constituent is represented by an
     # additional eligible series, so preserve the official file as published.
@@ -1761,6 +1805,124 @@ def calculate_market_breadth(
             }
         )
     return rows, as_of, evaluated
+
+
+def build_stock_ytd_table(
+    constituents: list[dict[str, str]],
+    histories: dict[str, list[tuple[date, float]]],
+    *,
+    as_of: date,
+    year: int,
+) -> dict[str, object]:
+    """Build a point-in-time calendar-year ranking for the current NIFTY 500 universe."""
+    if year < 2000 or year > as_of.year:
+        raise ValueError("invalid_stock_ytd_year")
+    year_start = date(year, 1, 1)
+    year_end = min(as_of, date(year, 12, 31))
+    rows: list[dict[str, object]] = []
+    for constituent in constituents:
+        symbol = str(constituent["symbol"])
+        history = sorted(
+            (
+                (session_date, float(close))
+                for session_date, close in histories.get(symbol, [])
+                if session_date <= year_end and math.isfinite(float(close)) and float(close) > 0
+            ),
+            key=lambda item: item[0],
+        )
+        prior_rows = [item for item in history if item[0] < year_start]
+        selected_rows = [item for item in history if year_start <= item[0] <= year_end]
+        if not selected_rows:
+            rows.append(
+                {
+                    "rank": None,
+                    "symbol": symbol,
+                    "name": str(constituent.get("name") or symbol),
+                    "sector": str(constituent["sector"]),
+                    "status": "unavailable",
+                    "price_date": None,
+                    "ltp": None,
+                    "ytd_performance_pct": None,
+                    "from_20dma_pct": None,
+                    "from_200dma_pct": None,
+                }
+            )
+            continue
+        price_date, latest_close = selected_rows[-1]
+        prior_close = prior_rows[-1][1] if prior_rows else None
+        closes = [close for session_date, close in history if session_date <= price_date]
+        average_20 = sum(closes[-20:]) / 20 if len(closes) >= 20 else None
+        average_200 = sum(closes[-200:]) / 200 if len(closes) >= 200 else None
+        ytd_return = (
+            ((latest_close / prior_close) - 1) * 100
+            if prior_close is not None and prior_close > 0
+            else None
+        )
+        status = "ready" if ytd_return is not None and average_200 is not None else "partial_history"
+        rows.append(
+            {
+                "rank": None,
+                "symbol": symbol,
+                "name": str(constituent.get("name") or symbol),
+                "sector": str(constituent["sector"]),
+                "status": status,
+                "price_date": price_date.isoformat(),
+                "ltp": round(latest_close, 2),
+                "ytd_performance_pct": round(ytd_return, 2) if ytd_return is not None else None,
+                "from_20dma_pct": (
+                    round(((latest_close / average_20) - 1) * 100, 2)
+                    if average_20 is not None else None
+                ),
+                "from_200dma_pct": (
+                    round(((latest_close / average_200) - 1) * 100, 2)
+                    if average_200 is not None else None
+                ),
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            row["ytd_performance_pct"] is None,
+            -float(row["ytd_performance_pct"]) if row["ytd_performance_pct"] is not None else 0.0,
+            str(row["symbol"]),
+        )
+    )
+    rank = 0
+    for row in rows:
+        if row["ytd_performance_pct"] is not None:
+            rank += 1
+            row["rank"] = rank
+    dated_rows = [row for row in rows if row["price_date"] is not None]
+    selected_as_of = max((str(row["price_date"]) for row in dated_rows), default=None)
+    ready = sum(row["status"] == "ready" for row in rows)
+    partial = sum(row["status"] == "partial_history" for row in rows)
+    unavailable = sum(row["status"] == "unavailable" for row in rows)
+    return {
+        "ok": True,
+        "status": "ranking_ready" if ready else "ranking_partial",
+        "contract_version": "nifty500-stock-ytd-v1",
+        "universe": "NIFTY 500",
+        "selected_year": year,
+        "as_of_date": selected_as_of,
+        "price_label": "Latest completed close" if year == as_of.year else "Year-end completed close",
+        "coverage": {
+            "total": len(rows),
+            "ready": ready,
+            "partial_history": partial,
+            "unavailable": unavailable,
+        },
+        "rows": rows,
+        "definitions": {
+            "ytd_performance_pct": "selected-year close versus the final completed close before that calendar year",
+            "from_20dma_pct": "selected-year close percentage above or below its trailing 20-session simple moving average",
+            "from_200dma_pct": "selected-year close percentage above or below its trailing 200-session simple moving average",
+        },
+        "limitations": [
+            "The universe is the current official NIFTY 500 constituent snapshot and carries survivorship bias for historical years.",
+            "Historical-year prices and moving averages are aligned to that year's final available completed session.",
+            "Rows without enough price history remain visible as partial or unavailable.",
+            "The ranking is descriptive performance evidence, not a recommendation.",
+        ],
+    }
 
 
 def parse_institutional_flows(payload: object, *, today: date) -> list[dict[str, object]]:
@@ -5050,6 +5212,946 @@ def parse_nse_announcement_csv(csv_payload: str) -> list[dict[str, object]]:
     return rows
 
 
+def parse_earnings_csv(csv_payload: str) -> list[dict[str, object]]:
+    """Validate a user-supplied quarterly earnings CSV without fetching issuer data."""
+    if not isinstance(csv_payload, str) or not csv_payload.strip():
+        raise ValueError("invalid_earnings_csv")
+    reader = csv.DictReader(io.StringIO(csv_payload.lstrip("\ufeff")))
+    if reader.fieldnames is None:
+        raise ValueError("invalid_earnings_csv")
+    aliases = {re.sub(r"[^a-z0-9]", "", name.lower()): name for name in reader.fieldnames}
+    required = {
+        "symbol", "companyname", "sector", "basis", "fiscalyear", "quarter",
+        "periodend", "reportedat", "currency", "unit", "revenue", "netprofit",
+        "eps", "sourceurl",
+    }
+    if not required.issubset(aliases):
+        raise ValueError("unsupported_earnings_csv_columns")
+
+    def field(row: dict[str, str], key: str) -> str:
+        return str(row.get(aliases[key]) or "").strip()
+
+    def number(value: str) -> float:
+        text = value.replace(",", "").strip()
+        if text.startswith("(") and text.endswith(")"):
+            text = f"-{text[1:-1]}"
+        try:
+            result = float(text)
+        except ValueError as error:
+            raise ValueError("invalid_earnings_value") from error
+        if not math.isfinite(result):
+            raise ValueError("invalid_earnings_value")
+        return result
+
+    rows: list[dict[str, object]] = []
+    for raw in reader:
+        symbol = field(raw, "symbol").upper()
+        company_name = field(raw, "companyname")
+        sector = field(raw, "sector")
+        basis = field(raw, "basis").lower()
+        fiscal_year = field(raw, "fiscalyear")
+        quarter = field(raw, "quarter").upper()
+        currency = field(raw, "currency").upper()
+        unit = field(raw, "unit").lower()
+        source_url = field(raw, "sourceurl")
+        fiscal_match = re.fullmatch(r"(20\d{2})-(\d{2})", fiscal_year)
+        parsed_url = urllib.parse.urlsplit(source_url)
+        if (
+            not re.fullmatch(r"[A-Z0-9][A-Z0-9&.-]{0,39}", symbol)
+            or not company_name
+            or len(company_name) > 160
+            or not sector
+            or len(sector) > 120
+            or basis not in {"consolidated", "standalone"}
+            or fiscal_match is None
+            or int(fiscal_match.group(2)) != (int(fiscal_match.group(1)) + 1) % 100
+            or quarter not in {"Q1", "Q2", "Q3", "Q4"}
+            or currency != "INR"
+            or unit not in {"crore", "lakh", "million"}
+            or parsed_url.scheme != "https"
+            or not parsed_url.netloc
+        ):
+            raise ValueError("invalid_earnings_row")
+        try:
+            period_end = date.fromisoformat(field(raw, "periodend"))
+            reported_at = date.fromisoformat(field(raw, "reportedat"))
+        except ValueError as error:
+            raise ValueError("invalid_earnings_date") from error
+        if reported_at < period_end or reported_at > datetime.now(INDIA_TIMEZONE).date():
+            raise ValueError("invalid_earnings_date")
+        revenue = number(field(raw, "revenue"))
+        net_profit = number(field(raw, "netprofit"))
+        eps = number(field(raw, "eps"))
+        if revenue < 0:
+            raise ValueError("invalid_earnings_value")
+        rows.append(
+            {
+                "symbol": symbol,
+                "company_name": company_name,
+                "sector": sector,
+                "basis": basis,
+                "fiscal_year": fiscal_year,
+                "quarter": quarter,
+                "period_end": period_end.isoformat(),
+                "reported_at": reported_at.isoformat(),
+                "currency": currency,
+                "unit": unit,
+                "revenue": revenue,
+                "net_profit": net_profit,
+                "eps": eps,
+                "source_url": source_url,
+                "raw": dict(raw),
+            }
+        )
+        if len(rows) > 5000:
+            raise ValueError("earnings_csv_too_many_rows")
+    if not rows:
+        raise ValueError("earnings_csv_empty")
+    return rows
+
+
+def build_earnings_analysis(records: list[dict[str, object]]) -> dict[str, object]:
+    """Build latest-quarter growth evidence from append-only imported records."""
+    identities: dict[tuple[str, str, str, str], dict[str, object]] = {}
+    for record in records:
+        identity = (
+            str(record.get("symbol") or ""),
+            str(record.get("basis") or ""),
+            str(record.get("fiscal_year") or ""),
+            str(record.get("quarter") or ""),
+        )
+        existing = identities.get(identity)
+        if existing is None or str(record.get("imported_at") or "") > str(existing.get("imported_at") or ""):
+            identities[identity] = record
+    clean_records = list(identities.values())
+    groups: dict[tuple[str, str], list[dict[str, object]]] = {}
+    for record in clean_records:
+        groups.setdefault((str(record["symbol"]), str(record["basis"])), []).append(record)
+
+    def growth(current: float, prior: float) -> float | None:
+        return round(((current / prior) - 1) * 100, 2) if prior > 0 else None
+
+    rows: list[dict[str, object]] = []
+    for (symbol, basis), series in groups.items():
+        series.sort(key=lambda item: (str(item["period_end"]), str(item["reported_at"])))
+        latest = series[-1]
+        fiscal_start = int(str(latest["fiscal_year"])[:4])
+        prior_year_label = f"{fiscal_start - 1}-{fiscal_start % 100:02d}"
+        yoy = next(
+            (
+                item for item in reversed(series[:-1])
+                if item["fiscal_year"] == prior_year_label and item["quarter"] == latest["quarter"]
+            ),
+            None,
+        )
+        quarter_number = int(str(latest["quarter"])[1])
+        if quarter_number == 1:
+            previous_quarter = "Q4"
+            previous_fiscal_year = prior_year_label
+        else:
+            previous_quarter = f"Q{quarter_number - 1}"
+            previous_fiscal_year = str(latest["fiscal_year"])
+        qoq = next(
+            (
+                item for item in reversed(series[:-1])
+                if item["fiscal_year"] == previous_fiscal_year
+                and item["quarter"] == previous_quarter
+            ),
+            None,
+        )
+        comparable_yoy = bool(
+            yoy
+            and yoy["currency"] == latest["currency"]
+            and yoy["unit"] == latest["unit"]
+        )
+        comparable_qoq = bool(
+            qoq
+            and qoq["currency"] == latest["currency"]
+            and qoq["unit"] == latest["unit"]
+        )
+        latest_profit = float(latest["net_profit"])
+        yoy_profit = float(yoy["net_profit"]) if comparable_yoy and yoy else None
+        if yoy_profit is None:
+            profit_state = "comparison_unavailable"
+        elif latest_profit > 0 >= yoy_profit:
+            profit_state = "turned_profitable"
+        elif latest_profit < 0 <= yoy_profit:
+            profit_state = "moved_to_loss"
+        elif latest_profit > yoy_profit:
+            profit_state = "profit_improved"
+        elif latest_profit < yoy_profit:
+            profit_state = "profit_declined"
+        else:
+            profit_state = "profit_unchanged"
+        rows.append(
+            {
+                "symbol": symbol,
+                "company_name": latest["company_name"],
+                "sector": latest["sector"],
+                "basis": basis,
+                "fiscal_year": latest["fiscal_year"],
+                "quarter": latest["quarter"],
+                "period_end": latest["period_end"],
+                "reported_at": latest["reported_at"],
+                "currency": latest["currency"],
+                "unit": latest["unit"],
+                "revenue": round(float(latest["revenue"]), 2),
+                "revenue_yoy_pct": growth(float(latest["revenue"]), float(yoy["revenue"])) if comparable_yoy and yoy else None,
+                "revenue_qoq_pct": growth(float(latest["revenue"]), float(qoq["revenue"])) if comparable_qoq and qoq else None,
+                "net_profit": round(latest_profit, 2),
+                "net_profit_yoy_pct": growth(latest_profit, yoy_profit) if yoy_profit is not None else None,
+                "net_profit_yoy_change": round(latest_profit - yoy_profit, 2) if yoy_profit is not None else None,
+                "eps": round(float(latest["eps"]), 2),
+                "eps_yoy_pct": growth(float(latest["eps"]), float(yoy["eps"])) if comparable_yoy and yoy else None,
+                "profit_state": profit_state,
+                "status": "ready" if comparable_yoy else "partial_history",
+                "source_url": latest["source_url"],
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            row["revenue_yoy_pct"] is None,
+            -float(row["revenue_yoy_pct"]) if row["revenue_yoy_pct"] is not None else 0.0,
+            str(row["symbol"]),
+        )
+    )
+    latest_reported = max((str(row["reported_at"]) for row in rows), default=None)
+    return {
+        "ok": True,
+        "status": "earnings_ready" if rows else "no_earnings_data",
+        "contract_version": "earnings-analysis-v1",
+        "as_of_date": latest_reported,
+        "coverage": {
+            "stored_records": len(records),
+            "distinct_quarters": len(clean_records),
+            "latest_rows": len(rows),
+            "companies": len({row["symbol"] for row in rows}),
+            "yoy_ready": sum(row["status"] == "ready" for row in rows),
+            "turnarounds": sum(row["profit_state"] == "turned_profitable" for row in rows),
+            "moved_to_loss": sum(row["profit_state"] == "moved_to_loss" for row in rows),
+        },
+        "rows": rows,
+        "required_columns": [
+            "Symbol", "Company Name", "Sector", "Basis", "Fiscal Year", "Quarter",
+            "Period End", "Reported At", "Currency", "Unit", "Revenue", "Net Profit",
+            "EPS", "Source URL",
+        ],
+        "limitations": [
+            "Only manually imported issuer or exchange results are used; automated website collection is disabled.",
+            "YoY comparisons require the same symbol, basis, quarter, currency, and unit in the prior fiscal year.",
+            "Percentage profit and EPS growth is withheld when the comparison value is zero or negative.",
+            "No consensus estimate, surprise score, valuation conclusion, recommendation, or trading signal is produced.",
+        ],
+    }
+
+
+def _portfolio_headers_and_rows(raw_rows: list[list[object]]) -> tuple[list[str], list[dict[str, object]]]:
+    """Turn a worksheet-like matrix into a bounded, JSON-safe table."""
+    def header_score(row: list[object]) -> int:
+        keys = [re.sub(r"[^a-z0-9]", "", str(cell).lower()) for cell in row if str(cell).strip()]
+        if len(keys) < 2:
+            return 0
+        symbol = any(
+            any(token in key for token in ("symbol", "ticker", "instrument", "scrip", "security", "stockcode", "nsecode"))
+            for key in keys
+        )
+        measure = any(
+            "quantity" in key or "qty" in key or key in {"units", "shares"}
+            or "weight" in key or "allocation" in key
+            or ((any(prefix in key for prefix in ("current", "market", "closing", "present", "total"))) and "val" in key)
+            for key in keys
+        )
+        optional = sum(
+            any(token in key for token in ("average", "avg", "cost", "sector", "industry", "company", "name"))
+            for key in keys
+        )
+        return (10 if symbol else 0) + (10 if measure else 0) + optional
+
+    candidates = [
+        (header_score(row), index)
+        for index, row in enumerate(raw_rows[:25])
+        if any(str(cell).strip() for cell in row)
+    ]
+    first = max(
+        candidates,
+        key=lambda item: (
+            item[0],
+            -sum(bool(str(cell).strip()) for cell in raw_rows[item[1]]),
+        ),
+        default=(0, None),
+    )[1]
+    if candidates and max(candidates)[0] < 20:
+        first = next((index for index, row in enumerate(raw_rows) if any(str(cell).strip() for cell in row)), None)
+    if first is None:
+        raise ValueError("portfolio_file_empty")
+    headers = [str(cell).strip() for cell in raw_rows[first]]
+    while headers and not headers[-1]:
+        headers.pop()
+    if not headers or len(headers) > MAX_PORTFOLIO_COLUMNS or any(not header for header in headers):
+        raise ValueError("invalid_portfolio_headers")
+    normalized = [re.sub(r"[^a-z0-9]", "", header.lower()) for header in headers]
+    if any(not header for header in normalized) or len(set(normalized)) != len(normalized):
+        raise ValueError("duplicate_portfolio_headers")
+    rows: list[dict[str, object]] = []
+
+    def normalized_row(raw: list[object]) -> list[str]:
+        values = [re.sub(r"[^a-z0-9]", "", str(value).lower()) for value in raw[:len(headers)]]
+        values.extend([""] * (len(headers) - len(values)))
+        return values
+
+    header_positions = [
+        index for index, raw in enumerate(raw_rows)
+        if normalized_row(raw) == normalized
+    ]
+    if len(header_positions) > 1:
+        # Some personal trackers place several identically shaped Excel tables on
+        # one sheet. Read each contiguous table body and stop at its first blank
+        # row so later summaries are not mistaken for holdings.
+        for header_position in header_positions:
+            for raw in raw_rows[header_position + 1:]:
+                values = list(raw[:len(headers)])
+                values.extend([""] * (len(headers) - len(values)))
+                if not any(str(value).strip() for value in values):
+                    break
+                if normalized_row(raw) == normalized:
+                    break
+                rows.append({header: value for header, value in zip(headers, values)})
+                if len(rows) > MAX_PORTFOLIO_ROWS:
+                    raise ValueError("portfolio_file_too_many_rows")
+    else:
+        for raw in raw_rows[first + 1:]:
+            values = list(raw[:len(headers)])
+            values.extend([""] * (len(headers) - len(values)))
+            if not any(str(value).strip() for value in values):
+                continue
+            rows.append({header: value for header, value in zip(headers, values)})
+            if len(rows) > MAX_PORTFOLIO_ROWS:
+                raise ValueError("portfolio_file_too_many_rows")
+    if not rows:
+        raise ValueError("portfolio_file_empty")
+    return headers, rows
+
+
+def parse_portfolio_csv(payload: bytes) -> tuple[list[str], list[dict[str, object]], str | None]:
+    try:
+        text = payload.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise ValueError("portfolio_csv_not_utf8") from error
+    try:
+        dialect = csv.Sniffer().sniff(text[:4096], delimiters=",\t;")
+    except csv.Error:
+        dialect = csv.excel
+    matrix = [list(row) for row in csv.reader(io.StringIO(text), dialect)]
+    headers, rows = _portfolio_headers_and_rows(matrix)
+    return headers, rows, None
+
+
+def _excel_column_index(cell_reference: str) -> int:
+    letters = re.match(r"[A-Za-z]+", cell_reference or "")
+    if letters is None:
+        raise ValueError("invalid_portfolio_xlsx")
+    result = 0
+    for character in letters.group(0).upper():
+        result = result * 26 + ord(character) - 64
+    return result - 1
+
+
+def parse_portfolio_xlsx(payload: bytes) -> tuple[list[str], list[dict[str, object]], str | None]:
+    """Read the first XLSX worksheet with the standard library only."""
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(payload))
+    except (zipfile.BadZipFile, OSError) as error:
+        raise ValueError("invalid_portfolio_xlsx") from error
+    with archive:
+        members = archive.infolist()
+        if len(members) > 500 or sum(item.file_size for item in members) > 50 * 1024 * 1024:
+            raise ValueError("portfolio_xlsx_too_large")
+        names = {item.filename for item in members}
+        required = {"xl/workbook.xml", "xl/_rels/workbook.xml.rels"}
+        if not required.issubset(names):
+            raise ValueError("invalid_portfolio_xlsx")
+        try:
+            workbook = ET.fromstring(archive.read("xl/workbook.xml"))
+            relationships = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+        except (ET.ParseError, KeyError) as error:
+            raise ValueError("invalid_portfolio_xlsx") from error
+        relationship_targets = {
+            item.attrib.get("Id", ""): item.attrib.get("Target", "")
+            for item in relationships
+        }
+        sheets = workbook.findall(".//{*}sheet")
+        if not sheets:
+            raise ValueError("invalid_portfolio_xlsx")
+        sheet = sheets[0]
+        relationship_id = sheet.attrib.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id", "")
+        target = relationship_targets.get(relationship_id, "")
+        target = target.lstrip("/")
+        sheet_path = target if target.startswith("xl/") else f"xl/{target}"
+        if ".." in Path(sheet_path).parts or sheet_path not in names:
+            raise ValueError("invalid_portfolio_xlsx")
+        shared_strings: list[str] = []
+        if "xl/sharedStrings.xml" in names:
+            try:
+                shared_root = ET.fromstring(archive.read("xl/sharedStrings.xml"))
+                shared_strings = ["".join(node.itertext()) for node in shared_root.findall(".//{*}si")]
+            except ET.ParseError as error:
+                raise ValueError("invalid_portfolio_xlsx") from error
+        try:
+            worksheet = ET.fromstring(archive.read(sheet_path))
+        except (ET.ParseError, KeyError) as error:
+            raise ValueError("invalid_portfolio_xlsx") from error
+        matrix: list[list[object]] = []
+        for row_node in worksheet.findall(".//{*}sheetData/{*}row"):
+            row: list[object] = []
+            for cell in row_node.findall("{*}c"):
+                column = _excel_column_index(cell.attrib.get("r", ""))
+                if column >= MAX_PORTFOLIO_COLUMNS:
+                    raise ValueError("portfolio_file_too_many_columns")
+                row.extend([""] * (column + 1 - len(row)))
+                cell_type = cell.attrib.get("t", "")
+                value_node = cell.find("{*}v")
+                if cell_type == "inlineStr":
+                    inline = cell.find("{*}is")
+                    value: object = "" if inline is None else "".join(inline.itertext())
+                else:
+                    raw_value = "" if value_node is None else (value_node.text or "")
+                    if cell_type == "s":
+                        try:
+                            value = shared_strings[int(raw_value)]
+                        except (ValueError, IndexError) as error:
+                            raise ValueError("invalid_portfolio_xlsx") from error
+                    elif cell_type in {"str", "b", "e"}:
+                        value = raw_value
+                    else:
+                        try:
+                            number = float(raw_value)
+                            value = int(number) if number.is_integer() else number
+                        except ValueError:
+                            value = raw_value
+                row[column] = value
+            matrix.append(row)
+            if len(matrix) > MAX_PORTFOLIO_ROWS + 25:
+                raise ValueError("portfolio_file_too_many_rows")
+        headers, rows = _portfolio_headers_and_rows(matrix)
+        return headers, rows, sheet.attrib.get("name") or "Sheet 1"
+
+
+def parse_home_loan_tracker_xlsx(payload: bytes) -> dict[str, object] | None:
+    """Read an optional home-loan worksheet from an uploaded portfolio workbook."""
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(payload))
+    except (zipfile.BadZipFile, OSError) as error:
+        raise ValueError("invalid_portfolio_xlsx") from error
+    with archive:
+        members = archive.infolist()
+        if len(members) > 500 or sum(item.file_size for item in members) > 50 * 1024 * 1024:
+            raise ValueError("portfolio_xlsx_too_large")
+        names = {item.filename for item in members}
+        try:
+            workbook = ET.fromstring(archive.read("xl/workbook.xml"))
+            relationships = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+        except (ET.ParseError, KeyError) as error:
+            raise ValueError("invalid_portfolio_xlsx") from error
+        sheet = next(
+            (
+                item for item in workbook.findall(".//{*}sheet")
+                if "loan" in re.sub(r"[^a-z0-9]", "", str(item.attrib.get("name") or "").lower())
+            ),
+            None,
+        )
+        if sheet is None:
+            return None
+        relationship_targets = {
+            item.attrib.get("Id", ""): item.attrib.get("Target", "")
+            for item in relationships
+        }
+        relationship_id = sheet.attrib.get(
+            "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id", ""
+        )
+        target = relationship_targets.get(relationship_id, "").lstrip("/")
+        sheet_path = target if target.startswith("xl/") else f"xl/{target}"
+        if ".." in Path(sheet_path).parts or sheet_path not in names:
+            raise ValueError("invalid_portfolio_xlsx")
+        shared_strings: list[str] = []
+        if "xl/sharedStrings.xml" in names:
+            try:
+                shared_root = ET.fromstring(archive.read("xl/sharedStrings.xml"))
+                shared_strings = ["".join(node.itertext()) for node in shared_root.findall(".//{*}si")]
+            except ET.ParseError as error:
+                raise ValueError("invalid_portfolio_xlsx") from error
+        try:
+            worksheet = ET.fromstring(archive.read(sheet_path))
+        except (ET.ParseError, KeyError) as error:
+            raise ValueError("invalid_portfolio_xlsx") from error
+
+        matrix: dict[int, list[object]] = {}
+        for row_node in worksheet.findall(".//{*}sheetData/{*}row"):
+            try:
+                row_number = int(row_node.attrib.get("r", "0"))
+            except ValueError as error:
+                raise ValueError("invalid_portfolio_xlsx") from error
+            if row_number <= 0 or row_number > MAX_PORTFOLIO_ROWS:
+                continue
+            row: list[object] = []
+            for cell in row_node.findall("{*}c"):
+                column = _excel_column_index(cell.attrib.get("r", ""))
+                if column >= MAX_PORTFOLIO_COLUMNS:
+                    continue
+                row.extend([""] * (column + 1 - len(row)))
+                cell_type = cell.attrib.get("t", "")
+                value_node = cell.find("{*}v")
+                if cell_type == "inlineStr":
+                    inline = cell.find("{*}is")
+                    value: object = "" if inline is None else "".join(inline.itertext())
+                else:
+                    raw_value = "" if value_node is None else (value_node.text or "")
+                    if cell_type == "s":
+                        try:
+                            value = shared_strings[int(raw_value)]
+                        except (ValueError, IndexError) as error:
+                            raise ValueError("invalid_portfolio_xlsx") from error
+                    elif cell_type in {"str", "b", "e"}:
+                        value = raw_value
+                    else:
+                        try:
+                            number = float(raw_value)
+                            value = int(number) if number.is_integer() else number
+                        except ValueError:
+                            value = raw_value
+                row[column] = value
+            matrix[row_number] = row
+
+        def cell(row_number: int, column: int) -> object:
+            row = matrix.get(row_number, [])
+            return row[column] if column < len(row) else ""
+
+        payment_rows: list[dict[str, object]] = []
+        totals: dict[str, float | None] = {"principal": None, "interest": None, "payment": None}
+        outstanding: float | None = None
+        outstanding_as_of: str | None = None
+        annual_rate_pct: float | None = None
+        for row_number in sorted(matrix):
+            label = str(cell(row_number, 0) or "").strip()
+            if re.fullmatch(r"\d{4}-\d{2}", label):
+                principal = _portfolio_number(cell(row_number, 1))
+                interest = _portfolio_number(cell(row_number, 2))
+                total = _portfolio_number(cell(row_number, 3))
+                if any(value not in (None, 0) for value in (principal, interest, total)):
+                    payment_rows.append({
+                        "fiscal_year": label,
+                        "principal": principal or 0.0,
+                        "interest": interest or 0.0,
+                        "payment": total if total is not None else (principal or 0.0) + (interest or 0.0),
+                    })
+            elif label.lower() == "total":
+                totals = {
+                    "principal": _portfolio_number(cell(row_number, 1)),
+                    "interest": _portfolio_number(cell(row_number, 2)),
+                    "payment": _portfolio_number(cell(row_number, 3)),
+                }
+            elif label.lower().startswith("outstanding"):
+                outstanding = _portfolio_number(cell(row_number, 1))
+                rate_match = re.search(r"(\d+(?:\.\d+)?)\s*%", str(cell(row_number, 2) or ""))
+                annual_rate_pct = float(rate_match.group(1)) if rate_match else None
+                date_match = re.search(r"as\s+on\s+(.+?)\)?$", label, re.IGNORECASE)
+                if date_match:
+                    raw_date = date_match.group(1).strip()
+                    try:
+                        outstanding_as_of = datetime.strptime(raw_date, "%b %d %Y").date().isoformat()
+                    except ValueError:
+                        outstanding_as_of = raw_date
+
+        rent_totals: dict[str, float | None] = {"rent": None, "maintenance": None, "net_rent": None}
+        for row_number in sorted(matrix):
+            if str(cell(row_number, 8) or "").strip().lower() == "total":
+                rent_totals = {
+                    "rent": _portfolio_number(cell(row_number, 9)),
+                    "maintenance": _portfolio_number(cell(row_number, 10)),
+                    "net_rent": _portfolio_number(cell(row_number, 11)),
+                }
+                break
+
+        if not payment_rows and outstanding is None:
+            return None
+        latest_payment = next((row for row in reversed(payment_rows) if float(row["payment"]) > 0), None)
+        suggested_monthly_payment = (
+            round(float(latest_payment["payment"]) / 12, 2) if latest_payment else None
+        )
+        return {
+            "contract_version": "home-loan-tracker-v1",
+            "sheet_name": sheet.attrib.get("name") or "Loan payments",
+            "payment_rows": payment_rows,
+            "totals": totals,
+            "outstanding": outstanding,
+            "outstanding_as_of": outstanding_as_of,
+            "annual_rate_pct": annual_rate_pct,
+            "suggested_monthly_payment": suggested_monthly_payment,
+            "suggested_payment_basis": (
+                f"{latest_payment['fiscal_year']} annual payment divided by 12" if latest_payment else None
+            ),
+            "rent_totals": rent_totals,
+        }
+
+
+def parse_portfolio_file(file_name: str, payload: bytes) -> dict[str, object]:
+    if not payload or len(payload) > MAX_PORTFOLIO_FILE_BYTES:
+        raise ValueError("invalid_portfolio_file_size")
+    suffix = Path(file_name).suffix.lower()
+    if suffix == ".csv":
+        headers, rows, sheet_name = parse_portfolio_csv(payload)
+        loan_tracker = None
+    elif suffix == ".xlsx":
+        headers, rows, sheet_name = parse_portfolio_xlsx(payload)
+        loan_tracker = parse_home_loan_tracker_xlsx(payload)
+    else:
+        raise ValueError("unsupported_portfolio_file")
+    mapping = infer_portfolio_mapping(headers, rows)
+    return {
+        "ok": True,
+        "contract_version": "portfolio-upload-preview-v1",
+        "file_name": file_name,
+        "sheet_name": sheet_name,
+        "headers": headers,
+        "row_count": len(rows),
+        "sample_rows": rows[:8],
+        "rows": rows,
+        "detected_mapping": mapping,
+        "loan_tracker": loan_tracker,
+        "persistence": "browser_memory_only",
+    }
+
+
+def infer_portfolio_mapping(
+    headers: list[str], rows: list[dict[str, object]]
+) -> dict[str, str | None]:
+    """Detect common Indian broker and portfolio-export column names."""
+    normalized = {header: re.sub(r"[^a-z0-9]", "", header.lower()) for header in headers}
+    aliases = {
+        "symbol": (
+            "symbol", "tradingsymbol", "ticker", "instrument", "stock", "scrip",
+            "security", "nsecode", "stockcode", "nsesymbol", "securitysymbol",
+            "tradingscrip", "scripcode",
+        ),
+        "quantity": (
+            "quantity", "qty", "netqty", "netquantity", "holdingqty", "holdingsqty",
+            "units", "shares", "availableqty", "availablequantity", "totalqty",
+            "totalquantity", "freeqty", "freequantity", "settledqty", "holdingquantity",
+            "holding", "holdings", "balance", "netposition", "positionqty",
+        ),
+        "weight": (
+            "weight", "weightpct", "weightpercentage", "portfolioweight",
+            "allocation", "allocationpct", "allocationpercentage",
+        ),
+        "average_cost": (
+            "averagecost", "avgcost", "averageprice", "avgprice", "buyaverage",
+            "buyavg", "costprice", "averagebuyprice", "avgcostprice", "buyprice",
+        ),
+        "current_value": (
+            "currentvalue", "curvalue", "marketvalue", "holdingvalue", "presentvalue",
+            "currentvaluation", "marketvaluation", "valuation", "curval", "mktvalue",
+            "marketval", "currentmarketvalue", "presentmarketvalue", "closingvalue",
+            "netvalue", "totalvalue", "currval", "cmpvalue", "holdingvaluation",
+        ),
+        "sector": ("sector", "industry", "industryname", "sectorname"),
+        "name": (
+            "companyname", "company", "securityname", "instrumentname", "stockname", "name", "instrument",
+        ),
+    }
+
+    def match(field: str) -> str | None:
+        candidates = aliases[field]
+        exact = next(
+            (
+                header for candidate in candidates
+                for header, key in normalized.items()
+                if key == candidate
+            ),
+            None,
+        )
+        if exact is not None:
+            return exact
+        return next(
+            (
+                header for header, key in normalized.items()
+                if any(len(alias) >= 5 and (key.startswith(alias) or key.endswith(alias)) for alias in candidates)
+            ),
+            None,
+        )
+
+    mapping = {field: match(field) for field in aliases}
+    if mapping["quantity"] is None:
+        mapping["quantity"] = next(
+            (
+                header for header, key in normalized.items()
+                if "quantity" in key or "qty" in key or "units" in key or "shares" in key
+                or key in {"holding", "holdings", "balance", "netposition"}
+            ),
+            None,
+        )
+    if mapping["weight"] is None:
+        mapping["weight"] = next(
+            (header for header, key in normalized.items() if "weight" in key or "allocation" in key),
+            None,
+        )
+    if mapping["current_value"] is None:
+        mapping["current_value"] = next(
+            (
+                header for header, key in normalized.items()
+                if "val" in key and any(prefix in key for prefix in ("current", "market", "closing", "present", "total", "net"))
+            ),
+            None,
+        )
+    if mapping["average_cost"] is None:
+        mapping["average_cost"] = next(
+            (
+                header for header, key in normalized.items()
+                if any(prefix in key for prefix in ("average", "avg", "buy", "cost"))
+                and any(suffix in key for suffix in ("price", "cost", "rate"))
+            ),
+            None,
+        )
+    if mapping["symbol"] is None:
+        symbol_candidates: list[str] = []
+        for header in headers:
+            values = [str(row.get(header, "")).strip().upper() for row in rows[:100]]
+            populated = [value for value in values if value]
+            if populated and sum(bool(re.fullmatch(r"(?:NSE:|BSE:)?[A-Z0-9&-]{1,32}(?:-(?:EQ|BE|RR))?", value)) for value in populated) / len(populated) >= 0.90:
+                symbol_candidates.append(header)
+        if len(symbol_candidates) == 1:
+            mapping["symbol"] = symbol_candidates[0]
+    if mapping["symbol"] is None:
+        raise ValueError("portfolio_symbol_column_not_recognized")
+    if mapping["quantity"] is None and mapping["weight"] is None and mapping["current_value"] is None:
+        raise ValueError("portfolio_quantity_weight_or_value_not_recognized")
+    return mapping
+
+
+def _portfolio_number(value: object) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    cleaned = re.sub(r"[₹,$%\s]", "", str(value)).replace(",", "")
+    if not cleaned:
+        return None
+    if cleaned.startswith("(") and cleaned.endswith(")"):
+        cleaned = f"-{cleaned[1:-1]}"
+    try:
+        result = float(cleaned)
+    except ValueError:
+        return None
+    return result if math.isfinite(result) else None
+
+
+def build_portfolio_analysis(
+    rows: list[dict[str, object]],
+    mapping: dict[str, object],
+    price_histories: dict[str, list[dict[str, object]]],
+    *,
+    constituents: list[dict[str, str]] | None = None,
+    fno_symbols: set[str] | None = None,
+) -> dict[str, object]:
+    """Validate and summarize an uploaded portfolio without persisting holdings."""
+    if not rows or len(rows) > MAX_PORTFOLIO_ROWS or not isinstance(mapping, dict):
+        raise ValueError("invalid_portfolio_rows")
+    headers = {str(key) for row in rows if isinstance(row, dict) for key in row}
+    symbol_column = mapping.get("symbol")
+    quantity_column = mapping.get("quantity")
+    weight_column = mapping.get("weight")
+    if not isinstance(symbol_column, str) or symbol_column not in headers:
+        raise ValueError("portfolio_symbol_mapping_required")
+    if not any(
+        isinstance(column, str) and column in headers
+        for column in (quantity_column, weight_column, mapping.get("current_value"))
+    ):
+        raise ValueError("portfolio_quantity_weight_or_value_required")
+    for key in ("quantity", "weight", "average_cost", "current_value", "sector", "name"):
+        column = mapping.get(key)
+        if column not in (None, "") and (not isinstance(column, str) or column not in headers):
+            raise ValueError("invalid_portfolio_mapping")
+    uses_uploaded_weight = isinstance(weight_column, str) and weight_column in headers
+    uses_uploaded_current_value = not uses_uploaded_weight and bool(mapping.get("current_value"))
+
+    constituent_lookup = {
+        item["symbol"].upper(): item for item in (constituents or []) if item.get("symbol")
+    }
+    fno_symbols = {symbol.upper() for symbol in (fno_symbols or set())}
+    symbols: list[str] = []
+    duplicate_keys: list[str] = []
+    name_column = mapping.get("name")
+    for row in rows:
+        raw_symbol = str(row.get(symbol_column, "")).strip().upper()
+        symbol = re.sub(r"^(NSE:|BSE:)", "", raw_symbol)
+        symbol = re.sub(r"-(EQ|BE|RR)$", "", symbol)
+        symbols.append(symbol)
+        uploaded_name = str(row.get(str(name_column), "")).strip().upper() if name_column else ""
+        duplicate_keys.append(f"{symbol}|{uploaded_name}" if uploaded_name else symbol)
+    counts: dict[str, int] = defaultdict(int)
+    for duplicate_key in duplicate_keys:
+        if duplicate_key:
+            counts[duplicate_key] += 1
+
+    prepared: list[dict[str, object]] = []
+    issues: list[dict[str, object]] = []
+    for index, (row, symbol, duplicate_key) in enumerate(zip(rows, symbols, duplicate_keys), start=2):
+        reasons: list[str] = []
+        symbol_pattern = r"[A-Z0-9& ._/-]{1,64}" if (uses_uploaded_weight or uses_uploaded_current_value) else r"[A-Z0-9&-]{1,32}"
+        if not re.fullmatch(symbol_pattern, symbol):
+            reasons.append("invalid_symbol")
+        if symbol and counts[duplicate_key] > 1:
+            reasons.append("duplicate_symbol")
+        quantity = _portfolio_number(row.get(str(quantity_column))) if isinstance(quantity_column, str) else None
+        uploaded_weight = _portfolio_number(row.get(str(weight_column))) if isinstance(weight_column, str) else None
+        average_cost = _portfolio_number(row.get(str(mapping.get("average_cost")))) if mapping.get("average_cost") else None
+        current_value = _portfolio_number(row.get(str(mapping.get("current_value")))) if mapping.get("current_value") else None
+        if not uses_uploaded_weight and not uses_uploaded_current_value and (quantity is None or quantity <= 0):
+            reasons.append("invalid_quantity")
+        if uses_uploaded_weight and (uploaded_weight is None or uploaded_weight < 0):
+            reasons.append("invalid_weight")
+        if average_cost is not None and average_cost < 0:
+            issues.append({"row_number": index, "symbol": symbol or "—", "reason": "invalid_average_cost"})
+            average_cost = None
+        if uses_uploaded_current_value and (current_value is None or current_value <= 0):
+            reasons.append("invalid_current_value")
+        history = price_histories.get(symbol, [])
+        latest = history[-1] if history else None
+        price = float(latest["close"]) if latest else None
+        price_date = latest["date"].isoformat() if latest and isinstance(latest.get("date"), date) else None
+        metadata = constituent_lookup.get(symbol, {})
+        uploaded_sector = str(row.get(str(mapping.get("sector")), "")).strip() if mapping.get("sector") else ""
+        uploaded_name = str(row.get(str(mapping.get("name")), "")).strip() if mapping.get("name") else ""
+        prepared.append({
+            "row_number": index,
+            "symbol": symbol,
+            "company_name": uploaded_name or metadata.get("name") or symbol or "—",
+            "sector": uploaded_sector or metadata.get("sector") or "Unclassified",
+            "quantity": quantity,
+            "uploaded_weight": uploaded_weight,
+            "average_cost": average_cost,
+            "provided_current_value": current_value,
+            "latest_price": price,
+            "price_date": price_date,
+            "in_nifty500": symbol in constituent_lookup,
+            "in_local_fno_universe": symbol in fno_symbols,
+            "reasons": reasons,
+        })
+        for reason in reasons:
+            issues.append({"row_number": index, "symbol": symbol or "—", "reason": reason})
+
+    if uses_uploaded_weight:
+        basis = "uploaded_weight"
+        valid_weights = [float(item["uploaded_weight"]) for item in prepared if not item["reasons"] and item["uploaded_weight"] is not None]
+        fractional = bool(valid_weights and max(valid_weights) <= 1 and sum(valid_weights) <= 1.5)
+        for item in prepared:
+            item["basis_value"] = (
+                float(item["uploaded_weight"]) * (100 if fractional else 1)
+                if not item["reasons"] and item["uploaded_weight"] is not None else None
+            )
+    elif mapping.get("current_value"):
+        basis = "uploaded_current_value"
+        for item in prepared:
+            item["basis_value"] = item["provided_current_value"] if not item["reasons"] else None
+    else:
+        basis = "quantity_times_latest_close"
+        for item in prepared:
+            if not item["reasons"] and item["quantity"] is not None and item["latest_price"] is not None:
+                item["basis_value"] = float(item["quantity"]) * float(item["latest_price"])
+            else:
+                item["basis_value"] = None
+                if not item["reasons"] and item["latest_price"] is None:
+                    item["reasons"].append("price_unavailable")
+                    issues.append({"row_number": item["row_number"], "symbol": item["symbol"] or "—", "reason": "price_unavailable"})
+
+    basis_total = sum(float(item["basis_value"]) for item in prepared if item.get("basis_value") is not None and float(item["basis_value"]) > 0)
+    positions: list[dict[str, object]] = []
+    for item in prepared:
+        basis_value = item.get("basis_value")
+        weight = round(float(basis_value) / basis_total * 100, 2) if basis_total > 0 and basis_value is not None and float(basis_value) > 0 else None
+        latest_price = item.get("latest_price")
+        average_cost = item.get("average_cost")
+        if latest_price is not None and average_cost is not None and float(average_cost) > 0:
+            return_pct = round((float(latest_price) / float(average_cost) - 1) * 100, 2)
+        elif (
+            basis == "uploaded_current_value"
+            and basis_value is not None
+            and item.get("quantity") is not None
+            and float(item["quantity"]) > 0
+            and average_cost is not None
+            and float(average_cost) > 0
+        ):
+            return_pct = round(
+                (float(basis_value) / (float(item["quantity"]) * float(average_cost)) - 1) * 100,
+                2,
+            )
+        else:
+            return_pct = None
+        status = "ready" if weight is not None else (str(item["reasons"][0]) if item["reasons"] else "excluded")
+        positions.append({
+            **{key: item[key] for key in (
+                "row_number", "symbol", "company_name", "sector", "quantity", "average_cost",
+                "latest_price", "price_date", "in_nifty500", "in_local_fno_universe"
+            )},
+            "current_value": round(float(basis_value), 2) if basis_value is not None and basis != "uploaded_weight" else None,
+            "weight_pct": weight,
+            "return_since_average_cost_pct": return_pct,
+            "status": status,
+        })
+    positions.sort(key=lambda item: (item["weight_pct"] is None, -float(item["weight_pct"] or 0), str(item["symbol"])))
+    eligible = [item for item in positions if item["weight_pct"] is not None]
+    sector_weights: dict[str, float] = defaultdict(float)
+    for item in eligible:
+        sector_weights[str(item["sector"])] += float(item["weight_pct"])
+    sectors = [
+        {"sector": sector, "weight_pct": round(weight, 2), "position_count": sum(item["sector"] == sector for item in eligible)}
+        for sector, weight in sector_weights.items()
+    ]
+    sectors.sort(key=lambda item: (-float(item["weight_pct"]), str(item["sector"])))
+    weights = sorted((float(item["weight_pct"]) for item in eligible), reverse=True)
+    top_one = round(weights[0], 2) if weights else None
+    top_five = round(sum(weights[:5]), 2) if weights else None
+    hhi = round(sum(weight * weight for weight in weights), 2) if weights else None
+    if top_one is None:
+        concentration = "not_available"
+    elif top_one > 25 or (top_five or 0) > 70:
+        concentration = "high_concentration"
+    elif top_one > 15 or (top_five or 0) > 50:
+        concentration = "moderate_concentration"
+    else:
+        concentration = "broadly_distributed"
+    price_dates = [str(item["price_date"]) for item in eligible if item.get("price_date")]
+    return {
+        "ok": True,
+        "status": "portfolio_ready" if eligible else "portfolio_not_ready",
+        "contract_version": "portfolio-analysis-v1",
+        "as_of_date": max(price_dates, default=None),
+        "weight_basis": basis,
+        "persistence": "request_memory_only",
+        "coverage": {
+            "input_rows": len(rows),
+            "unique_symbols": len({symbol for symbol in symbols if symbol}),
+            "eligible_positions": len(eligible),
+            "excluded_rows": len(positions) - len(eligible),
+            "priced_positions": sum(item["latest_price"] is not None for item in positions),
+            "sector_classified": sum(item["sector"] != "Unclassified" for item in eligible),
+            "nifty500_overlap": sum(bool(item["in_nifty500"]) for item in eligible),
+            "local_fno_overlap": sum(bool(item["in_local_fno_universe"]) for item in eligible),
+        },
+        "concentration": {
+            "state": concentration,
+            "largest_position_pct": top_one,
+            "top_five_pct": top_five,
+            "hhi": hhi,
+        },
+        "positions": positions,
+        "sectors": sectors,
+        "issues": issues,
+        "limitations": [
+            "The uploaded file and mapped holdings are processed by the local server for this request and are not written to the database.",
+            "Weights are normalized across eligible rows; cash and assets without a mapped row are not inferred.",
+            "Latest prices use the most recent completed local EOD close and may be stale or unavailable.",
+            "Concentration is descriptive. Beta, volatility contribution, scenario analysis, sentiment alignment, and recommendations are not included in this first slice.",
+        ],
+    }
+
+
 def build_macro_events_calendar(
     *,
     today: date,
@@ -5063,9 +6165,12 @@ def build_macro_events_calendar(
         start_text = str(event.get("start_at") or "")
         try:
             start_date = date.fromisoformat(start_text[:10])
+            end_date = date.fromisoformat(str(event.get("end_at") or start_text)[:10])
         except ValueError as error:
             raise ValueError("invalid_macro_event_calendar") from error
-        if start_date < today:
+        if end_date < start_date:
+            raise ValueError("invalid_macro_event_calendar")
+        if end_date < today:
             continue
         source_key = str(event.get("source_key") or "")
         source = source_lookup.get(source_key)
@@ -5091,7 +6196,8 @@ def build_macro_events_calendar(
                 "decision_at": event.get("decision_at"),
                 "india_time": india_time(event.get("decision_at") or start_text),
                 "timezone": str(event["timezone"]),
-                "days_until": (start_date - today).days,
+                "days_until": max(0, (start_date - today).days),
+                "ongoing": start_date < today <= end_date,
                 "source_key": source_key,
                 "source_label": source["label"],
                 "source_url": source["url"],
@@ -5128,7 +6234,7 @@ def build_macro_events_calendar(
         "limitations": [
             "This is a reviewed calendar snapshot, not an automatically synchronized feed.",
             "Dates can change; verify the linked official source before relying on an event time.",
-            "RBI events remain date-pending until a current official 2026-27 schedule is verified.",
+            "RBI meeting dates come from its official 23-Mar-2026 schedule; that schedule does not specify decision times.",
             "No unscheduled news, consensus estimate, surprise, sentiment, or trade impact score is shown.",
         ],
     }
@@ -5243,6 +6349,9 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         if path == "/api/kite/market-breadth":
             self._send_market_breadth()
             return
+        if path == "/api/stocks/ytd":
+            self._send_stock_ytd(urllib.parse.urlsplit(self.path).query)
+            return
         if path == "/api/dashboard/market-sentiment-summary":
             self._send_dashboard_market_sentiment_summary()
             return
@@ -5263,6 +6372,9 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             return
         if path == "/api/news-events/local":
             self._send_local_news_events()
+            return
+        if path == "/api/earnings/local":
+            self._send_local_earnings()
             return
         if path == "/api/events/calendar":
             self._send_macro_events_calendar()
@@ -5389,6 +6501,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 reviewed_on=datetime.now(INDIA_TIMEZONE).date(),
                 live_items=live_items,
             ),
+        )
+
+    def _send_local_earnings(self) -> None:
+        self._send_json(
+            HTTPStatus.OK,
+            build_earnings_analysis(_get_eod_store().load_earnings_records()),
         )
 
     def _send_macro_events_calendar(self) -> None:
@@ -6512,7 +7630,11 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             and isinstance(cached_at, (int, float))
             and time.monotonic() - float(cached_at) < BREADTH_CACHE_SECONDS
         ):
-            self._send_json(HTTPStatus.OK, {**cached_payload, "cache_hit": True})
+            public_payload = {
+                key: value for key, value in cached_payload.items()
+                if not str(key).startswith("_")
+            }
+            self._send_json(HTTPStatus.OK, {**public_payload, "cache_hit": True})
             return
         if not _BREADTH_BUILD_LOCK.acquire(blocking=False):
             self._send_json(
@@ -6526,7 +7648,11 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             with _SESSION_LOCK:
                 _BREADTH_CACHE.clear()
                 _BREADTH_CACHE.update({"payload": payload, "created_at": time.monotonic()})
-            self._send_json(HTTPStatus.OK, {**payload, "cache_hit": False})
+            public_payload = {
+                key: value for key, value in payload.items()
+                if not str(key).startswith("_")
+            }
+            self._send_json(HTTPStatus.OK, {**public_payload, "cache_hit": False})
         except ValueError as error:
             reason = str(error)
             if reason in {"access_token_invalid_or_expired", "authentication_failed"}:
@@ -6534,6 +7660,67 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": reason})
         finally:
             _BREADTH_BUILD_LOCK.release()
+
+    def _send_stock_ytd(self, query: str) -> None:
+        values = urllib.parse.parse_qs(query).get("year", [])
+        if len(values) > 1 or (values and not re.fullmatch(r"20\d{2}", values[0])):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_stock_ytd_year"})
+            return
+        requested_year = int(values[0]) if values else None
+        with _SESSION_LOCK:
+            session = dict(_ACTIVE_KITE_SESSION)
+            cached_payload = _BREADTH_CACHE.get("payload")
+            cached_at = _BREADTH_CACHE.get("created_at")
+        api_key = session.get("api_key")
+        access_token = session.get("access_token")
+        if not api_key or not access_token:
+            self._send_json(HTTPStatus.UNAUTHORIZED, {"ok": False, "reason": "kite_not_connected"})
+            return
+
+        cache_hit = (
+            isinstance(cached_payload, dict)
+            and isinstance(cached_at, (int, float))
+            and time.monotonic() - float(cached_at) < BREADTH_CACHE_SECONDS
+            and isinstance(cached_payload.get("_stock_ytd_by_year"), dict)
+        )
+        if not cache_hit:
+            if not _BREADTH_BUILD_LOCK.acquire(blocking=False):
+                self._send_json(HTTPStatus.CONFLICT, {"ok": False, "reason": "breadth_refresh_in_progress"})
+                return
+            try:
+                cached_payload = self._build_market_breadth(str(api_key), str(access_token))
+                with _SESSION_LOCK:
+                    _BREADTH_CACHE.clear()
+                    _BREADTH_CACHE.update({"payload": cached_payload, "created_at": time.monotonic()})
+            except ValueError as error:
+                reason = str(error)
+                if reason in {"access_token_invalid_or_expired", "authentication_failed"}:
+                    self._clear_session()
+                self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": reason})
+                return
+            finally:
+                _BREADTH_BUILD_LOCK.release()
+
+        by_year = cached_payload.get("_stock_ytd_by_year") if isinstance(cached_payload, dict) else None
+        if not isinstance(by_year, dict) or not by_year:
+            self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": "stock_ytd_unavailable"})
+            return
+        available_years = sorted((int(year) for year in by_year), reverse=True)
+        selected_year = requested_year if requested_year is not None else available_years[0]
+        result = by_year.get(selected_year)
+        if not isinstance(result, dict):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_stock_ytd_year"})
+            return
+        self._send_json(
+            HTTPStatus.OK,
+            {
+                **result,
+                "available_years": available_years,
+                "cache_hit": cache_hit,
+                "universe_source": NIFTY500_CONSTITUENTS_URL,
+                "price_source": "Kite Connect historical daily candles",
+            },
+        )
 
     def _build_market_breadth(self, api_key: str, access_token: str) -> dict[str, object]:
         constituent_request = urllib.request.Request(
@@ -6558,7 +7745,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         missing_symbols = [item["symbol"] for item in constituents if item["symbol"] not in tokens]
 
         now = datetime.now(INDIA_TIMEZONE)
-        from_date = now.date() - timedelta(days=HISTORICAL_LOOKBACK_DAYS)
+        from_date = now.date() - timedelta(days=NIFTY500_HISTORY_LOOKBACK_DAYS)
         histories: dict[str, list[tuple[date, float]]] = {}
         requested = 0
         for constituent in constituents:
@@ -6581,7 +7768,11 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 },
                 method="GET",
             )
-            provider_payload, reason = self._request_provider_json(request, exchange=False)
+            provider_payload, reason = self._request_provider_json(
+                request,
+                exchange=False,
+                maximum_bytes=MAX_HISTORICAL_RESPONSE_BYTES,
+            )
             requested += 1
             if reason is not None:
                 raise ValueError(reason)
@@ -6591,6 +7782,10 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
 
         rows, as_of, evaluated = calculate_market_breadth(constituents, histories)
         monthly_returns = calculate_month_to_date_returns(histories, as_of=as_of)
+        stock_ytd_by_year = {
+            year: build_stock_ytd_table(constituents, histories, as_of=as_of, year=year)
+            for year in range(as_of.year, as_of.year - 5, -1)
+        }
         with _SESSION_LOCK:
             _MONTHLY_EQUITY_RETURNS_CACHE.clear()
             _MONTHLY_EQUITY_RETURNS_CACHE.update(
@@ -6611,6 +7806,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             "one_day_change_definition": "percentage-point change in share above 20DMA",
             "universe_source": NIFTY500_CONSTITUENTS_URL,
             "price_source": "Kite Connect historical daily candles",
+            "_stock_ytd_by_year": stock_ytd_by_year,
         }
 
     def _current_equity_tokens(self, api_key: str, access_token: str) -> dict[str, str]:
@@ -7287,6 +8483,24 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         )
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler name
+        if self.path == "/api/portfolio/preview":
+            payload = self._read_json_payload(MAX_PORTFOLIO_IMPORT_BYTES)
+            if payload is not None:
+                self._send_portfolio_preview(payload)
+            return
+
+        if self.path == "/api/portfolio/analyze":
+            payload = self._read_json_payload(MAX_PORTFOLIO_IMPORT_BYTES)
+            if payload is not None:
+                self._send_portfolio_analysis(payload)
+            return
+
+        if self.path == "/api/earnings/import":
+            payload = self._read_json_payload(MAX_EARNINGS_IMPORT_BYTES)
+            if payload is not None:
+                self._send_earnings_import(payload)
+            return
+
         if self.path == "/api/news-events/nse-manual-import":
             payload = self._read_json_payload(MAX_NEWS_IMPORT_BYTES)
             if payload is not None:
@@ -7644,6 +8858,109 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         self._send_json(
             HTTPStatus.OK,
             {**workspace, "write_result": write_result},
+        )
+
+    def _send_earnings_import(self, payload: dict[str, object]) -> None:
+        file_name = payload.get("file_name")
+        csv_text = payload.get("csv_text")
+        if (
+            not isinstance(file_name, str)
+            or not re.fullmatch(r"[A-Za-z0-9._ -]{1,128}\.csv", file_name)
+            or not isinstance(csv_text, str)
+        ):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_earnings_import"})
+            return
+        try:
+            parsed = parse_earnings_csv(csv_text)
+            store = _get_eod_store()
+            write_result = store.append_earnings_records(parsed, source_file_name=file_name)
+            workspace = build_earnings_analysis(store.load_earnings_records())
+        except ValueError as error:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": str(error)})
+            return
+        self._send_json(HTTPStatus.OK, {**workspace, "write_result": write_result})
+
+    def _send_portfolio_preview(self, payload: dict[str, object]) -> None:
+        file_name = payload.get("file_name")
+        encoded = payload.get("content_base64")
+        if (
+            not isinstance(file_name, str)
+            or not re.fullmatch(r"[A-Za-z0-9._ ()&-]{1,128}\.(?:csv|xlsx)", file_name, re.IGNORECASE)
+            or not isinstance(encoded, str)
+        ):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_portfolio_file"})
+            return
+        try:
+            raw = base64.b64decode(encoded, validate=True)
+            preview = parse_portfolio_file(file_name, raw)
+        except (ValueError, binascii.Error) as error:
+            reason = str(error) if isinstance(error, ValueError) else "invalid_portfolio_file"
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": reason})
+            return
+        self._send_json(HTTPStatus.OK, preview)
+
+    def _send_portfolio_analysis(self, payload: dict[str, object]) -> None:
+        rows = payload.get("rows")
+        mapping = payload.get("mapping")
+        if (
+            not isinstance(rows, list)
+            or not all(isinstance(row, dict) for row in rows)
+            or not isinstance(mapping, dict)
+        ):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_portfolio_rows"})
+            return
+        normalized_symbols = {
+            re.sub(r"-(EQ|BE|RR)$", "", re.sub(r"^(NSE:|BSE:)", "", str(row.get(str(mapping.get("symbol")), "")).strip().upper()))
+            for row in rows
+        }
+        store = _get_eod_store()
+        stock_inventory = {str(item["display_name"]) for item in store.list_instruments(kind="stock")}
+        histories = {
+            symbol: store.load_candles(kind="stock", display_name=symbol)
+            for symbol in normalized_symbols
+            if symbol in stock_inventory
+        }
+        constituents: list[dict[str, str]] = []
+        constituent_status = "unavailable"
+        request = urllib.request.Request(
+            NIFTY500_CONSTITUENTS_URL,
+            headers={
+                "Accept": "text/csv,text/plain;q=0.9,*/*;q=0.8",
+                "Accept-Encoding": "identity",
+                "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+            },
+            method="GET",
+        )
+        constituent_csv, reason = self._request_provider_text(request, MAX_CONSTITUENT_BYTES)
+        if reason is None:
+            try:
+                constituents = parse_nifty500_constituents(constituent_csv or "")
+                constituent_status = "official_current_snapshot"
+            except ValueError:
+                constituent_status = "invalid_provider_response"
+        fno_symbols = {
+            str(item.get("underlying") or "").upper()
+            for item in store.load_futures_eod_snapshots()
+            if item.get("underlying")
+        }
+        try:
+            result = build_portfolio_analysis(
+                rows,
+                mapping,
+                histories,
+                constituents=constituents,
+                fno_symbols=fno_symbols,
+            )
+        except ValueError as error:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": str(error)})
+            return
+        self._send_json(
+            HTTPStatus.OK,
+            {
+                **result,
+                "constituent_source_status": constituent_status,
+                "constituent_source_url": NIFTY500_CONSTITUENTS_URL,
+            },
         )
 
     def _read_json_payload(

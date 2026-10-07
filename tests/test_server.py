@@ -28,6 +28,8 @@ from server import (
     build_dashboard_seasonality_universe_summary,
     build_news_events_workspace,
     build_macro_events_calendar,
+    build_stock_ytd_table,
+    build_earnings_analysis,
     build_index_futures_confirmation,
     build_regime_external_cluster_readiness,
     apply_recovering_market_state,
@@ -59,6 +61,11 @@ from server import (
     parse_rbi_macro_snapshot,
     parse_near_month_stock_futures,
     parse_nse_announcement_csv,
+    parse_earnings_csv,
+    parse_portfolio_file,
+    parse_home_loan_tracker_xlsx,
+    infer_portfolio_mapping,
+    build_portfolio_analysis,
     parse_seasonality_index_tokens,
     rank_historical_month_averages,
 )
@@ -683,6 +690,45 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
                 "bad symbol,Company,Subject,05-Oct-2026 15:42:10\n"
             )
 
+    def test_earnings_csv_and_analysis_keep_loss_comparisons_explicit(self):
+        header = (
+            "Symbol,Company Name,Sector,Basis,Fiscal Year,Quarter,Period End,"
+            "Reported At,Currency,Unit,Revenue,Net Profit,EPS,Source URL\n"
+        )
+        payload = header + (
+            "ABC,ABC Limited,Industrials,Consolidated,2025-26,Q1,2025-06-30,"
+            "2025-07-20,INR,crore,100,-5,-1,https://example.test/abc-old.pdf\n"
+            "ABC,ABC Limited,Industrials,Consolidated,2026-27,Q1,2026-06-30,"
+            "2026-07-20,INR,crore,120,10,2,https://example.test/abc-new.pdf\n"
+        )
+        records = parse_earnings_csv(payload)
+        result = build_earnings_analysis(records)
+        row = result["rows"][0]
+        self.assertEqual(row["revenue_yoy_pct"], 20.0)
+        self.assertIsNone(row["revenue_qoq_pct"])
+        self.assertEqual(row["profit_state"], "turned_profitable")
+        self.assertIsNone(row["net_profit_yoy_pct"])
+        self.assertEqual(row["net_profit_yoy_change"], 15.0)
+        self.assertEqual(result["coverage"]["turnarounds"], 1)
+
+    def test_earnings_csv_rejects_missing_provenance_and_future_reports(self):
+        header = (
+            "Symbol,Company Name,Sector,Basis,Fiscal Year,Quarter,Period End,"
+            "Reported At,Currency,Unit,Revenue,Net Profit,EPS,Source URL\n"
+        )
+        with self.assertRaisesRegex(ValueError, "invalid_earnings_row"):
+            parse_earnings_csv(
+                header
+                + "ABC,ABC Limited,Industrials,Consolidated,2026-27,Q1,2026-06-30,"
+                "2026-07-20,INR,crore,120,10,2,\n"
+            )
+        with self.assertRaisesRegex(ValueError, "invalid_earnings_date"):
+            parse_earnings_csv(
+                header
+                + "ABC,ABC Limited,Industrials,Consolidated,2027-28,Q1,2027-06-30,"
+                "2027-07-20,INR,crore,120,10,2,https://example.test/a.pdf\n"
+            )
+
     def test_macro_event_calendar_keeps_verified_events_and_pending_rbi_separate(self):
         result = build_macro_events_calendar(
             today=date(2026, 10, 6),
@@ -708,6 +754,16 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
             ),
             events=(
                 {
+                    "key": "ongoing_meeting",
+                    "title": "Official multi-day meeting",
+                    "region": "India",
+                    "category": "central_bank",
+                    "start_at": "2026-10-05",
+                    "end_at": "2026-10-06",
+                    "timezone": "Asia/Kolkata",
+                    "source_key": "verified",
+                },
+                {
                     "key": "release",
                     "title": "Official release",
                     "region": "India",
@@ -730,12 +786,14 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(result["status"], "official_calendar_snapshot_ready")
         self.assertEqual(result["contract"]["version"], "macro-events-calendar-v1")
         self.assertFalse(result["contract"]["unscheduled_news_enabled"])
-        self.assertEqual(result["coverage"]["upcoming_events"], 1)
-        self.assertEqual(result["coverage"]["next_7_days"], 1)
+        self.assertEqual(result["coverage"]["upcoming_events"], 2)
+        self.assertEqual(result["coverage"]["next_7_days"], 2)
         self.assertEqual(result["coverage"]["verified_sources"], 1)
         self.assertEqual(result["coverage"]["pending_sources"], 1)
-        self.assertEqual(result["next_event"]["key"], "release")
-        self.assertEqual(result["events"][0]["india_time"], "2026-10-12T08:30+05:30")
+        self.assertEqual(result["next_event"]["key"], "ongoing_meeting")
+        self.assertTrue(result["next_event"]["ongoing"])
+        self.assertEqual(result["next_event"]["days_until"], 0)
+        self.assertEqual(result["events"][1]["india_time"], "2026-10-12T08:30+05:30")
 
     def test_external_cluster_readiness_requires_complete_dated_sessions(self):
         dates = [date(2025, 1, 1) + timedelta(days=index) for index in range(252)]
@@ -976,7 +1034,10 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         )
         rows = parse_nifty500_constituents(header + body)
         self.assertEqual(len(rows), 500)
-        self.assertEqual(rows[0], {"symbol": "SYM0", "sector": "Sector 0"})
+        self.assertEqual(
+            rows[0],
+            {"symbol": "SYM0", "name": "Company 0", "sector": "Sector 0"},
+        )
         current_official_rows = (
             "".join(
                 f"Company {index},Sector {index % 3},SYM{index},EQ,ISIN{index}\n"
@@ -988,7 +1049,14 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         )
         current_rows = parse_nifty500_constituents(header + current_official_rows)
         self.assertEqual(len(current_rows), 501)
-        self.assertEqual(current_rows[-1], {"symbol": "EMBASSY", "sector": "Realty"})
+        self.assertEqual(
+            current_rows[-1],
+            {
+                "symbol": "EMBASSY",
+                "name": "EMBASSY OFFICE PARKS REIT",
+                "sector": "Realty",
+            },
+        )
         rows_with_be_security = parse_nifty500_constituents(
             header + body + "Company BE,Sector 1,SYMBE,BE,ISINBE\n"
         )
@@ -1006,6 +1074,60 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
             parse_nifty500_constituents(
                 header + body + "Company 499,Sector,SYM499,BZ,ISIN499\n"
             )
+
+    def test_stock_ytd_table_ranks_returns_and_preserves_missing_rows(self):
+        constituents = [
+            {"symbol": "AAA", "name": "Alpha Ltd", "sector": "Industrials"},
+            {"symbol": "BBB", "name": "Beta Ltd", "sector": "Financial Services"},
+            {"symbol": "MISS", "name": "Missing Ltd", "sector": "Healthcare"},
+        ]
+        sessions = [date(2023, 12, 29)] + [
+            date(2024, 1, 1) + timedelta(days=offset) for offset in range(220)
+        ]
+        histories = {
+            "AAA": list(zip(sessions, [100.0] + [100.0 + offset / 2 for offset in range(1, 221)])),
+            "BBB": list(zip(sessions, [100.0] + [100.0 - offset / 10 for offset in range(1, 221)])),
+        }
+
+        result = build_stock_ytd_table(
+            constituents,
+            histories,
+            as_of=date(2024, 8, 7),
+            year=2024,
+        )
+
+        self.assertEqual(result["contract_version"], "nifty500-stock-ytd-v1")
+        self.assertEqual(result["price_label"], "Latest completed close")
+        self.assertEqual([row["symbol"] for row in result["rows"]], ["AAA", "BBB", "MISS"])
+        self.assertEqual([row["rank"] for row in result["rows"]], [1, 2, None])
+        self.assertEqual(result["rows"][0]["name"], "Alpha Ltd")
+        self.assertGreater(result["rows"][0]["ytd_performance_pct"], 0)
+        self.assertLess(result["rows"][1]["ytd_performance_pct"], 0)
+        self.assertIsNotNone(result["rows"][0]["from_20dma_pct"])
+        self.assertIsNotNone(result["rows"][0]["from_200dma_pct"])
+        self.assertEqual(
+            result["coverage"],
+            {"total": 3, "ready": 2, "partial_history": 0, "unavailable": 1},
+        )
+
+    def test_stock_ytd_table_aligns_historical_year_metrics_to_year_end(self):
+        constituents = [{"symbol": "AAA", "name": "Alpha Ltd", "sector": "Industrials"}]
+        start = date(2022, 12, 30)
+        sessions = [start + timedelta(days=offset) for offset in range(800)]
+        histories = {"AAA": [(session, 100.0 + offset) for offset, session in enumerate(sessions)]}
+
+        result = build_stock_ytd_table(
+            constituents,
+            histories,
+            as_of=date(2025, 3, 10),
+            year=2023,
+        )
+
+        row = result["rows"][0]
+        self.assertEqual(result["price_label"], "Year-end completed close")
+        self.assertEqual(row["price_date"], "2023-12-31")
+        self.assertEqual(row["ltp"], 466.0)
+        self.assertEqual(row["status"], "ready")
 
     def test_equity_tokens_accept_only_nse_eq_rows(self):
         fixture = """instrument_token,tradingsymbol,instrument_type,segment,exchange
@@ -1667,6 +1789,208 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         )
         self.assertEqual(rows, [])
         self.assertEqual(missing, ["Nifty 50", "Nifty Bank"])
+
+    def test_portfolio_csv_preview_keeps_rows_in_memory_contract(self):
+        preview = parse_portfolio_file(
+            "holdings.csv",
+            b"Symbol,Quantity,Average Cost\nINFY,10,1400\nTCS,5,3200\n",
+        )
+        self.assertEqual(preview["headers"], ["Symbol", "Quantity", "Average Cost"])
+        self.assertEqual(preview["row_count"], 2)
+        self.assertEqual(preview["rows"][0]["Symbol"], "INFY")
+        self.assertEqual(
+            preview["detected_mapping"],
+            {
+                "symbol": "Symbol",
+                "quantity": "Quantity",
+                "weight": None,
+                "average_cost": "Average Cost",
+                "current_value": None,
+                "sector": None,
+                "name": None,
+            },
+        )
+        self.assertEqual(preview["persistence"], "browser_memory_only")
+
+    def test_portfolio_mapping_recognizes_common_broker_export_columns(self):
+        mapping = infer_portfolio_mapping(
+            ["Instrument", "Qty.", "Avg. cost", "LTP", "Cur. value", "P&L"],
+            [
+                {"Instrument": "INFY", "Qty.": 10, "Avg. cost": 1400, "LTP": 1500, "Cur. value": 15000, "P&L": 1000},
+                {"Instrument": "TCS", "Qty.": 5, "Avg. cost": 3200, "LTP": 3000, "Cur. value": 15000, "P&L": -1000},
+            ],
+        )
+        self.assertEqual(mapping["symbol"], "Instrument")
+        self.assertEqual(mapping["quantity"], "Qty.")
+        self.assertEqual(mapping["average_cost"], "Avg. cost")
+        self.assertEqual(mapping["current_value"], "Cur. value")
+
+    def test_portfolio_mapping_prefers_explicit_symbol_over_instrument_name(self):
+        mapping = infer_portfolio_mapping(
+            ["Instrument", "Symbol", "Qty.", "Avg. cost", "Cur Value"],
+            [{"Instrument": "Infosys", "Symbol": "INFY", "Qty.": 10, "Avg. cost": 1400, "Cur Value": 15000}],
+        )
+        self.assertEqual(mapping["symbol"], "Symbol")
+        self.assertEqual(mapping["name"], "Instrument")
+
+    def test_portfolio_csv_skips_broker_report_preamble_and_finds_header(self):
+        preview = parse_portfolio_file(
+            "broker-holdings.csv",
+            b"Holdings statement\nClient ID,AB1234\nGenerated on,07-10-2026\n\nTrading Symbol,Total Qty,Avg Cost Price,Closing Value\nINFY,10,1400,15000\nTCS,5,3200,15000\n",
+        )
+        self.assertEqual(preview["headers"], ["Trading Symbol", "Total Qty", "Avg Cost Price", "Closing Value"])
+        self.assertEqual(preview["row_count"], 2)
+        self.assertEqual(preview["detected_mapping"]["symbol"], "Trading Symbol")
+        self.assertEqual(preview["detected_mapping"]["quantity"], "Total Qty")
+        self.assertEqual(preview["detected_mapping"]["current_value"], "Closing Value")
+
+    def test_portfolio_xlsx_preview_reads_first_sheet_without_dependency(self):
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr(
+                "xl/workbook.xml",
+                '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Holdings" sheetId="1" r:id="rId1"/></sheets></workbook>',
+            )
+            archive.writestr(
+                "xl/_rels/workbook.xml.rels",
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/></Relationships>',
+            )
+            archive.writestr(
+                "xl/worksheets/sheet1.xml",
+                '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Symbol</t></is></c><c r="B1" t="inlineStr"><is><t>Quantity</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>INFY</t></is></c><c r="B2"><v>12</v></c></row></sheetData></worksheet>',
+            )
+        preview = parse_portfolio_file("holdings.xlsx", payload.getvalue())
+        self.assertEqual(preview["sheet_name"], "Holdings")
+        self.assertEqual(preview["rows"], [{"Symbol": "INFY", "Quantity": 12}])
+
+    def test_home_loan_tracker_reads_payments_outstanding_and_rent_totals(self):
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr(
+                "xl/workbook.xml",
+                '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Loan payments" sheetId="1" r:id="rId1"/></sheets></workbook>',
+            )
+            archive.writestr(
+                "xl/_rels/workbook.xml.rels",
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/></Relationships>',
+            )
+            archive.writestr(
+                "xl/worksheets/sheet1.xml",
+                '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                '<row r="1"><c r="A1" t="inlineStr"><is><t>Home Loan FY</t></is></c><c r="B1" t="inlineStr"><is><t>Principal</t></is></c><c r="C1" t="inlineStr"><is><t>Interest</t></is></c><c r="D1" t="inlineStr"><is><t>Total</t></is></c></row>'
+                '<row r="2"><c r="A2" t="inlineStr"><is><t>2025-26</t></is></c><c r="B2"><v>120000</v></c><c r="C2"><v>80000</v></c><c r="D2"><v>200000</v></c></row>'
+                '<row r="3"><c r="A3" t="inlineStr"><is><t>Total</t></is></c><c r="B3"><v>120000</v></c><c r="C3"><v>80000</v></c><c r="D3"><v>200000</v></c><c r="I3" t="inlineStr"><is><t>Total</t></is></c><c r="J3"><v>300000</v></c><c r="K3"><v>50000</v></c><c r="L3"><v>250000</v></c></row>'
+                '<row r="4"><c r="A4" t="inlineStr"><is><t>Outstanding(As on Sep 6 2026)</t></is></c><c r="B4"><v>3984073</v></c><c r="C4" t="inlineStr"><is><t>(8.05% p.a.)</t></is></c></row>'
+                '</sheetData></worksheet>',
+            )
+        tracker = parse_home_loan_tracker_xlsx(payload.getvalue())
+        self.assertIsNotNone(tracker)
+        self.assertEqual(tracker["payment_rows"][0]["payment"], 200000)
+        self.assertEqual(tracker["outstanding"], 3984073)
+        self.assertEqual(tracker["outstanding_as_of"], "2026-09-06")
+        self.assertEqual(tracker["annual_rate_pct"], 8.05)
+        self.assertEqual(tracker["suggested_monthly_payment"], 16666.67)
+        self.assertEqual(tracker["rent_totals"]["net_rent"], 250000)
+
+    def test_portfolio_xlsx_combines_repeated_holdings_tables_and_skips_summary(self):
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr(
+                "xl/workbook.xml",
+                '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Active" sheetId="1" r:id="rId1"/></sheets></workbook>',
+            )
+            archive.writestr(
+                "xl/_rels/workbook.xml.rels",
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/></Relationships>',
+            )
+            archive.writestr(
+                "xl/worksheets/sheet1.xml",
+                '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                '<row r="1"><c r="A1" t="inlineStr"><is><t>Instrument</t></is></c><c r="B1" t="inlineStr"><is><t>Symbol</t></is></c><c r="C1" t="inlineStr"><is><t>Qty.</t></is></c><c r="D1" t="inlineStr"><is><t>Cur Value</t></is></c></row>'
+                '<row r="2"><c r="A2" t="inlineStr"><is><t>Infosys</t></is></c><c r="B2" t="inlineStr"><is><t>INFY</t></is></c><c r="C2"><v>10</v></c><c r="D2"><v>15000</v></c></row>'
+                '<row r="3"/>'
+                '<row r="5"><c r="A5" t="inlineStr"><is><t>Instrument</t></is></c><c r="B5" t="inlineStr"><is><t>Symbol</t></is></c><c r="C5" t="inlineStr"><is><t>Qty.</t></is></c><c r="D5" t="inlineStr"><is><t>Cur Value</t></is></c></row>'
+                '<row r="6"><c r="A6" t="inlineStr"><is><t>TCS</t></is></c><c r="B6" t="inlineStr"><is><t>TCS</t></is></c><c r="C6"><v>5</v></c><c r="D6"><v>16000</v></c></row>'
+                '<row r="7"/>'
+                '<row r="9"><c r="A9" t="inlineStr"><is><t>Net worth</t></is></c><c r="B9"><v>500000</v></c></row>'
+                '</sheetData></worksheet>',
+            )
+        preview = parse_portfolio_file("tracker.xlsx", payload.getvalue())
+        self.assertEqual(preview["row_count"], 2)
+        self.assertEqual([row["Symbol"] for row in preview["rows"]], ["INFY", "TCS"])
+        self.assertEqual(preview["detected_mapping"]["symbol"], "Symbol")
+        self.assertEqual(preview["detected_mapping"]["name"], "Instrument")
+
+    def test_portfolio_analysis_excludes_duplicates_and_builds_concentration(self):
+        histories = {
+            "INFY": [{"date": date(2026, 10, 6), "close": 1500.0}],
+            "TCS": [{"date": date(2026, 10, 6), "close": 3000.0}],
+            "RELIANCE": [{"date": date(2026, 10, 6), "close": 1200.0}],
+        }
+        result = build_portfolio_analysis(
+            [
+                {"Symbol": "INFY", "Qty": "10", "Avg": "1400"},
+                {"Symbol": "INFY", "Qty": "2", "Avg": "1450"},
+                {"Symbol": "TCS", "Qty": "5", "Avg": "3200"},
+                {"Symbol": "RELIANCE", "Qty": "10", "Avg": "1000"},
+            ],
+            {"symbol": "Symbol", "quantity": "Qty", "average_cost": "Avg"},
+            histories,
+            constituents=[
+                {"symbol": "INFY", "name": "Infosys", "sector": "IT"},
+                {"symbol": "TCS", "name": "TCS", "sector": "IT"},
+                {"symbol": "RELIANCE", "name": "Reliance", "sector": "Energy"},
+            ],
+            fno_symbols={"INFY", "TCS", "RELIANCE"},
+        )
+        self.assertEqual(result["coverage"]["eligible_positions"], 2)
+        self.assertEqual(result["coverage"]["excluded_rows"], 2)
+        self.assertEqual(result["weight_basis"], "quantity_times_latest_close")
+        self.assertAlmostEqual(sum(row["weight_pct"] for row in result["positions"] if row["weight_pct"] is not None), 100.0)
+        self.assertEqual(result["sectors"][0]["sector"], "IT")
+        self.assertTrue(any(issue["reason"] == "duplicate_symbol" for issue in result["issues"]))
+
+    def test_portfolio_analysis_accepts_uploaded_weights_without_prices(self):
+        result = build_portfolio_analysis(
+            [{"Ticker": "AAA", "Weight": "60%"}, {"Ticker": "BBB", "Weight": "40%"}],
+            {"symbol": "Ticker", "weight": "Weight"},
+            {},
+        )
+        self.assertEqual(result["coverage"]["eligible_positions"], 2)
+        self.assertEqual(result["weight_basis"], "uploaded_weight")
+        self.assertEqual(result["concentration"]["largest_position_pct"], 60.0)
+        self.assertEqual(result["concentration"]["state"], "high_concentration")
+
+    def test_portfolio_analysis_accepts_current_value_without_quantity(self):
+        result = build_portfolio_analysis(
+            [{"Stock": "AAA", "Market Value": "75000"}, {"Stock": "BBB", "Market Value": "25000"}],
+            {"symbol": "Stock", "quantity": None, "weight": None, "average_cost": None, "current_value": "Market Value", "sector": None, "name": None},
+            {},
+        )
+        self.assertEqual(result["coverage"]["eligible_positions"], 2)
+        self.assertEqual(result["weight_basis"], "uploaded_current_value")
+        self.assertEqual(result["concentration"]["largest_position_pct"], 75.0)
+
+    def test_portfolio_analysis_allows_shared_symbol_when_instrument_names_differ(self):
+        result = build_portfolio_analysis(
+            [
+                {"Instrument": "Fund A", "Symbol": "MF", "Qty": "10", "Avg": "100", "Current": "1100"},
+                {"Instrument": "Fund B", "Symbol": "MF", "Qty": "20", "Avg": "100", "Current": "1800"},
+            ],
+            {"symbol": "Symbol", "quantity": "Qty", "average_cost": "Avg", "current_value": "Current", "name": "Instrument"},
+            {},
+        )
+        self.assertEqual(result["coverage"]["eligible_positions"], 2)
+        self.assertEqual([row["return_since_average_cost_pct"] for row in result["positions"]], [-10.0, 10.0])
+
+    def test_portfolio_analysis_accepts_descriptive_non_exchange_identifier_with_uploaded_value(self):
+        result = build_portfolio_analysis(
+            [{"Instrument": "NCD", "Symbol": "SHRIRAM FIN", "Qty": "1", "Avg": "99990", "Current": "104963"}],
+            {"symbol": "Symbol", "quantity": "Qty", "average_cost": "Avg", "current_value": "Current", "name": "Instrument"},
+            {},
+        )
+        self.assertEqual(result["coverage"]["eligible_positions"], 1)
+        self.assertEqual(result["positions"][0]["return_since_average_cost_pct"], 4.97)
 
 
 if __name__ == "__main__":

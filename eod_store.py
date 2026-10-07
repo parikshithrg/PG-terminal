@@ -222,6 +222,31 @@ class EODStore:
 
                     CREATE INDEX IF NOT EXISTS news_event_records_published_idx
                     ON news_event_records(published_at, symbol);
+
+                    CREATE TABLE IF NOT EXISTS earnings_records (
+                        record_hash TEXT PRIMARY KEY,
+                        symbol TEXT NOT NULL,
+                        company_name TEXT NOT NULL,
+                        sector TEXT NOT NULL,
+                        basis TEXT NOT NULL CHECK (basis IN ('consolidated', 'standalone')),
+                        fiscal_year TEXT NOT NULL,
+                        quarter TEXT NOT NULL CHECK (quarter IN ('Q1', 'Q2', 'Q3', 'Q4')),
+                        period_end TEXT NOT NULL,
+                        reported_at TEXT NOT NULL,
+                        currency TEXT NOT NULL,
+                        unit TEXT NOT NULL,
+                        revenue REAL NOT NULL,
+                        net_profit REAL NOT NULL,
+                        eps REAL NOT NULL,
+                        source_url TEXT NOT NULL,
+                        source_file_name TEXT NOT NULL,
+                        raw_json TEXT NOT NULL,
+                        imported_at TEXT NOT NULL,
+                        schema_version INTEGER NOT NULL
+                    );
+
+                    CREATE INDEX IF NOT EXISTS earnings_records_period_idx
+                    ON earnings_records(symbol, basis, period_end, imported_at);
                     """
                 )
 
@@ -970,6 +995,93 @@ class EODStore:
                        source_file_name, imported_at
                 FROM news_event_records
                 ORDER BY published_at DESC, symbol, event_hash
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def append_earnings_records(
+        self,
+        rows: list[dict[str, object]],
+        *,
+        source_file_name: str,
+        imported_at: str | None = None,
+    ) -> dict[str, int]:
+        if (
+            not isinstance(rows, list)
+            or not rows
+            or not isinstance(source_file_name, str)
+            or not re.fullmatch(r"[A-Za-z0-9._ -]{1,128}\.csv", source_file_name)
+        ):
+            raise ValueError("invalid_earnings_import")
+        timestamp = imported_at or datetime.now(timezone.utc).isoformat()
+        prepared: list[tuple[object, ...]] = []
+        keys = (
+            "symbol", "company_name", "sector", "basis", "fiscal_year", "quarter",
+            "period_end", "reported_at", "currency", "unit", "revenue", "net_profit",
+            "eps", "source_url",
+        )
+        for row in rows:
+            if not isinstance(row, dict) or any(key not in row for key in keys):
+                raise ValueError("invalid_earnings_import")
+            canonical_record = {key: row[key] for key in keys}
+            try:
+                canonical = json.dumps(
+                    canonical_record, sort_keys=True, separators=(",", ":"), allow_nan=False
+                )
+                raw_json = json.dumps(
+                    row.get("raw") if isinstance(row.get("raw"), dict) else {},
+                    sort_keys=True, separators=(",", ":"), allow_nan=False,
+                )
+            except (TypeError, ValueError) as error:
+                raise ValueError("invalid_earnings_import") from error
+            record_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+            prepared.append(
+                (
+                    record_hash,
+                    *(row[key] for key in keys),
+                    source_file_name,
+                    raw_json,
+                    timestamp,
+                    SCHEMA_VERSION,
+                )
+            )
+        inserted = 0
+        duplicates = 0
+        with closing(self._connect()) as connection:
+            with connection:
+                for record in prepared:
+                    if connection.execute(
+                        "SELECT 1 FROM earnings_records WHERE record_hash = ?", (record[0],)
+                    ).fetchone() is not None:
+                        duplicates += 1
+                        continue
+                    connection.execute(
+                        """
+                        INSERT INTO earnings_records (
+                            record_hash, symbol, company_name, sector, basis, fiscal_year,
+                            quarter, period_end, reported_at, currency, unit, revenue,
+                            net_profit, eps, source_url, source_file_name, raw_json,
+                            imported_at, schema_version
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        record,
+                    )
+                    inserted += 1
+        return {"inserted": inserted, "duplicates": duplicates}
+
+    def load_earnings_records(self, *, limit: int = 10000) -> list[dict[str, object]]:
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 25000:
+            raise ValueError("invalid_earnings_limit")
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                """
+                SELECT record_hash, symbol, company_name, sector, basis, fiscal_year,
+                       quarter, period_end, reported_at, currency, unit, revenue,
+                       net_profit, eps, source_url, source_file_name, imported_at
+                FROM earnings_records
+                ORDER BY period_end DESC, reported_at DESC, symbol, basis, imported_at DESC
                 LIMIT ?
                 """,
                 (limit,),

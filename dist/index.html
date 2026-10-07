@@ -363,8 +363,12 @@
     .page-tab {
       position: relative;
       padding: 0 0 13px;
+      border: 0;
       color: #4b4e54;
+      background: transparent;
       font-size: 14px;
+      font-family: inherit;
+      cursor: pointer;
     }
 
     .page-tab.active { color: var(--ink); font-weight: 650; }
@@ -521,6 +525,18 @@
       gap: 12px;
     }
     .universe-action-status { color: var(--muted); font-size: 12px; text-align: right; }
+    .loan-calculator-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+    }
+    .loan-calculate-button { align-self: end; min-height: 40px; }
+    .loan-result-grid { margin-top: 28px; }
     .analysis-section { margin-top: 28px; }
     .analysis-section h2 { margin: 0 0 4px; color: #2b2e33; font-size: 17px; }
     .analysis-section .section-subtitle { margin: 22px 0 8px; color: var(--text); font-size: 15px; }
@@ -537,6 +553,17 @@
     .section-heading-row .section-title { margin: 0; }
 
     .section-note { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+    .table-guide {
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      border-left: 3px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+    .table-guide strong { color: var(--text); }
 
     .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
     table { width: 100%; border-collapse: collapse; min-width: 720px; }
@@ -544,6 +571,15 @@
     th { color: #686d75; background: #fcfcfc; font-size: 12px; font-weight: 600; }
     td { font-size: 14px; }
     th:not(:first-child), td:not(:first-child) { text-align: right; }
+    .stock-ranking-table th:nth-child(2), .stock-ranking-table td:nth-child(2),
+    .stock-ranking-table th:nth-child(3), .stock-ranking-table td:nth-child(3),
+    .stock-ranking-table th:nth-child(4), .stock-ranking-table td:nth-child(4),
+    .stock-ranking-table th:last-child, .stock-ranking-table td:last-child { text-align: left; }
+    .earnings-table { min-width: 1850px; }
+    .earnings-table th:nth-child(-n+6), .earnings-table td:nth-child(-n+6),
+    .earnings-table th:nth-child(15), .earnings-table td:nth-child(15),
+    .earnings-table th:nth-child(16), .earnings-table td:nth-child(16),
+    .earnings-table th:last-child, .earnings-table td:last-child { text-align: left; }
     tr:last-child td { border-bottom: 0; }
 
     .sortable-heading { padding: 0; }
@@ -830,6 +866,7 @@
       .summary-value { font-size: 20px; }
       .split-panels { grid-template-columns: 1fr; }
       .universe-controls { grid-template-columns: 1fr; }
+      .loan-calculator-grid { grid-template-columns: 1fr 1fr; }
       .universe-source { grid-column: 1; }
       .score-guide-grid { grid-template-columns: 1fr; }
       .score-guide-status { display: none; }
@@ -838,6 +875,7 @@
 
     @media (max-width: 430px) {
       .summary-grid { grid-template-columns: 1fr; }
+      .loan-calculator-grid { grid-template-columns: 1fr; }
       .seasonality-headline-grid { grid-template-columns: 1fr; }
       .action-button { min-height: 32px; padding-inline: 7px; }
       .action-button.eod-running { min-width: 82px; }
@@ -1092,12 +1130,45 @@
           </div>
         </section>
 
+        <section class="dashboard-section" aria-labelledby="dashboardEventsTitle">
+          <div class="workspace-summary-card">
+            <div class="workspace-summary-head">
+              <div>
+                <div class="workspace-summary-kicker">Workspace summary · official calendar snapshots</div>
+                <h2 class="workspace-summary-headline" id="dashboardEventsTitle">Events Calendar</h2>
+              </div>
+              <span class="workspace-summary-status" id="dashboardEventsStatus">Loading calendar</span>
+            </div>
+            <p class="workspace-summary-copy" id="dashboardEventsCopy">Reading the next scheduled India and U.S. macro events from the reviewed calendar snapshot.</p>
+            <div class="workspace-summary-metrics" aria-label="Events Calendar summary">
+              <div class="workspace-summary-metric"><strong id="dashboardEventsNextDate">—</strong><span>Next scheduled event</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardEventsSevenDay">—</strong><span>Within seven days</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardEventsThirtyDay">—</strong><span>Within 30 days</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardEventsUpcoming">—</strong><span>Current + upcoming</span></div>
+            </div>
+            <div class="workspace-summary-readiness">
+              <span><strong>Reviewed</strong> <span id="dashboardEventsAsOf">—</span></span>
+              <span><strong>Regions</strong> <span id="dashboardEventsRegions">—</span></span>
+              <span><strong>Sources</strong> <span id="dashboardEventsSources">—</span></span>
+              <span><strong>Synchronization</strong> <span id="dashboardEventsSync">—</span></span>
+            </div>
+            <div class="workspace-summary-actions">
+              <div class="workspace-summary-note" id="dashboardEventsNote">Scheduled events only. Verify the official source before relying on a date or time.</div>
+              <div class="workspace-summary-buttons">
+                <button class="panel-button" id="refreshDashboardEventsButton" type="button">Refresh summary</button>
+                <button class="panel-button primary" id="viewEventsButton" type="button">View details</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section aria-labelledby="marketSnapshotTitle">
           <div class="section-heading-row">
             <h2 class="section-title" id="marketSnapshotTitle">Market snapshot</h2>
             <button class="panel-button" id="refreshIndexButton" type="button" disabled>Refresh indices</button>
           </div>
           <p class="section-note" id="indexSnapshotNote">Connect Kite to load only the indices available in the current Kite instrument inventory.</p>
+          <div class="table-guide"><strong>How to read:</strong> Each row is one index snapshot. Compare the last price with the previous close to understand the current move; open, high, and low show today’s trading range. Check Status before using a row because unavailable or delayed quotes are not replaced.</div>
           <div class="table-wrap">
             <table>
               <thead>
@@ -1116,6 +1187,7 @@
             <button class="panel-button" id="loadBreadthButton" type="button" disabled>Load breadth</button>
           </div>
           <p class="section-note" id="marketBreadthNote">Connect Kite, then load NIFTY 500 breadth from completed daily candles. Universe and industry mapping come from the official NIFTY 500 constituent file.</p>
+          <div class="table-guide"><strong>How to read:</strong> The moving-average percentages show how much of each sector is participating in its trend. Higher values mean broader participation; a positive 1d change means participation improved since the prior session. Read the stock count first—small groups are less representative.</div>
           <div class="table-wrap">
             <table>
               <thead>
@@ -1270,6 +1342,7 @@
             </section>
             <h3 class="section-subtitle">External historical-evidence readiness</h3>
             <p class="section-note">External evidence enters validation only after enough dated observations exist and its directional thresholds pass a separate review. Sparse history is not treated as neutral.</p>
+            <div class="table-guide"><strong>How to read:</strong> Compare stored complete sessions with history required. Ready means the input has enough dated history for testing; it does not mean the input is predictive or that its candidate weight has been approved.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Evidence input</th><th>Candidate cluster</th><th>Weight</th><th>Stored complete sessions</th><th>History required</th><th>Stored period</th><th>Status</th></tr></thead>
@@ -1277,6 +1350,7 @@
               </table>
             </div>
             <div class="analysis-note" id="regimeExternalReadinessNote">Coverage readiness never activates a score by itself.</div>
+            <div class="table-guide"><strong>How to read:</strong> Each regime row summarizes what happened after that historical state. Median and positive/outperform rates describe typical direction; worst drawdowns describe tail risk. Give little weight to rows with small session samples, and compare excess returns only when a benchmark is selected.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Regime</th><th>Sessions</th><th>5d median</th><th>20d median</th><th>20d positive</th><th>20d excess vs benchmark</th><th>20d outperform rate</th><th>Worst 20d relative drawdown</th><th>60d median</th><th>Worst 20d drawdown</th></tr></thead>
@@ -1285,6 +1359,7 @@
             </div>
             <h3 class="section-subtitle">Transition-aware recovery review</h3>
             <p class="section-note">Recovering market is assigned from prior regime history only: at least five confirmed weak/high-risk sessions followed by confirmed improvement. It lasts no more than 20 sessions and is evaluated only after the rule is assigned.</p>
+            <div class="table-guide"><strong>How to read:</strong> This table isolates sessions classified as recovering after stress. Compare the 20-session median and outperform rate with the worst drawdown: stronger typical returns with shallow tail loss are more stable, but sample size remains essential.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Transition state</th><th>Sessions</th><th>5d median</th><th>20d median</th><th>20d positive</th><th>20d excess</th><th>20d outperform rate</th><th>60d median</th><th>Worst 20d drawdown</th></tr></thead>
@@ -1293,6 +1368,7 @@
             </div>
             <details class="panel sentiment-data-quality">
               <summary>Recovery episodes and outcomes</summary>
+              <div class="table-guide"><strong>How to read:</strong> One row is one distinct recovery episode. Entry and exit show duration and why the state ended; return, drawdown, and excess show the subsequent path. Episodes are historical examples, not independent trade recommendations.</div>
               <div class="table-wrap">
                 <table>
                   <thead><tr><th>Recovery entry</th><th>Prior risk episode</th><th>Exit</th><th>Exit reason</th><th>20d return</th><th>20d maximum drawdown</th><th>20d excess</th></tr></thead>
@@ -1302,6 +1378,7 @@
             </details>
             <div class="analysis-note" id="regimeTransitionNote">This transition state remains validation-only and is not a current market signal.</div>
             <h3 class="section-subtitle">Simple trend baseline</h3>
+            <div class="table-guide"><strong>How to read:</strong> Use this simpler price-trend model as a reference point. If the more complex regime table does not improve typical returns, outperform rates, or drawdown behaviour versus this baseline, the added complexity has not earned its place.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Baseline state</th><th>Sessions</th><th>20d median</th><th>20d positive</th><th>20d excess</th><th>20d outperform rate</th><th>60d median</th><th>Worst 20d drawdown</th></tr></thead>
@@ -1310,6 +1387,7 @@
             </div>
             <h3 class="section-subtitle">Named stress-event review</h3>
             <p class="section-note">Each event is compared with non-overlapping windows of the same length outside every named event. A high drawdown or stress percentile means the event was more severe than most ordinary historical windows.</p>
+            <div class="table-guide"><strong>How to read:</strong> Return and drawdown percentiles locate the event relative to ordinary control windows. Higher drawdown-severity or stress percentiles mean a more unusual adverse episode; recovery percentiles show whether recovery-state readings were also unusually frequent.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Review window</th><th>Dates</th><th>Index return</th><th>Control median return</th><th>Return percentile</th><th>Excess vs benchmark</th><th>Maximum drawdown</th><th>Drawdown severity percentile</th><th>Relative drawdown</th><th>Entry regime</th><th>Exit regime</th><th>Weak/high-risk sessions</th><th>Stress percentile</th><th>Recovering sessions</th><th>Recovery percentile</th><th>First weak/high-risk reading</th></tr></thead>
@@ -1329,6 +1407,7 @@
             </div>
             <h3 class="section-subtitle">Current cross-sectional decision board</h3>
             <p class="section-note">Each index's latest completed-session state is matched only with that index's validated historical state evidence. Nifty 50 is displayed as context, not as the universal direction.</p>
+            <div class="table-guide"><strong>How to read:</strong> Start with Decision and Current state, then verify stock coverage, as-of date, and historical sample. Median/positive/excess fields describe the historical case; tail outcome, adverse distance, breach rate, and F&amp;O confirmation show risk and confirmation gaps. Avoid rows are intentional, not missing recommendations.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Decision</th><th>Index</th><th>Current state</th><th>State score</th><th>Stock coverage</th><th>As of</th><th>Historical state sample</th><th>Research horizon</th><th>Median outcome</th><th>Positive</th><th>Excess vs Nifty 50</th><th>Tail 10% outcome</th><th>90th-pct adverse distance</th><th>3% distance breach</th><th>F&O short confirmation</th><th>Current evidence</th></tr></thead>
@@ -1336,6 +1415,7 @@
               </table>
             </div>
             <div class="analysis-note" id="currentIndexDecisionNote">Long and short candidates may coexist. Missing or historically unsupported states remain visible as avoid or insufficient evidence.</div>
+            <div class="table-guide"><strong>How to read:</strong> This ranking compares historical 20-session outcomes across indices. Higher median excess and outperform rate indicate stronger relative history, while worst absolute and relative drawdowns reveal downside. Confirm that sample and F&amp;O constituent coverage are adequate before comparing ranks.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Rank</th><th>Index</th><th>Sample</th><th>Median return</th><th>Positive</th><th>Median excess vs Nifty 50</th><th>Outperform rate</th><th>Worst drawdown</th><th>Worst relative drawdown</th><th>F&O constituent coverage</th></tr></thead>
@@ -1345,6 +1425,7 @@
             <div class="analysis-note" id="crossIndexComparisonNote">Indices without sufficient history or at least five liquid F&O constituents will be excluded and listed here.</div>
             <h3 class="section-subtitle">Recovery-state stability across indices</h3>
             <p class="section-note">The same frozen recovery rule is applied to every eligible index. Outcomes are descriptive and are not ranked as current opportunities.</p>
+            <div class="table-guide"><strong>How to read:</strong> Reached Positive and Relapsed show how recovery episodes resolved. Incremental median compares recovery sessions with a comparable base; positive excess with fewer relapses is more stable, but small episode counts make conclusions fragile.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Index</th><th>Episodes</th><th>Recovery sessions</th><th>Reached Positive</th><th>Relapsed</th><th>20d recovery median</th><th>Comparable base median</th><th>Incremental median</th><th>20d positive</th><th>20d excess vs Nifty 50</th><th>20d outperform rate</th><th>Worst 20d return</th><th>Worst 20d drawdown</th><th>Recovery thesis</th></tr></thead>
@@ -1354,6 +1435,7 @@
             <div class="analysis-note" id="crossIndexRecoveryNote">Recovery comparisons will appear here after the historical study is built.</div>
             <h3 class="section-subtitle">Historical long/short research map</h3>
             <p class="section-note">This maps which validated state has historically supported each index's strongest long or short research case. It is not a live signal; the next stage must join it with each index's current state.</p>
+            <div class="table-guide"><strong>How to read:</strong> Long-side and short-side states are selected independently from historical evidence. Compare their sample sizes and excess returns; a listed state is only a research candidate and matters currently only if the index is actually in that state with adequate evidence.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Index</th><th>Long-side state</th><th>Long sample</th><th>Long 20d median</th><th>Long 20d excess</th><th>Short-side state</th><th>Short sample</th><th>Short 5d median</th><th>Short 5d excess</th></tr></thead>
@@ -1554,6 +1636,7 @@
                 </label>
                 <div class="coverage-detail" id="futuresOiSafeguards">Noise and coverage safeguards will appear with data.</div>
               </div>
+              <div class="table-guide"><strong>How to read:</strong> Price and open interest moving together classify positioning: both rising is long build-up, price falling with OI rising is short build-up, both falling is long unwinding, and price rising with OI falling is short covering. Check expiry and Comparison—rollovers or stale baselines should not be read as directional evidence.</div>
               <div class="table-wrap">
                 <table class="futures-table">
                   <thead><tr>
@@ -1642,6 +1725,7 @@
           <section class="analysis-section">
             <h2>Transparent local factor table</h2>
             <p class="section-note" id="screenerTableNote">Load the local screen to inspect coverage and factor values.</p>
+            <div class="table-guide"><strong>How to read:</strong> Begin with Status and Sessions. Positive returns and distances above moving averages indicate recent strength; 20-day excess shows performance relative to Nifty 50. A 52-week position near 100% is near the annual high, drawdown measures distance below that high, and realised volatility describes variability—not direction.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Symbol</th><th>Status</th><th>Sessions</th><th>Close</th><th>20d return</th><th>20d excess vs Nifty</th><th>vs 20DMA</th><th>vs 50DMA</th><th>vs 200DMA</th><th>52w position</th><th>52w drawdown</th><th>20d realised vol</th></tr></thead>
@@ -1766,6 +1850,7 @@
           <section class="analysis-section">
             <h2>Month of year — <span id="seasonalityInstrumentLabel">NIFTY 50</span></h2>
             <p class="section-note" id="seasonalityMonthNote">Monthly return and trading-range summary.</p>
+            <div class="table-guide"><strong>How to read:</strong> Each row groups all observations for that calendar month. Count is the sample size; average return shows typical direction, average range shows movement within the month, and highest/lowest returns show extremes. A positive average is historical tendency, not a forecast.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Period</th><th>Count</th><th>Average Return %</th><th>Average Range</th><th>Highest Return</th><th>Lowest Return</th></tr></thead>
@@ -1777,6 +1862,7 @@
           <section class="analysis-section">
             <h2>Day of week</h2>
             <p class="section-note" id="seasonalityWeekdayNote">Daily-return behaviour grouped by exchange trading weekday.</p>
+            <div class="table-guide"><strong>How to read:</strong> Each row groups completed sessions by exchange weekday. Compare average return with the highest and lowest observations and check Count; a small average beside wide extremes usually indicates a weak, noisy weekday effect.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Period</th><th>Count</th><th>Average Return %</th><th>Average Range</th><th>Highest Return</th><th>Lowest Return</th></tr></thead>
@@ -1788,6 +1874,7 @@
           <section class="analysis-section">
             <h2>Turn of month</h2>
             <p class="section-note" id="seasonalityTurnNote">Last three and first three trading sessions of each month compared with all remaining sessions.</p>
+            <div class="table-guide"><strong>How to read:</strong> Compare Turn window with Other sessions. Average and median show effect size, while Positive Sessions shows consistency. The turn-of-month effect is more credible only when average and median agree and the held-out test below also survives.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Window</th><th>Count</th><th>Average Return %</th><th>Median Return %</th><th>Positive Sessions %</th></tr></thead>
@@ -1799,6 +1886,7 @@
           <section class="analysis-section">
             <h2>Held-out check — train vs. test</h2>
             <p class="section-note">A validation frame intended to reject unstable patterns rather than certify predictions.</p>
+            <div class="table-guide"><strong>How to read:</strong> Train excess is discovered in the earlier sample; Test excess checks the later unseen sample. Same Direction is necessary but not sufficient. Survived requires the predefined consistency rules, and a failed row should not be presented as a seasonal edge.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Period</th><th>Train Count</th><th>Train Excess %</th><th>Train Significant</th><th>Test Count</th><th>Test Excess %</th><th>Same Direction</th><th>Survived</th></tr></thead>
@@ -1810,6 +1898,7 @@
 
           <section class="analysis-section">
             <h2>Turn of month — held-out check</h2>
+            <div class="table-guide"><strong>How to read:</strong> Compare the train and test rows separately. Edge is the turn-window daily average minus other sessions; the p-value measures how compatible the observed difference is with noise. Significant must remain true in both periods before treating the effect as stable evidence.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Period</th><th>From</th><th>To</th><th>Edge % / Day</th><th>p-value</th><th>Significant</th></tr></thead>
@@ -1839,7 +1928,7 @@
           </div>
 
           <section class="summary-grid" aria-label="Macro event calendar summary">
-            <article class="summary-card"><div class="summary-value" id="eventsUpcomingValue">—</div><div class="summary-meta">Upcoming events</div></article>
+            <article class="summary-card"><div class="summary-value" id="eventsUpcomingValue">—</div><div class="summary-meta">Current + upcoming events</div></article>
             <article class="summary-card"><div class="summary-value" id="eventsSevenDayValue">—</div><div class="summary-meta">Within seven days</div></article>
             <article class="summary-card"><div class="summary-value" id="eventsIndiaValue">—</div><div class="summary-meta">India events</div></article>
             <article class="summary-card"><div class="summary-value" id="eventsUsValue">—</div><div class="summary-meta">U.S. events</div></article>
@@ -1870,8 +1959,9 @@
           </div>
 
           <section class="analysis-section">
-            <h2>Upcoming macro events</h2>
+            <h2>Current and upcoming macro events</h2>
             <p class="section-note">Timed U.S. releases include their India Standard Time conversion. All-day dates have no assumed release time.</p>
+            <div class="table-guide"><strong>How to read:</strong> Date/window is the official scheduled period; India time is shown only when the source specifies a clock time. Days counts down from today, with 0 for an event in progress. Use Type and Region to filter, then open the official source and read the Note before relying on the schedule.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Date / window</th><th>Event</th><th>Region</th><th>Type</th><th>India time</th><th>Days</th><th>Official source</th><th>Note</th></tr></thead>
@@ -1882,7 +1972,8 @@
 
           <section class="analysis-section">
             <h2>Calendar source readiness</h2>
-            <p class="section-note">Only verified dated snapshots can populate the event table. RBI remains visible but date-pending rather than guessed.</p>
+            <p class="section-note">Only verified dated snapshots can populate the event table. RBI MPC dates use its official 23-Mar-2026 schedule; no decision time is assumed.</p>
+            <div class="table-guide"><strong>How to read:</strong> Verified snapshot means the displayed dates were checked against the linked authority. Review note records timing caveats or possible revisions. A pending source may remain listed for transparency but cannot contribute dated events until verified.</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Calendar</th><th>Authority</th><th>Region</th><th>Status</th><th>Review note</th><th>Official page</th></tr></thead>
@@ -1895,6 +1986,274 @@
             <h2>Contract and limitations</h2>
             <p class="section-note">This is a reviewed event snapshot, not a continuously synchronized economic calendar.</p>
             <div class="analysis-note" id="newsEventsContractNote">The macro-events contract has not been loaded.</div>
+          </section>
+        </section>
+
+        <section id="earningsView" hidden aria-labelledby="earningsTitle">
+          <div class="page-tabs" aria-label="Earnings Analysis views">
+            <div class="page-tab active">Quarterly results</div>
+          </div>
+
+          <div class="analysis-intro">
+            <div>
+              <h1 id="earningsTitle">Earnings Analysis</h1>
+              <p class="analysis-caption">Issuer-reported quarterly revenue, profit, and EPS evidence</p>
+            </div>
+            <button class="panel-button" id="refreshEarningsButton" type="button">Refresh local results</button>
+          </div>
+
+          <div class="analysis-status" id="earningsStatus">Local earnings data not loaded</div>
+          <div class="analysis-note">Automated exchange-site collection is disabled. Import a reviewed CSV prepared from an issuer or exchange filing; every row must include an HTTPS source link.</div>
+
+          <section class="summary-grid" aria-label="Earnings data summary">
+            <article class="summary-card"><div class="summary-value" id="earningsCompaniesValue">—</div><div class="summary-meta">Companies</div></article>
+            <article class="summary-card"><div class="summary-value" id="earningsYoyReadyValue">—</div><div class="summary-meta">YoY-comparable rows</div></article>
+            <article class="summary-card"><div class="summary-value" id="earningsTurnaroundValue">—</div><div class="summary-meta">Turned profitable</div></article>
+            <article class="summary-card"><div class="summary-value" id="earningsLossValue">—</div><div class="summary-meta">Moved to loss</div></article>
+          </section>
+
+          <div class="universe-controls" aria-label="Earnings import and filters">
+            <div class="selector-field">
+              <label for="earningsCsvInput">Quarterly-results CSV</label>
+              <input id="earningsCsvInput" type="file" accept=".csv,text/csv">
+            </div>
+            <div class="selector-field">
+              <label for="earningsBasisSelect">Reporting basis</label>
+              <select id="earningsBasisSelect">
+                <option value="all">Consolidated and standalone</option>
+                <option value="consolidated">Consolidated</option>
+                <option value="standalone">Standalone</option>
+              </select>
+            </div>
+            <div class="selector-field">
+              <label for="earningsSectorSelect">Sector</label>
+              <select id="earningsSectorSelect"><option value="all">All sectors</option></select>
+            </div>
+            <div class="selector-field">
+              <label for="earningsSearchInput">Find a company</label>
+              <input id="earningsSearchInput" type="search" placeholder="Company name or symbol" autocomplete="off">
+            </div>
+            <div class="universe-action-row">
+              <div>
+                <button class="panel-button primary" id="importEarningsButton" type="button">Validate and import CSV</button>
+                <a class="panel-button" href="earnings-template.csv" download>Download template</a>
+              </div>
+              <span class="universe-action-status" id="earningsResultCount">No local earnings rows loaded.</span>
+            </div>
+            <p class="universe-source" id="earningsImportHelp">Required headers: Symbol, Company Name, Sector, Basis, Fiscal Year, Quarter, Period End, Reported At, Currency, Unit, Revenue, Net Profit, EPS, Source URL. Dates use YYYY-MM-DD; Basis is consolidated or standalone; Unit is crore, lakh, or million.</p>
+          </div>
+
+          <section class="analysis-section">
+            <h2>Latest reported quarter by company and basis</h2>
+            <p class="section-note" id="earningsAsOfNote">Import reviewed quarterly results to populate the analysis.</p>
+            <div class="table-guide"><strong>How to read:</strong> Revenue YoY compares the latest quarter with the same fiscal quarter one year earlier; QoQ compares the immediately preceding imported quarter. Profit change remains visible when a percentage would be misleading because the prior profit was zero or negative. Check Basis, Unit, Status, and the source filing before comparing companies.</div>
+            <div class="table-wrap">
+              <table class="earnings-table">
+                <thead><tr><th>Company</th><th>Symbol</th><th>Sector</th><th>Basis</th><th>Quarter</th><th>Reported</th><th>Revenue</th><th>Revenue YoY</th><th>Revenue QoQ</th><th>Net profit</th><th>Profit YoY change</th><th>Profit YoY</th><th>EPS</th><th>EPS YoY</th><th>Profit state</th><th>Status</th><th>Source</th></tr></thead>
+                <tbody id="earningsBody"><tr><td colspan="17">No quarterly earnings records have been imported.</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Contract and limitations</h2>
+            <div class="analysis-note" id="earningsContractNote">The earnings-analysis contract has not been loaded.</div>
+          </section>
+        </section>
+
+        <section id="portfolioView" hidden aria-labelledby="portfolioTitle">
+          <div class="page-tabs" role="tablist" aria-label="Portfolio Analysis views">
+            <button class="page-tab active" id="portfolioHoldingsTab" type="button" role="tab" aria-selected="true" aria-controls="portfolioHoldingsPanel">Holdings analysis</button>
+            <button class="page-tab" id="portfolioLoanTab" type="button" role="tab" aria-selected="false" aria-controls="portfolioLoanPanel">Home loan tracker</button>
+          </div>
+
+          <div class="analysis-intro">
+            <div>
+              <h1 id="portfolioTitle">Portfolio Analysis</h1>
+              <p class="analysis-caption">Local holdings validation, weights, and concentration</p>
+            </div>
+            <button class="panel-button" id="clearPortfolioButton" type="button">Clear portfolio</button>
+          </div>
+
+          <div class="analysis-status" id="portfolioStatus">Choose a CSV or XLSX holdings file</div>
+          <div class="analysis-note">Your file is sent only to the PG-terminal server running on this computer. It is parsed in memory, is not written to SQLite, and is discarded after each response.</div>
+
+          <div class="universe-controls" aria-label="Portfolio upload">
+            <div class="selector-field">
+              <label for="portfolioFileInput">Holdings file</label>
+              <input id="portfolioFileInput" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+            </div>
+            <div class="universe-action-row">
+              <span class="universe-action-status" id="portfolioUploadStatus">Choose a file and analysis will start automatically.</span>
+            </div>
+            <p class="universe-source">PG-terminal automatically recognizes common broker columns for symbol, quantity, weight, average cost, current value, sector, and company name. Uploaded weight is preferred, then current value, then quantity × latest locally stored EOD close.</p>
+          </div>
+
+          <div id="portfolioHoldingsPanel" role="tabpanel" aria-labelledby="portfolioHoldingsTab">
+            <section class="summary-grid" aria-label="Portfolio summary">
+              <article class="summary-card"><div class="summary-value" id="portfolioPositionsValue">—</div><div class="summary-meta">Eligible positions</div></article>
+              <article class="summary-card"><div class="summary-value" id="portfolioLargestValue">—</div><div class="summary-meta">Largest position</div></article>
+              <article class="summary-card"><div class="summary-value" id="portfolioTopFiveValue">—</div><div class="summary-meta">Top-five weight</div></article>
+              <article class="summary-card"><div class="summary-value" id="portfolioSectorValue">—</div><div class="summary-meta">Largest sector</div></article>
+            </section>
+
+            <section class="analysis-section">
+            <h2>Upload preview</h2>
+            <p class="section-note" id="portfolioPreviewNote">The first eight non-empty rows will appear here before analysis.</p>
+            <div class="table-guide"><strong>How to read:</strong> Confirm that the detected columns and sample rows match the source file. No manual mapping is required. Duplicate or invalid symbols are reported explicitly after analysis.</div>
+            <div class="table-wrap"><table><thead id="portfolioPreviewHead"><tr><th>Preview</th></tr></thead><tbody id="portfolioPreviewBody"><tr><td>No file preview loaded.</td></tr></tbody></table></div>
+            </section>
+
+            <section class="analysis-section">
+            <h2>Position allocation</h2>
+            <p class="section-note" id="portfolioAsOfNote">Upload a file to calculate normalized holdings weights.</p>
+            <div class="table-guide"><strong>How to read:</strong> Weight is normalized across valid included rows, not necessarily the investor’s entire net worth. Check Status and Price date first. Return since cost is shown only when a positive average cost and a local completed close are both available. NIFTY 500 and F&amp;O columns indicate coverage overlap, not investment suitability.</div>
+            <div class="table-wrap"><table><thead><tr><th>Symbol</th><th>Company</th><th>Sector</th><th>Quantity</th><th>Average cost</th><th>Latest close</th><th>Price date</th><th>Current value</th><th>Weight</th><th>Return since cost</th><th>NIFTY 500</th><th>Local F&amp;O</th><th>Status</th></tr></thead><tbody id="portfolioPositionsBody"><tr><td colspan="13">No portfolio has been analyzed.</td></tr></tbody></table></div>
+            </section>
+
+            <section class="analysis-section">
+            <h2>Sector concentration</h2>
+            <p class="section-note">Sector weights use an automatically detected sector column, otherwise the current official NIFTY 500 classification when available.</p>
+            <div class="table-guide"><strong>How to read:</strong> Larger weights identify where the portfolio is concentrated. Position count alone does not measure diversification because a few large holdings can dominate many small holdings. Unclassified positions remain visible instead of being guessed.</div>
+            <div class="table-wrap"><table><thead><tr><th>Sector</th><th>Weight</th><th>Positions</th></tr></thead><tbody id="portfolioSectorsBody"><tr><td colspan="3">No sector allocation available.</td></tr></tbody></table></div>
+            </section>
+
+            <section class="analysis-section">
+            <h2>Validation issues</h2>
+            <p class="section-note">Rows with duplicate symbols, invalid quantities or weights, or unavailable prices are never silently repaired.</p>
+            <div class="table-guide"><strong>How to read:</strong> Correct the listed source row and preview the file again. Duplicate symbols are excluded as a group so they cannot distort allocation. A missing price matters only when quantity × local close is the selected weight basis.</div>
+            <div class="table-wrap"><table><thead><tr><th>Source row</th><th>Symbol</th><th>Issue</th></tr></thead><tbody id="portfolioIssuesBody"><tr><td colspan="3">No validation run yet.</td></tr></tbody></table></div>
+            </section>
+
+            <section class="analysis-section">
+            <h2>Contract and limitations</h2>
+            <div class="analysis-note" id="portfolioContractNote">The portfolio-analysis contract has not been loaded.</div>
+            </section>
+          </div>
+
+          <div id="portfolioLoanPanel" role="tabpanel" aria-labelledby="portfolioLoanTab" hidden>
+            <div class="analysis-status" id="homeLoanStatus">Upload an XLSX workbook containing a loan sheet</div>
+
+            <section class="summary-grid loan-summary-grid" aria-label="Home loan summary">
+              <article class="summary-card"><div class="summary-value" id="loanOutstandingValue">—</div><div class="summary-meta">Outstanding principal</div></article>
+              <article class="summary-card"><div class="summary-value" id="loanRateValue">—</div><div class="summary-meta">Annual interest rate</div></article>
+              <article class="summary-card"><div class="summary-value" id="loanPaidValue">—</div><div class="summary-meta">Total payments recorded</div></article>
+              <article class="summary-card"><div class="summary-value" id="loanInterestValue">—</div><div class="summary-meta">Interest paid</div></article>
+            </section>
+
+            <section class="analysis-section">
+              <h2>Early repayment calculator</h2>
+              <p class="section-note" id="loanCalculatorNote">Upload the tracker to prefill the outstanding balance and interest rate. All assumptions remain editable.</p>
+              <div class="loan-calculator-grid">
+                <div class="selector-field"><label for="loanPrincipalInput">Outstanding principal</label><input id="loanPrincipalInput" type="number" min="0" step="1000" inputmode="decimal"></div>
+                <div class="selector-field"><label for="loanRateInput">Annual interest rate (%)</label><input id="loanRateInput" type="number" min="0" max="50" step="0.01" inputmode="decimal"></div>
+                <div class="selector-field"><label for="loanEmiInput">Regular monthly payment</label><input id="loanEmiInput" type="number" min="0" step="100" inputmode="decimal"></div>
+                <div class="selector-field"><label for="loanStartDateInput">First payment date</label><input id="loanStartDateInput" type="date"></div>
+                <div class="selector-field"><label for="loanLumpSumInput">One-time early payment</label><input id="loanLumpSumInput" type="number" min="0" step="1000" value="0" inputmode="decimal"></div>
+                <div class="selector-field"><label for="loanExtraMonthlyInput">Additional monthly payment</label><input id="loanExtraMonthlyInput" type="number" min="0" step="100" value="0" inputmode="decimal"></div>
+                <button class="panel-button loan-calculate-button" id="calculateLoanButton" type="button">Calculate repayment</button>
+              </div>
+              <div class="analysis-note">The calculator assumes a constant reducing-balance rate, monthly interest, and payment at month-end. It excludes fees, rate changes, tax effects, and lender-specific prepayment rules.</div>
+            </section>
+
+            <section class="summary-grid loan-result-grid" aria-label="Loan repayment results">
+              <article class="summary-card"><div class="summary-value" id="loanBaselinePeriodValue">—</div><div class="summary-meta">Current payment payoff period</div></article>
+              <article class="summary-card"><div class="summary-value" id="loanScenarioPeriodValue">—</div><div class="summary-meta">Early-payment payoff period</div></article>
+              <article class="summary-card"><div class="summary-value" id="loanMonthsSavedValue">—</div><div class="summary-meta">Time saved</div></article>
+              <article class="summary-card"><div class="summary-value" id="loanInterestSavedValue">—</div><div class="summary-meta">Estimated interest saved</div></article>
+            </section>
+
+            <section class="analysis-section">
+              <h2>Projected early-payment schedule</h2>
+              <p class="section-note" id="loanScheduleNote">Enter valid repayment assumptions to generate an annual projection.</p>
+              <div class="table-guide"><strong>How to read:</strong> Opening and closing balances show the estimated principal at the start and end of each projection year. Principal plus interest equals projected payments. Compare this schedule with the baseline payoff period above before deciding an early-payment amount.</div>
+              <div class="table-wrap"><table><thead><tr><th>Projection year</th><th>Opening balance</th><th>Principal paid</th><th>Interest paid</th><th>Total payments</th><th>Closing balance</th></tr></thead><tbody id="loanScheduleBody"><tr><td colspan="6">No repayment scenario calculated.</td></tr></tbody></table></div>
+            </section>
+
+            <section class="analysis-section">
+              <h2>Monthly payment timeline</h2>
+              <p class="section-note" id="loanTimelineNote">Enter valid repayment assumptions to generate the payment timeline.</p>
+              <div class="table-guide"><strong>How to read:</strong> The one-time early payment is deducted before Month 1. Each later row applies one month of interest to the opening balance, then splits that month’s payment between interest and principal. The final payment can be smaller than the entered monthly amount.</div>
+              <div class="table-wrap"><table><thead><tr><th>Payment</th><th>Payment date</th><th>Opening balance</th><th>Payment amount</th><th>Principal repaid</th><th>Interest paid</th><th>Closing balance</th></tr></thead><tbody id="loanTimelineBody"><tr><td colspan="7">No monthly payment timeline calculated.</td></tr></tbody></table></div>
+            </section>
+
+            <section class="analysis-section">
+              <h2>Recorded home-loan payments</h2>
+              <p class="section-note" id="loanHistoryNote">Upload the tracker workbook to load the fiscal-year payment history.</p>
+              <div class="table-guide"><strong>How to read:</strong> Principal reduces the loan balance; interest is the financing cost. A falling interest share generally indicates faster principal reduction, while early payments should increase the principal portion.</div>
+              <div class="table-wrap"><table><thead><tr><th>Fiscal year</th><th>Principal</th><th>Interest</th><th>Total payment</th><th>Interest share</th></tr></thead><tbody id="loanHistoryBody"><tr><td colspan="5">No loan-payment history loaded.</td></tr></tbody></table></div>
+            </section>
+
+            <section class="analysis-section">
+              <h2>Tracker totals</h2>
+              <div class="table-wrap"><table><thead><tr><th>Principal paid</th><th>Interest paid</th><th>Total payments</th><th>Rent received</th><th>Maintenance</th><th>Net rent</th></tr></thead><tbody id="loanTotalsBody"><tr><td colspan="6">No tracker totals loaded.</td></tr></tbody></table></div>
+              <div class="analysis-note" id="loanContractNote">The home-loan tracker contract has not been loaded.</div>
+            </section>
+          </div>
+        </section>
+
+        <section id="stockYtdView" hidden aria-labelledby="stockYtdTitle">
+          <div class="page-tabs" aria-label="Stock data views">
+            <div class="page-tab active">Calendar-year ranking</div>
+          </div>
+
+          <div class="analysis-intro">
+            <div>
+              <h1 id="stockYtdTitle">NIFTY 500 Stock Data</h1>
+              <p class="analysis-caption">Calendar-year performance and moving-average distance for every current constituent</p>
+            </div>
+            <div class="analysis-status" id="stockYtdStatus">Stock ranking not loaded</div>
+          </div>
+
+          <section class="summary-grid" aria-label="Stock ranking summary">
+            <article class="summary-card"><div class="summary-value" id="stockYtdUniverseValue">—</div><div class="summary-meta">Current NIFTY 500 rows</div></article>
+            <article class="summary-card"><div class="summary-value" id="stockYtdReadyValue">—</div><div class="summary-meta">Fully evaluated rows</div></article>
+            <article class="summary-card"><div class="summary-value" id="stockYtdLeaderValue">—</div><div class="summary-meta">Highest selected-year return</div></article>
+            <article class="summary-card"><div class="summary-value" id="stockYtdLaggardValue">—</div><div class="summary-meta">Lowest selected-year return</div></article>
+          </section>
+
+          <div class="universe-controls" aria-label="Stock ranking controls">
+            <div class="selector-field">
+              <label for="stockYtdYearSelect">Performance year</label>
+              <select id="stockYtdYearSelect"><option value="">Latest available year</option></select>
+            </div>
+            <div class="selector-field">
+              <label for="stockYtdSortSelect">Performance order</label>
+              <select id="stockYtdSortSelect">
+                <option value="best">Most performing to least performing</option>
+                <option value="worst">Least performing to most performing</option>
+              </select>
+            </div>
+            <div class="selector-field">
+              <label for="stockYtdSectorSelect">Sector</label>
+              <select id="stockYtdSectorSelect"><option value="all">All sectors</option></select>
+            </div>
+            <div class="selector-field">
+              <label for="stockYtdSearchInput">Find a stock</label>
+              <input id="stockYtdSearchInput" type="search" placeholder="Company name or symbol" autocomplete="off">
+            </div>
+            <div class="universe-action-row">
+              <button class="panel-button primary" id="loadStockYtdButton" type="button" disabled>Load NIFTY 500 ranking</button>
+              <span class="universe-action-status" id="stockYtdResultCount">Connect Kite to retrieve completed daily candles.</span>
+            </div>
+            <p class="universe-source" id="stockYtdAsOfNote">The current constituent snapshot is used for every year; historical selections therefore carry survivorship bias.</p>
+          </div>
+
+          <section class="analysis-section">
+            <h2>Stock performance ranking</h2>
+            <p class="section-note" id="stockYtdPriceNote">LTP is the latest completed close for the selected year.</p>
+            <div class="table-guide"><strong>How to read:</strong> YTD compares the selected year’s final available close with the last completed close before that year began. Positive distance from a moving average means price closed above that trend; negative distance means it closed below. Use the year and order controls to rank either leaders or laggards. Partial and unavailable rows stay visible so missing history is not hidden.</div>
+            <div class="table-wrap">
+              <table class="stock-ranking-table">
+                <thead><tr><th>Performance rank</th><th>Stock name</th><th>Symbol</th><th>Sector</th><th id="stockYtdPriceHeading">LTP</th><th>YTD performance</th><th>% away from 20DMA</th><th>% away from 200DMA</th><th>Status</th></tr></thead>
+                <tbody id="stockYtdBody"><tr><td colspan="9">Stock ranking has not been loaded.</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Contract and limitations</h2>
+            <div class="analysis-note" id="stockYtdContractNote">The stock-ranking contract has not been loaded.</div>
           </section>
         </section>
 
@@ -1925,6 +2284,8 @@
     const refreshDashboardSeasonalityButton = document.getElementById('refreshDashboardSeasonalityButton');
     const dashboardSeasonalityIndexSelect = document.getElementById('dashboardSeasonalityIndexSelect');
     const viewSeasonalityButton = document.getElementById('viewSeasonalityButton');
+    const refreshDashboardEventsButton = document.getElementById('refreshDashboardEventsButton');
+    const viewEventsButton = document.getElementById('viewEventsButton');
     const marketSentimentView = document.getElementById('marketSentimentView');
     const refreshSentimentButton = document.getElementById('refreshSentimentButton');
     const regimeValidationIndexSelect = document.getElementById('regimeValidationIndexSelect');
@@ -1940,9 +2301,40 @@
     const screenerSortSelect = document.getElementById('screenerSortSelect');
     const seasonalityView = document.getElementById('seasonalityView');
     const newsEventsView = document.getElementById('newsEventsView');
+    const earningsView = document.getElementById('earningsView');
+    const refreshEarningsButton = document.getElementById('refreshEarningsButton');
+    const earningsCsvInput = document.getElementById('earningsCsvInput');
+    const importEarningsButton = document.getElementById('importEarningsButton');
+    const earningsBasisSelect = document.getElementById('earningsBasisSelect');
+    const earningsSectorSelect = document.getElementById('earningsSectorSelect');
+    const earningsSearchInput = document.getElementById('earningsSearchInput');
+    const earningsBody = document.getElementById('earningsBody');
+    const portfolioView = document.getElementById('portfolioView');
+    const portfolioFileInput = document.getElementById('portfolioFileInput');
+    const clearPortfolioButton = document.getElementById('clearPortfolioButton');
+    const portfolioPositionsBody = document.getElementById('portfolioPositionsBody');
+    const portfolioSectorsBody = document.getElementById('portfolioSectorsBody');
+    const portfolioIssuesBody = document.getElementById('portfolioIssuesBody');
+    const portfolioHoldingsTab = document.getElementById('portfolioHoldingsTab');
+    const portfolioLoanTab = document.getElementById('portfolioLoanTab');
+    const portfolioHoldingsPanel = document.getElementById('portfolioHoldingsPanel');
+    const portfolioLoanPanel = document.getElementById('portfolioLoanPanel');
+    const loanHistoryBody = document.getElementById('loanHistoryBody');
+    const loanTotalsBody = document.getElementById('loanTotalsBody');
+    const loanScheduleBody = document.getElementById('loanScheduleBody');
+    const loanTimelineBody = document.getElementById('loanTimelineBody');
+    const calculateLoanButton = document.getElementById('calculateLoanButton');
     const refreshNewsEventsButton = document.getElementById('refreshNewsEventsButton');
     const eventRegionSelect = document.getElementById('eventRegionSelect');
     const eventCategorySelect = document.getElementById('eventCategorySelect');
+    const stockYtdView = document.getElementById('stockYtdView');
+    const stockYtdStatus = document.getElementById('stockYtdStatus');
+    const stockYtdYearSelect = document.getElementById('stockYtdYearSelect');
+    const stockYtdSortSelect = document.getElementById('stockYtdSortSelect');
+    const stockYtdSectorSelect = document.getElementById('stockYtdSectorSelect');
+    const stockYtdSearchInput = document.getElementById('stockYtdSearchInput');
+    const loadStockYtdButton = document.getElementById('loadStockYtdButton');
+    const stockYtdBody = document.getElementById('stockYtdBody');
     const seasonalityIndexSelect = document.getElementById('seasonalityIndexSelect');
     const seasonalityStockSelect = document.getElementById('seasonalityStockSelect');
     const seasonalityInstrumentLabel = document.getElementById('seasonalityInstrumentLabel');
@@ -2016,6 +2408,13 @@
     let regimeValidationUniverse = [];
     let dashboardSeasonalityRows = [];
     let dashboardSeasonalityUniverse = {};
+    let stockYtdRows = [];
+    let stockYtdPayload = null;
+    let earningsRows = [];
+    let earningsPayload = null;
+    let portfolioPreview = null;
+    let portfolioAnalysis = null;
+    let homeLoanTracker = null;
     const displayMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     function currentTheme() {
@@ -2933,6 +3332,65 @@
       }
     }
 
+    function renderDashboardEventsSummary(result) {
+      const coverage = result.coverage || {};
+      const contract = result.contract || {};
+      const next = result.next_event || null;
+      const upcoming = Number(coverage.upcoming_events || 0);
+      const verified = Number(coverage.verified_sources || 0);
+      const pending = Number(coverage.pending_sources || 0);
+      const status = document.getElementById('dashboardEventsStatus');
+      status.textContent = upcoming
+        ? pending ? `Calendar ready · ${pending} source pending` : 'Calendar ready'
+        : 'No upcoming events';
+      status.className = `workspace-summary-status ${upcoming ? 'ready' : 'unavailable'}`;
+      document.getElementById('dashboardEventsNextDate').textContent = next
+        ? next.ongoing ? 'In progress' : formatDisplayDate(String(next.start_at || '').slice(0, 10))
+        : '—';
+      document.getElementById('dashboardEventsSevenDay').textContent = Number(coverage.next_7_days || 0).toLocaleString('en-IN');
+      document.getElementById('dashboardEventsThirtyDay').textContent = Number(coverage.next_30_days || 0).toLocaleString('en-IN');
+      document.getElementById('dashboardEventsUpcoming').textContent = upcoming.toLocaleString('en-IN');
+      document.getElementById('dashboardEventsAsOf').textContent = formatDisplayDate(result.as_of_date);
+      document.getElementById('dashboardEventsRegions').textContent =
+        `India ${Number(coverage.india_events || 0)} · U.S. ${Number(coverage.us_events || 0)}`;
+      document.getElementById('dashboardEventsSources').textContent =
+        `${verified} verified · ${pending} date-pending`;
+      document.getElementById('dashboardEventsSync').textContent = contract.automated_sync_enabled
+        ? 'Automatic'
+        : 'Reviewed snapshot';
+      document.getElementById('dashboardEventsCopy').textContent = next
+        ? next.ongoing
+          ? `${next.title} is in progress through ${formatDisplayDate(String(next.end_at || next.start_at || '').slice(0, 10))}.`
+          : `Next: ${next.title} on ${formatDisplayDate(String(next.start_at || '').slice(0, 10))}, ${Number(next.days_until)} day${Number(next.days_until) === 1 ? '' : 's'} away.`
+        : 'No future event remains in the reviewed calendar snapshot.';
+      document.getElementById('dashboardEventsNote').textContent =
+        `${contract.version || 'macro-events-calendar-v1'} · scheduled macro events only. Dates can change; verify the linked official source before relying on an event time.`;
+    }
+
+    async function loadDashboardEventsSummary(showSuccess = false) {
+      refreshDashboardEventsButton.disabled = true;
+      refreshDashboardEventsButton.textContent = 'Refreshing…';
+      const status = document.getElementById('dashboardEventsStatus');
+      status.textContent = 'Loading calendar';
+      status.className = 'workspace-summary-status';
+      try {
+        const response = await fetch('/api/events/calendar', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) throw new Error('summary_unavailable');
+        renderDashboardEventsSummary(result);
+        if (showSuccess) showNotice(`Events summary refreshed · ${Number(result.coverage?.upcoming_events || 0)} upcoming events.`);
+        return true;
+      } catch (_error) {
+        status.textContent = 'Calendar unavailable';
+        status.className = 'workspace-summary-status unavailable';
+        document.getElementById('dashboardEventsCopy').textContent = 'The reviewed macro-event calendar could not be loaded.';
+        return false;
+      } finally {
+        refreshDashboardEventsButton.disabled = false;
+        refreshDashboardEventsButton.textContent = 'Refresh summary';
+      }
+    }
+
     async function loadDomesticSentiment(showSuccess = true) {
       refreshSentimentButton.disabled = true;
       refreshSentimentButton.textContent = 'Refreshing…';
@@ -3383,6 +3841,7 @@
       loadBreadthButton.disabled = !authenticated;
       loadSeasonalityButton.disabled = !authenticated;
       loadHistoricalComparisonButton.disabled = !authenticated;
+      loadStockYtdButton.disabled = !authenticated;
       seasonalityLoadStatus.textContent = authenticated
         ? 'Ready to load completed daily history.'
         : 'Connect Kite to load completed daily history.';
@@ -3394,6 +3853,11 @@
         resetMarketBreadth();
         resetMonthlyLeaders();
         resetHistoricalMonthLeaders();
+        stockYtdRows = [];
+        stockYtdPayload = null;
+        stockYtdStatus.textContent = 'Connect Kite to load the ranking';
+        stockYtdBody.innerHTML = '<tr><td colspan="9">Connect Kite to load the NIFTY 500 ranking.</td></tr>';
+        document.getElementById('stockYtdResultCount').textContent = 'Connect Kite to retrieve completed daily candles.';
       }
     }
 
@@ -3592,9 +4056,9 @@
             <td>${escapeHtml(event.note || 'Verify official source before the event.')}</td>
           </tr>`;
         }).join('')
-        : '<tr><td colspan="8">No upcoming events match the selected filters.</td></tr>';
+        : '<tr><td colspan="8">No current or upcoming events match the selected filters.</td></tr>';
       document.getElementById('eventFilterStatus').textContent =
-        `${rows.length} of ${macroEventRows.length} upcoming events shown · scheduled macro events only.`;
+        `${rows.length} of ${macroEventRows.length} current/upcoming events shown · scheduled macro events only.`;
     }
 
     function renderMacroEventsCalendar(result) {
@@ -3611,7 +4075,9 @@
       document.getElementById('eventsUsValue').textContent = Number(coverage.us_events || 0).toLocaleString('en-IN');
       const next = result.next_event || {};
       document.getElementById('eventNextNote').textContent = next.title
-        ? `Next: ${next.title} · ${formatEventDate(next.start_at)} · ${Number(next.days_until)} days away.`
+        ? next.ongoing
+          ? `In progress: ${next.title} · through ${formatEventDate(next.end_at || next.start_at)}.`
+          : `Next: ${next.title} · ${formatEventDate(next.start_at)} · ${Number(next.days_until)} days away.`
         : 'No upcoming event is stored in the reviewed snapshot.';
       document.getElementById('newsEventsIntroNote').textContent =
         `${contract.version || 'macro-events-calendar-v1'} · scheduled macro events only. Automated sync, unscheduled news, and impact scoring remain off.`;
@@ -3643,7 +4109,7 @@
         const result = await response.json();
         if (!response.ok || result.ok !== true) throw new Error('event_calendar_unavailable');
         renderMacroEventsCalendar(result);
-        if (showSuccess) showNotice(`Macro calendar refreshed · ${Number(result.coverage.upcoming_events || 0)} upcoming events.`);
+        if (showSuccess) showNotice(`Macro calendar refreshed · ${Number(result.coverage.upcoming_events || 0)} current/upcoming events.`);
         return true;
       } catch (_error) {
         document.getElementById('newsEventsStatus').textContent = 'Macro calendar unavailable';
@@ -4116,6 +4582,572 @@
       }
     }
 
+    function filteredEarningsRows() {
+      const search = earningsSearchInput.value.trim().toUpperCase();
+      const basis = earningsBasisSelect.value;
+      const sector = earningsSectorSelect.value;
+      return earningsRows.filter((row) => {
+        const matchesSearch = !search
+          || String(row.symbol || '').toUpperCase().includes(search)
+          || String(row.company_name || '').toUpperCase().includes(search);
+        return matchesSearch
+          && (basis === 'all' || row.basis === basis)
+          && (sector === 'all' || row.sector === sector);
+      });
+    }
+
+    function earningsNumber(value, unit, signed = false) {
+      if (value === null || value === undefined) return '—';
+      const number = Number(value);
+      return `${signed && number > 0 ? '+' : ''}${number.toLocaleString('en-IN', { maximumFractionDigits: 2 })} ${escapeHtml(unit || '')}`.trim();
+    }
+
+    function renderEarningsTable() {
+      const rows = filteredEarningsRows();
+      if (!rows.length) {
+        earningsBody.innerHTML = '<tr><td colspan="17">No earnings rows match the selected filters.</td></tr>';
+      } else {
+        earningsBody.innerHTML = rows.map((row) => `<tr>
+          <td>${escapeHtml(row.company_name)}</td>
+          <td>${escapeHtml(row.symbol)}</td>
+          <td>${escapeHtml(row.sector)}</td>
+          <td>${escapeHtml(row.basis)}</td>
+          <td>${escapeHtml(`${row.fiscal_year} ${row.quarter}`)}</td>
+          <td>${formatDisplayDate(row.reported_at)}</td>
+          <td>${earningsNumber(row.revenue, row.unit)}</td>
+          <td class="${stockYtdMetricClass(row.revenue_yoy_pct)}">${stockYtdMetric(row.revenue_yoy_pct)}</td>
+          <td class="${stockYtdMetricClass(row.revenue_qoq_pct)}">${stockYtdMetric(row.revenue_qoq_pct)}</td>
+          <td class="${stockYtdMetricClass(row.net_profit)}">${earningsNumber(row.net_profit, row.unit)}</td>
+          <td class="${stockYtdMetricClass(row.net_profit_yoy_change)}">${earningsNumber(row.net_profit_yoy_change, row.unit, true)}</td>
+          <td class="${stockYtdMetricClass(row.net_profit_yoy_pct)}">${stockYtdMetric(row.net_profit_yoy_pct)}</td>
+          <td>${earningsNumber(row.eps, '₹')}</td>
+          <td class="${stockYtdMetricClass(row.eps_yoy_pct)}">${stockYtdMetric(row.eps_yoy_pct)}</td>
+          <td>${escapeHtml(String(row.profit_state).replaceAll('_', ' '))}</td>
+          <td>${escapeHtml(String(row.status).replaceAll('_', ' '))}</td>
+          <td><a href="${escapeHtml(row.source_url)}" target="_blank" rel="noopener noreferrer">Filing</a></td>
+        </tr>`).join('');
+      }
+      document.getElementById('earningsResultCount').textContent = earningsPayload
+        ? `${rows.length.toLocaleString('en-IN')} of ${earningsRows.length.toLocaleString('en-IN')} latest rows shown.`
+        : 'No local earnings rows loaded.';
+    }
+
+    function renderEarnings(result) {
+      earningsPayload = result;
+      earningsRows = Array.isArray(result.rows) ? [...result.rows] : [];
+      const currentSector = earningsSectorSelect.value;
+      const sectors = [...new Set(earningsRows.map((row) => row.sector).filter(Boolean))]
+        .sort((left, right) => left.localeCompare(right, 'en-IN'));
+      earningsSectorSelect.innerHTML = '<option value="all">All sectors</option>'
+        + sectors.map((sector) => `<option value="${escapeHtml(sector)}">${escapeHtml(sector)}</option>`).join('');
+      earningsSectorSelect.value = sectors.includes(currentSector) ? currentSector : 'all';
+      const coverage = result.coverage || {};
+      document.getElementById('earningsCompaniesValue').textContent = Number(coverage.companies || 0).toLocaleString('en-IN');
+      document.getElementById('earningsYoyReadyValue').textContent = Number(coverage.yoy_ready || 0).toLocaleString('en-IN');
+      document.getElementById('earningsTurnaroundValue').textContent = Number(coverage.turnarounds || 0).toLocaleString('en-IN');
+      document.getElementById('earningsLossValue').textContent = Number(coverage.moved_to_loss || 0).toLocaleString('en-IN');
+      document.getElementById('earningsStatus').textContent = earningsRows.length
+        ? `${Number(coverage.distinct_quarters || 0).toLocaleString('en-IN')} distinct quarterly records`
+        : 'No earnings data imported';
+      document.getElementById('earningsAsOfNote').textContent = result.as_of_date
+        ? `Latest imported filing date ${formatDisplayDate(result.as_of_date)}. Values retain each row's declared unit and reporting basis.`
+        : 'Import reviewed quarterly results to populate the analysis.';
+      document.getElementById('earningsContractNote').textContent = `${result.contract_version || 'earnings-analysis-v1'}. ${(result.limitations || []).join(' ')}`;
+      renderEarningsTable();
+    }
+
+    async function loadEarnings(showSuccess = false) {
+      refreshEarningsButton.disabled = true;
+      refreshEarningsButton.textContent = 'Refreshing…';
+      try {
+        const response = await fetch('/api/earnings/local', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) throw new Error(result.reason || 'earnings_unavailable');
+        renderEarnings(result);
+        if (showSuccess) showNotice('Local earnings analysis refreshed.');
+        return true;
+      } catch (_error) {
+        document.getElementById('earningsStatus').textContent = 'The local earnings service is unavailable';
+        return false;
+      } finally {
+        refreshEarningsButton.disabled = false;
+        refreshEarningsButton.textContent = 'Refresh local results';
+      }
+    }
+
+    async function importEarningsCsv() {
+      const file = earningsCsvInput.files && earningsCsvInput.files[0];
+      if (!file) {
+        showNotice('Choose a quarterly-results CSV before importing.');
+        return;
+      }
+      if (file.size > 4 * 1024 * 1024) {
+        showNotice('The earnings CSV exceeds the 4 MB import limit.');
+        return;
+      }
+      importEarningsButton.disabled = true;
+      importEarningsButton.textContent = 'Validating…';
+      try {
+        const response = await fetch('/api/earnings/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_name: file.name, csv_text: await file.text() }),
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          showNotice(`Earnings import rejected: ${String(result.reason || 'invalid file').replaceAll('_', ' ')}.`);
+          return false;
+        }
+        renderEarnings(result);
+        earningsCsvInput.value = '';
+        const write = result.write_result || {};
+        showNotice(`Earnings import complete: ${Number(write.inserted || 0)} added, ${Number(write.duplicates || 0)} duplicates ignored.`);
+        return true;
+      } catch (_error) {
+        showNotice('The local earnings import service is unavailable.');
+        return false;
+      } finally {
+        importEarningsButton.disabled = false;
+        importEarningsButton.textContent = 'Validate and import CSV';
+      }
+    }
+
+    function setPortfolioTab(tabName) {
+      const showLoan = tabName === 'loan';
+      portfolioHoldingsPanel.hidden = showLoan;
+      portfolioLoanPanel.hidden = !showLoan;
+      portfolioHoldingsTab.classList.toggle('active', !showLoan);
+      portfolioLoanTab.classList.toggle('active', showLoan);
+      portfolioHoldingsTab.setAttribute('aria-selected', String(!showLoan));
+      portfolioLoanTab.setAttribute('aria-selected', String(showLoan));
+    }
+
+    function loanPeriod(months, zeroLabel = 'Paid off') {
+      if (!Number.isFinite(months) || months < 0) return '—';
+      if (months === 0) return zeroLabel;
+      const years = Math.floor(months / 12);
+      const remaining = months % 12;
+      if (!years) return `${remaining} mo`;
+      if (!remaining) return `${years} yr`;
+      return `${years} yr ${remaining} mo`;
+    }
+
+    function loanMonthDate(isoDate, offset) {
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(isoDate || ''));
+      if (!match) return null;
+      const year = Number(match[1]);
+      const monthIndex = Number(match[2]) - 1 + offset;
+      const requestedDay = Number(match[3]);
+      const monthStart = new Date(Date.UTC(year, monthIndex, 1));
+      const lastDay = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 0)).getUTCDate();
+      const result = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth(), Math.min(requestedDay, lastDay)));
+      return result.toISOString().slice(0, 10);
+    }
+
+    function buildLoanAmortization(principal, annualRatePct, monthlyPayment) {
+      if (![principal, annualRatePct, monthlyPayment].every(Number.isFinite) || principal < 0 || annualRatePct < 0 || monthlyPayment <= 0) return null;
+      if (principal === 0) return { months: 0, totalInterest: 0, schedule: [], timeline: [] };
+      const monthlyRate = annualRatePct / 1200;
+      if (monthlyRate > 0 && monthlyPayment <= principal * monthlyRate) return null;
+      let balance = principal;
+      let months = 0;
+      let totalInterest = 0;
+      const schedule = [];
+      const timeline = [];
+      while (balance > 0.005 && months < 1200) {
+        const yearIndex = Math.floor(months / 12);
+        if (!schedule[yearIndex]) {
+          schedule[yearIndex] = { year: yearIndex + 1, opening: balance, principal: 0, interest: 0, payment: 0, closing: balance };
+        }
+        const interest = balance * monthlyRate;
+        const payment = Math.min(monthlyPayment, balance + interest);
+        const principalPaid = payment - interest;
+        if (principalPaid <= 0) return null;
+        const opening = balance;
+        balance = Math.max(0, balance - principalPaid);
+        months += 1;
+        totalInterest += interest;
+        timeline.push({ month: months, opening, payment, principal: principalPaid, interest, closing: balance });
+        schedule[yearIndex].principal += principalPaid;
+        schedule[yearIndex].interest += interest;
+        schedule[yearIndex].payment += payment;
+        schedule[yearIndex].closing = balance;
+      }
+      if (balance > 0.005) return null;
+      return { months, totalInterest, schedule, timeline };
+    }
+
+    function calculateLoanRepayment() {
+      const principal = Number(document.getElementById('loanPrincipalInput').value);
+      const rate = Number(document.getElementById('loanRateInput').value);
+      const emi = Number(document.getElementById('loanEmiInput').value);
+      const firstPaymentDate = document.getElementById('loanStartDateInput').value;
+      const lumpSum = Number(document.getElementById('loanLumpSumInput').value || 0);
+      const extraMonthly = Number(document.getElementById('loanExtraMonthlyInput').value || 0);
+      const baseline = buildLoanAmortization(principal, rate, emi);
+      const scenarioPrincipal = Math.max(0, principal - Math.max(0, lumpSum));
+      const scenario = buildLoanAmortization(scenarioPrincipal, rate, emi + Math.max(0, extraMonthly));
+      if (!baseline || !scenario || !loanMonthDate(firstPaymentDate, 0) || lumpSum < 0 || extraMonthly < 0) {
+        document.getElementById('loanBaselinePeriodValue').textContent = '—';
+        document.getElementById('loanScenarioPeriodValue').textContent = '—';
+        document.getElementById('loanMonthsSavedValue').textContent = '—';
+        document.getElementById('loanInterestSavedValue').textContent = '—';
+        document.getElementById('loanScheduleNote').textContent = 'The monthly payment must exceed monthly interest and all inputs must be non-negative.';
+        loanScheduleBody.innerHTML = '<tr><td colspan="6">Enter a sustainable monthly payment to calculate the schedule.</td></tr>';
+        document.getElementById('loanTimelineNote').textContent = 'Enter a valid first-payment date and sustainable repayment assumptions.';
+        loanTimelineBody.innerHTML = '<tr><td colspan="7">No monthly payment timeline calculated.</td></tr>';
+        return false;
+      }
+      const monthsSaved = Math.max(0, baseline.months - scenario.months);
+      const interestSaved = Math.max(0, baseline.totalInterest - scenario.totalInterest);
+      document.getElementById('loanBaselinePeriodValue').textContent = loanPeriod(baseline.months);
+      document.getElementById('loanScenarioPeriodValue').textContent = loanPeriod(scenario.months);
+      document.getElementById('loanMonthsSavedValue').textContent = loanPeriod(monthsSaved, '0 mo');
+      document.getElementById('loanInterestSavedValue').textContent = portfolioNumber(interestSaved, true);
+      document.getElementById('loanScheduleNote').textContent = `Projection uses ${portfolioNumber(scenarioPrincipal, true)} after the one-time payment and ${portfolioNumber(emi + Math.max(0, extraMonthly), true)} per month.`;
+      loanScheduleBody.innerHTML = scenario.schedule.length
+        ? scenario.schedule.map((row) => `<tr><td>Year ${row.year}</td><td>${portfolioNumber(row.opening, true)}</td><td>${portfolioNumber(row.principal, true)}</td><td>${portfolioNumber(row.interest, true)}</td><td>${portfolioNumber(row.payment, true)}</td><td>${portfolioNumber(row.closing, true)}</td></tr>`).join('')
+        : '<tr><td colspan="6">The one-time payment clears the outstanding principal immediately.</td></tr>';
+      const payoffDate = scenario.timeline.length ? loanMonthDate(firstPaymentDate, scenario.timeline.length - 1) : null;
+      document.getElementById('loanTimelineNote').textContent = scenario.timeline.length
+        ? `${scenario.timeline.length} monthly payments projected from ${formatDisplayDate(firstPaymentDate)} through ${formatDisplayDate(payoffDate)}.`
+        : 'The one-time early payment clears the balance before the first monthly payment.';
+      loanTimelineBody.innerHTML = scenario.timeline.length
+        ? scenario.timeline.map((row) => `<tr><td>${row.month}</td><td>${formatDisplayDate(loanMonthDate(firstPaymentDate, row.month - 1))}</td><td>${portfolioNumber(row.opening, true)}</td><td>${portfolioNumber(row.payment, true)}</td><td>${portfolioNumber(row.principal, true)}</td><td>${portfolioNumber(row.interest, true)}</td><td>${portfolioNumber(row.closing, true)}</td></tr>`).join('')
+        : '<tr><td colspan="7">No monthly payments remain after the one-time early payment.</td></tr>';
+      return true;
+    }
+
+    function renderHomeLoanTracker(tracker) {
+      homeLoanTracker = tracker && typeof tracker === 'object' ? tracker : null;
+      if (!homeLoanTracker) {
+        document.getElementById('homeLoanStatus').textContent = 'No home-loan worksheet was detected in this upload';
+        ['loanOutstandingValue', 'loanRateValue', 'loanPaidValue', 'loanInterestValue', 'loanBaselinePeriodValue', 'loanScenarioPeriodValue', 'loanMonthsSavedValue', 'loanInterestSavedValue'].forEach((id) => { document.getElementById(id).textContent = '—'; });
+        loanHistoryBody.innerHTML = '<tr><td colspan="5">No loan-payment history loaded.</td></tr>';
+        loanTotalsBody.innerHTML = '<tr><td colspan="6">No tracker totals loaded.</td></tr>';
+        loanScheduleBody.innerHTML = '<tr><td colspan="6">No repayment scenario calculated.</td></tr>';
+        loanTimelineBody.innerHTML = '<tr><td colspan="7">No monthly payment timeline calculated.</td></tr>';
+        ['loanPrincipalInput', 'loanRateInput', 'loanEmiInput', 'loanStartDateInput'].forEach((id) => { document.getElementById(id).value = ''; });
+        document.getElementById('loanLumpSumInput').value = '0';
+        document.getElementById('loanExtraMonthlyInput').value = '0';
+        document.getElementById('loanTimelineNote').textContent = 'Enter valid repayment assumptions to generate the payment timeline.';
+        document.getElementById('loanHistoryNote').textContent = 'Upload an XLSX workbook containing a loan worksheet.';
+        document.getElementById('loanContractNote').textContent = 'The home-loan tracker contract has not been loaded.';
+        return;
+      }
+      const rows = Array.isArray(homeLoanTracker.payment_rows) ? homeLoanTracker.payment_rows : [];
+      const totals = homeLoanTracker.totals || {};
+      const rent = homeLoanTracker.rent_totals || {};
+      document.getElementById('homeLoanStatus').textContent = `Loan tracker ready · ${rows.length} fiscal years${homeLoanTracker.outstanding_as_of ? ` · outstanding as of ${formatDisplayDate(homeLoanTracker.outstanding_as_of)}` : ''}`;
+      document.getElementById('loanOutstandingValue').textContent = portfolioNumber(homeLoanTracker.outstanding, true);
+      document.getElementById('loanRateValue').textContent = homeLoanTracker.annual_rate_pct === null || homeLoanTracker.annual_rate_pct === undefined ? '—' : `${Number(homeLoanTracker.annual_rate_pct).toFixed(2)}%`;
+      document.getElementById('loanPaidValue').textContent = portfolioNumber(totals.payment, true);
+      document.getElementById('loanInterestValue').textContent = portfolioNumber(totals.interest, true);
+      loanHistoryBody.innerHTML = rows.length ? rows.map((row) => {
+        const interestShare = Number(row.payment) > 0 ? Number(row.interest) / Number(row.payment) * 100 : null;
+        return `<tr><td>${escapeHtml(row.fiscal_year)}</td><td>${portfolioNumber(row.principal, true)}</td><td>${portfolioNumber(row.interest, true)}</td><td>${portfolioNumber(row.payment, true)}</td><td>${interestShare === null ? '—' : `${interestShare.toFixed(1)}%`}</td></tr>`;
+      }).join('') : '<tr><td colspan="5">No completed fiscal-year payments found.</td></tr>';
+      loanTotalsBody.innerHTML = `<tr><td>${portfolioNumber(totals.principal, true)}</td><td>${portfolioNumber(totals.interest, true)}</td><td>${portfolioNumber(totals.payment, true)}</td><td>${portfolioNumber(rent.rent, true)}</td><td>${portfolioNumber(rent.maintenance, true)}</td><td>${portfolioNumber(rent.net_rent, true)}</td></tr>`;
+      document.getElementById('loanHistoryNote').textContent = `${homeLoanTracker.sheet_name || 'Loan payments'} · ${rows.length} recorded fiscal years.`;
+      document.getElementById('loanContractNote').textContent = `${homeLoanTracker.contract_version || 'home-loan-tracker-v1'}. Workbook values are read in memory and are not stored. Calculator projections are estimates, not lender statements.`;
+      document.getElementById('loanPrincipalInput').value = homeLoanTracker.outstanding ?? '';
+      document.getElementById('loanRateInput').value = homeLoanTracker.annual_rate_pct ?? '';
+      document.getElementById('loanEmiInput').value = homeLoanTracker.suggested_monthly_payment ?? '';
+      document.getElementById('loanStartDateInput').value = homeLoanTracker.outstanding_as_of ? loanMonthDate(homeLoanTracker.outstanding_as_of, 1) : '';
+      document.getElementById('loanLumpSumInput').value = '0';
+      document.getElementById('loanExtraMonthlyInput').value = '0';
+      document.getElementById('loanCalculatorNote').textContent = homeLoanTracker.suggested_payment_basis
+        ? `Monthly payment starts at ${portfolioNumber(homeLoanTracker.suggested_monthly_payment, true)}, estimated from ${homeLoanTracker.suggested_payment_basis}. Edit it if this includes irregular early payments.`
+        : 'Enter the contractual monthly payment and optional early-payment amounts.';
+      calculateLoanRepayment();
+    }
+
+    function portfolioFileBase64(file) {
+      return file.arrayBuffer().then((buffer) => {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let offset = 0; offset < bytes.length; offset += 32768) {
+          binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+        }
+        return btoa(binary);
+      });
+    }
+
+    function renderPortfolioPreview(result) {
+      const headers = Array.isArray(result.headers) ? result.headers : [];
+      const rows = Array.isArray(result.sample_rows) ? result.sample_rows : [];
+      document.getElementById('portfolioPreviewHead').innerHTML = `<tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr>`;
+      document.getElementById('portfolioPreviewBody').innerHTML = rows.length
+        ? rows.map((row) => `<tr>${headers.map((header) => `<td>${escapeHtml(row[header] ?? '')}</td>`).join('')}</tr>`).join('')
+        : `<tr><td colspan="${Math.max(1, headers.length)}">No non-empty rows found.</td></tr>`;
+      const sheet = result.sheet_name ? ` · sheet ${result.sheet_name}` : '';
+      const mapping = result.detected_mapping || {};
+      const detected = Object.entries(mapping)
+        .filter(([, column]) => column)
+        .map(([field, column]) => `${field.replaceAll('_', ' ')} → ${column}`)
+        .join(' · ');
+      document.getElementById('portfolioPreviewNote').textContent = `${Number(result.row_count || 0).toLocaleString('en-IN')} rows detected${sheet}. Detected columns: ${detected || 'none'}. Only the first eight rows are shown.`;
+    }
+
+    async function previewPortfolioFile() {
+      const file = portfolioFileInput.files && portfolioFileInput.files[0];
+      if (!file) {
+        showNotice('Choose a CSV or XLSX holdings file first.');
+        return false;
+      }
+      if (file.size > 8 * 1024 * 1024) {
+        showNotice('The holdings file exceeds the 8 MB local preview limit.');
+        return false;
+      }
+      document.getElementById('portfolioUploadStatus').textContent = 'Parsing and analyzing the file in local server memory.';
+      document.getElementById('portfolioStatus').textContent = 'Reading and validating portfolio…';
+      try {
+        const response = await fetch('/api/portfolio/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_name: file.name, content_base64: await portfolioFileBase64(file) }),
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          const reason = String(result.reason || 'invalid file').replaceAll('_', ' ');
+          document.getElementById('portfolioStatus').textContent = 'Portfolio columns were not recognized';
+          document.getElementById('portfolioUploadStatus').textContent = `Upload rejected: ${reason}. You can select the same file again after correcting it.`;
+          portfolioFileInput.value = '';
+          showNotice(`Portfolio preview rejected: ${reason}.`);
+          return false;
+        }
+        portfolioPreview = result;
+        portfolioAnalysis = null;
+        renderPortfolioPreview(result);
+        renderHomeLoanTracker(result.loan_tracker);
+        document.getElementById('portfolioUploadStatus').textContent = `${result.file_name} · ${Number(result.row_count || 0).toLocaleString('en-IN')} rows held in browser memory · analyzing now.`;
+        return await analyzePortfolio();
+      } catch (_error) {
+        document.getElementById('portfolioStatus').textContent = 'Portfolio upload could not be analyzed';
+        document.getElementById('portfolioUploadStatus').textContent = 'The local portfolio service could not read the file. Select it again to retry.';
+        portfolioFileInput.value = '';
+        showNotice('The local portfolio preview service is unavailable.');
+        return false;
+      }
+    }
+
+    function portfolioNumber(value, currency = false) {
+      if (value === null || value === undefined) return '—';
+      const formatted = Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+      return currency ? `₹${formatted}` : formatted;
+    }
+
+    function renderPortfolioAnalysis(result) {
+      portfolioAnalysis = result;
+      const coverage = result.coverage || {};
+      const concentration = result.concentration || {};
+      const positions = Array.isArray(result.positions) ? result.positions : [];
+      const sectors = Array.isArray(result.sectors) ? result.sectors : [];
+      const issues = Array.isArray(result.issues) ? result.issues : [];
+      document.getElementById('portfolioPositionsValue').textContent = Number(coverage.eligible_positions || 0).toLocaleString('en-IN');
+      document.getElementById('portfolioLargestValue').textContent = concentration.largest_position_pct === null || concentration.largest_position_pct === undefined ? '—' : `${Number(concentration.largest_position_pct).toFixed(2)}%`;
+      document.getElementById('portfolioTopFiveValue').textContent = concentration.top_five_pct === null || concentration.top_five_pct === undefined ? '—' : `${Number(concentration.top_five_pct).toFixed(2)}%`;
+      document.getElementById('portfolioSectorValue').textContent = sectors.length ? `${sectors[0].sector} ${Number(sectors[0].weight_pct).toFixed(1)}%` : '—';
+      document.getElementById('portfolioStatus').textContent = `${String(concentration.state || 'not_available').replaceAll('_', ' ')} · ${Number(coverage.excluded_rows || 0)} excluded rows`;
+      document.getElementById('portfolioAsOfNote').textContent = result.as_of_date
+        ? `Local prices through ${formatDisplayDate(result.as_of_date)} · weight basis: ${String(result.weight_basis || '').replaceAll('_', ' ')}.`
+        : `Weight basis: ${String(result.weight_basis || '').replaceAll('_', ' ')}. No local price date was available.`;
+      portfolioPositionsBody.innerHTML = positions.length ? positions.map((row) => `<tr>
+        <td>${escapeHtml(row.symbol || '—')}</td><td>${escapeHtml(row.company_name || '—')}</td><td>${escapeHtml(row.sector || 'Unclassified')}</td>
+        <td>${portfolioNumber(row.quantity)}</td><td>${portfolioNumber(row.average_cost, true)}</td><td>${portfolioNumber(row.latest_price, true)}</td>
+        <td>${row.price_date ? formatDisplayDate(row.price_date) : '—'}</td><td>${portfolioNumber(row.current_value, true)}</td>
+        <td>${row.weight_pct === null || row.weight_pct === undefined ? '—' : `${Number(row.weight_pct).toFixed(2)}%`}</td>
+        <td class="${stockYtdMetricClass(row.return_since_average_cost_pct)}">${stockYtdMetric(row.return_since_average_cost_pct)}</td>
+        <td>${row.in_nifty500 ? 'Yes' : 'No / unknown'}</td><td>${row.in_local_fno_universe ? 'Yes' : 'No'}</td>
+        <td>${escapeHtml(String(row.status || 'excluded').replaceAll('_', ' '))}</td></tr>`).join('')
+        : '<tr><td colspan="13">No eligible portfolio positions.</td></tr>';
+      portfolioSectorsBody.innerHTML = sectors.length ? sectors.map((row) => `<tr><td>${escapeHtml(row.sector)}</td><td>${Number(row.weight_pct).toFixed(2)}%</td><td>${Number(row.position_count).toLocaleString('en-IN')}</td></tr>`).join('')
+        : '<tr><td colspan="3">No sector allocation available.</td></tr>';
+      portfolioIssuesBody.innerHTML = issues.length ? issues.map((row) => `<tr><td>${Number(row.row_number).toLocaleString('en-IN')}</td><td>${escapeHtml(row.symbol)}</td><td>${escapeHtml(String(row.reason).replaceAll('_', ' '))}</td></tr>`).join('')
+        : '<tr><td colspan="3">No validation issues were found.</td></tr>';
+      document.getElementById('portfolioContractNote').textContent = `${result.contract_version || 'portfolio-analysis-v1'}. ${(result.limitations || []).join(' ')}`;
+      document.getElementById('portfolioUploadStatus').textContent = `${Number(coverage.eligible_positions || 0)} eligible positions · ${Number(coverage.priced_positions || 0)} with local prices · data remains in memory only.`;
+    }
+
+    async function analyzePortfolio() {
+      if (!portfolioPreview || !Array.isArray(portfolioPreview.rows)) {
+        showNotice('Preview a holdings file before analysis.');
+        return false;
+      }
+      const mapping = portfolioPreview.detected_mapping;
+      if (!mapping || !mapping.symbol || (!mapping.quantity && !mapping.weight && !mapping.current_value)) {
+        showNotice('The holdings columns could not be recognized automatically.');
+        return false;
+      }
+      try {
+        const response = await fetch('/api/portfolio/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows: portfolioPreview.rows, mapping }),
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          showNotice(`Portfolio analysis rejected: ${String(result.reason || 'invalid mapping').replaceAll('_', ' ')}.`);
+          return false;
+        }
+        renderPortfolioAnalysis(result);
+        showNotice('Portfolio validation and allocation analysis complete.');
+        return true;
+      } catch (_error) {
+        showNotice('The local portfolio analysis service is unavailable.');
+        return false;
+      }
+    }
+
+    function clearPortfolio() {
+      portfolioPreview = null;
+      portfolioAnalysis = null;
+      homeLoanTracker = null;
+      portfolioFileInput.value = '';
+      document.getElementById('portfolioStatus').textContent = 'Choose a CSV or XLSX holdings file';
+      document.getElementById('portfolioUploadStatus').textContent = 'Choose a file and analysis will start automatically.';
+      document.getElementById('portfolioPreviewNote').textContent = 'The first eight non-empty rows will appear here before analysis.';
+      document.getElementById('portfolioPreviewHead').innerHTML = '<tr><th>Preview</th></tr>';
+      document.getElementById('portfolioPreviewBody').innerHTML = '<tr><td>No file preview loaded.</td></tr>';
+      portfolioPositionsBody.innerHTML = '<tr><td colspan="13">No portfolio has been analyzed.</td></tr>';
+      portfolioSectorsBody.innerHTML = '<tr><td colspan="3">No sector allocation available.</td></tr>';
+      portfolioIssuesBody.innerHTML = '<tr><td colspan="3">No validation run yet.</td></tr>';
+      ['portfolioPositionsValue', 'portfolioLargestValue', 'portfolioTopFiveValue', 'portfolioSectorValue'].forEach((id) => { document.getElementById(id).textContent = '—'; });
+      document.getElementById('portfolioAsOfNote').textContent = 'Upload a file to calculate normalized holdings weights.';
+      document.getElementById('portfolioContractNote').textContent = 'The portfolio-analysis contract has not been loaded.';
+      renderHomeLoanTracker(null);
+      setPortfolioTab('holdings');
+      showNotice('Portfolio data cleared from browser memory.');
+    }
+
+    function stockYtdMetric(value) {
+      if (value === null || value === undefined) return '—';
+      const number = Number(value);
+      return `${number > 0 ? '+' : ''}${number.toFixed(2)}%`;
+    }
+
+    function stockYtdMetricClass(value) {
+      if (value === null || value === undefined) return '';
+      return Number(value) > 0 ? 'positive' : Number(value) < 0 ? 'negative' : '';
+    }
+
+    function filteredStockYtdRows() {
+      const search = stockYtdSearchInput.value.trim().toUpperCase();
+      const sector = stockYtdSectorSelect.value;
+      const direction = stockYtdSortSelect.value === 'worst' ? 1 : -1;
+      return stockYtdRows
+        .filter((row) => {
+          const matchesSearch = !search
+            || String(row.symbol || '').toUpperCase().includes(search)
+            || String(row.name || '').toUpperCase().includes(search);
+          return matchesSearch && (sector === 'all' || row.sector === sector);
+        })
+        .sort((left, right) => {
+          const leftValue = left.ytd_performance_pct;
+          const rightValue = right.ytd_performance_pct;
+          if (leftValue === null || leftValue === undefined || rightValue === null || rightValue === undefined) {
+            if ((leftValue === null || leftValue === undefined) && (rightValue === null || rightValue === undefined)) {
+              return String(left.symbol).localeCompare(String(right.symbol));
+            }
+            return leftValue === null || leftValue === undefined ? 1 : -1;
+          }
+          return (Number(leftValue) - Number(rightValue)) * direction
+            || String(left.symbol).localeCompare(String(right.symbol));
+        });
+    }
+
+    function renderStockYtdTable() {
+      const rows = filteredStockYtdRows();
+      if (!rows.length) {
+        stockYtdBody.innerHTML = '<tr><td colspan="9">No stocks match the selected filters.</td></tr>';
+      } else {
+        stockYtdBody.innerHTML = rows.map((row) => `<tr>
+          <td>${row.rank === null ? '—' : Number(row.rank).toLocaleString('en-IN')}</td>
+          <td>${escapeHtml(row.name || row.symbol)}</td>
+          <td>${escapeHtml(row.symbol)}</td>
+          <td>${escapeHtml(row.sector)}</td>
+          <td>${row.ltp === null ? '—' : formatPrice(row.ltp)}</td>
+          <td class="${stockYtdMetricClass(row.ytd_performance_pct)}">${stockYtdMetric(row.ytd_performance_pct)}</td>
+          <td class="${stockYtdMetricClass(row.from_20dma_pct)}">${stockYtdMetric(row.from_20dma_pct)}</td>
+          <td class="${stockYtdMetricClass(row.from_200dma_pct)}">${stockYtdMetric(row.from_200dma_pct)}</td>
+          <td>${escapeHtml(String(row.status || 'unavailable').replaceAll('_', ' '))}</td>
+        </tr>`).join('');
+      }
+      document.getElementById('stockYtdResultCount').textContent = stockYtdPayload
+        ? `${rows.length.toLocaleString('en-IN')} of ${stockYtdRows.length.toLocaleString('en-IN')} rows shown · unavailable data remains at the bottom.`
+        : 'Connect Kite to retrieve completed daily candles.';
+    }
+
+    function renderStockYtd(result) {
+      stockYtdPayload = result;
+      stockYtdRows = Array.isArray(result.rows) ? [...result.rows] : [];
+      const selectedYear = String(result.selected_year);
+      stockYtdYearSelect.innerHTML = (result.available_years || [result.selected_year])
+        .map((year) => `<option value="${Number(year)}">${Number(year)}</option>`)
+        .join('');
+      stockYtdYearSelect.value = selectedYear;
+
+      const currentSector = stockYtdSectorSelect.value;
+      const sectors = [...new Set(stockYtdRows.map((row) => row.sector).filter(Boolean))]
+        .sort((left, right) => left.localeCompare(right, 'en-IN'));
+      stockYtdSectorSelect.innerHTML = '<option value="all">All sectors</option>'
+        + sectors.map((sector) => `<option value="${escapeHtml(sector)}">${escapeHtml(sector)}</option>`).join('');
+      stockYtdSectorSelect.value = sectors.includes(currentSector) ? currentSector : 'all';
+
+      const coverage = result.coverage || {};
+      const rankedRows = stockYtdRows.filter((row) => row.ytd_performance_pct !== null && row.ytd_performance_pct !== undefined);
+      const leader = rankedRows[0];
+      const laggard = rankedRows[rankedRows.length - 1];
+      document.getElementById('stockYtdUniverseValue').textContent = Number(coverage.total || stockYtdRows.length).toLocaleString('en-IN');
+      document.getElementById('stockYtdReadyValue').textContent = Number(coverage.ready || 0).toLocaleString('en-IN');
+      document.getElementById('stockYtdLeaderValue').textContent = leader ? `${leader.symbol} ${stockYtdMetric(leader.ytd_performance_pct)}` : '—';
+      document.getElementById('stockYtdLaggardValue').textContent = laggard ? `${laggard.symbol} ${stockYtdMetric(laggard.ytd_performance_pct)}` : '—';
+      stockYtdStatus.textContent = `${result.selected_year} · as of ${formatDisplayDate(result.as_of_date)}`;
+      document.getElementById('stockYtdPriceHeading').textContent = result.price_label || 'Completed close';
+      document.getElementById('stockYtdPriceNote').textContent = `${result.price_label || 'Completed close'} as of ${formatDisplayDate(result.as_of_date)}. Moving averages are aligned to each row's final available session in ${result.selected_year}.`;
+      document.getElementById('stockYtdAsOfNote').textContent = `Official current NIFTY 500 universe · ${Number(coverage.ready || 0)} ready, ${Number(coverage.partial_history || 0)} partial, ${Number(coverage.unavailable || 0)} unavailable · ${result.cache_hit ? 'local cache reused' : 'fresh Kite retrieval'}.`;
+      const limitations = Array.isArray(result.limitations) ? result.limitations.join(' ') : '';
+      document.getElementById('stockYtdContractNote').textContent = `${result.contract_version || 'nifty500-stock-ytd-v1'}. ${limitations}`;
+      renderStockYtdTable();
+    }
+
+    async function loadStockYtd(showSuccess = false) {
+      if (!kiteLoginButton.classList.contains('kite-authenticated')) {
+        stockYtdStatus.textContent = 'Connect Kite to load the ranking';
+        showNotice('Connect Kite before loading NIFTY 500 stock data.');
+        return false;
+      }
+      loadStockYtdButton.disabled = true;
+      loadStockYtdButton.textContent = 'Loading NIFTY 500…';
+      stockYtdStatus.textContent = 'Retrieving completed daily candles…';
+      document.getElementById('stockYtdResultCount').textContent = 'The first uncached retrieval covers roughly five years and can take about three minutes.';
+      try {
+        const year = stockYtdYearSelect.value;
+        const endpoint = year ? `/api/stocks/ytd?year=${encodeURIComponent(year)}` : '/api/stocks/ytd';
+        const response = await fetch(endpoint, { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          if (result.reason === 'kite_not_connected' || result.reason === 'access_token_invalid_or_expired') {
+            setKiteAccess(false);
+          }
+          stockYtdStatus.textContent = result.reason === 'breadth_refresh_in_progress'
+            ? 'NIFTY 500 history refresh is already in progress'
+            : 'Stock ranking unavailable';
+          showNotice(kiteFailureMessage(result.reason));
+          return false;
+        }
+        renderStockYtd(result);
+        if (showSuccess) showNotice(`${result.selected_year} NIFTY 500 ranking loaded.`);
+        return true;
+      } catch (_error) {
+        stockYtdStatus.textContent = 'The local stock-ranking service is unavailable';
+        return false;
+      } finally {
+        loadStockYtdButton.textContent = 'Load NIFTY 500 ranking';
+        loadStockYtdButton.disabled = !kiteLoginButton.classList.contains('kite-authenticated');
+      }
+    }
+
     async function runEodUpdate() {
       if (!kiteLoginButton.classList.contains('kite-authenticated')) {
         showNotice('Connect Kite before running the EOD update.');
@@ -4279,6 +5311,7 @@
         provider_input_rejected: 'Kite rejected the supplied session verification input.',
         provider_rejected_request: 'Kite rejected the session request without a recognized error type.',
         invalid_provider_response: 'Kite returned an unexpected response that PG-terminal refused to accept.',
+        provider_response_too_large: 'Kite returned more data than the safety limit for this request.',
         provider_timeout: 'The local server timed out while contacting Kite.',
         provider_tls_failure: 'The local server could not establish a secure TLS connection to Kite.',
         provider_dns_failure: 'The local server could not resolve Kite’s API address.',
@@ -4308,7 +5341,7 @@
         invalid_futures_quote_response: 'Kite returned an unexpected futures quote response.',
         stored_futures_snapshot_conflict: 'A stored futures EOD observation conflicted with a later response.'
       };
-      return messages[reason] || `Kite connection failed with local reason: ${reason || 'unknown_error'}.`;
+      return messages[reason] || `The data request failed with local reason: ${reason || 'unknown_error'}.`;
     }
 
     async function restoreKiteStatus() {
@@ -4441,6 +5474,10 @@
       }
       document.querySelector('.nav-button[data-page="Seasonality Analysis"]').click();
     });
+    refreshDashboardEventsButton.addEventListener('click', () => loadDashboardEventsSummary(true));
+    viewEventsButton.addEventListener('click', () => {
+      document.querySelector('.nav-button[data-page="Events Calendar"]').click();
+    });
     refreshScreenerButton.addEventListener('click', () => loadLocalScreener(true));
     screenerSearchInput.addEventListener('input', renderScreenerRows);
     screenerReadinessSelect.addEventListener('change', renderScreenerRows);
@@ -4449,6 +5486,21 @@
     refreshNewsEventsButton.addEventListener('click', () => loadMacroEventsCalendar(true));
     eventRegionSelect.addEventListener('change', renderMacroEventRows);
     eventCategorySelect.addEventListener('change', renderMacroEventRows);
+    refreshEarningsButton.addEventListener('click', () => loadEarnings(true));
+    importEarningsButton.addEventListener('click', importEarningsCsv);
+    earningsBasisSelect.addEventListener('change', renderEarningsTable);
+    earningsSectorSelect.addEventListener('change', renderEarningsTable);
+    earningsSearchInput.addEventListener('input', renderEarningsTable);
+    portfolioFileInput.addEventListener('change', previewPortfolioFile);
+    clearPortfolioButton.addEventListener('click', clearPortfolio);
+    portfolioHoldingsTab.addEventListener('click', () => setPortfolioTab('holdings'));
+    portfolioLoanTab.addEventListener('click', () => setPortfolioTab('loan'));
+    calculateLoanButton.addEventListener('click', calculateLoanRepayment);
+    loadStockYtdButton.addEventListener('click', () => loadStockYtd(true));
+    stockYtdYearSelect.addEventListener('change', () => loadStockYtd(false));
+    stockYtdSortSelect.addEventListener('change', renderStockYtdTable);
+    stockYtdSectorSelect.addEventListener('change', renderStockYtdTable);
+    stockYtdSearchInput.addEventListener('input', renderStockYtdTable);
     regimeValidationIndexSelect.addEventListener('change', () => updateRegimeValidationSelection(true));
     regimeValidationBenchmarkSelect.addEventListener('change', () => {
       const benchmark = regimeValidationBenchmarkSelect.value === 'none' ? 'No relative benchmark' : 'Nifty 50 benchmark';
@@ -4505,19 +5557,26 @@
         const isScreener = button.dataset.page === 'Screener';
         const isSeasonality = button.dataset.page === 'Seasonality Analysis';
         const isNewsEvents = button.dataset.page === 'Events Calendar';
+        const isStockYtd = button.dataset.page === 'Stock Data YTD';
+        const isEarnings = button.dataset.page === 'Earnings Analysis';
+        const isPortfolio = button.dataset.page === 'Portfolio Analysis';
         dashboardView.hidden = !isDashboard;
         marketSentimentView.hidden = !isMarketSentiment;
         fnoView.hidden = !isFno;
         screenerView.hidden = !isScreener;
         seasonalityView.hidden = !isSeasonality;
         newsEventsView.hidden = !isNewsEvents;
-        emptyView.hidden = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents;
-        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents ? '' : button.dataset.page;
+        stockYtdView.hidden = !isStockYtd;
+        earningsView.hidden = !isEarnings;
+        portfolioView.hidden = !isPortfolio;
+        emptyView.hidden = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isEarnings || isPortfolio;
+        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isEarnings || isPortfolio ? '' : button.dataset.page;
         if (isDashboard) {
           loadDashboardMarketSentimentSummary(false);
           loadDashboardFnoSummary(false);
           loadDashboardScreenerSummary(false);
           loadDashboardSeasonalitySummary(false);
+          loadDashboardEventsSummary(false);
         }
         if ((isMarketSentiment || isFno) && document.getElementById('sentimentAsOfValue').textContent === '—') {
           loadDomesticSentiment(false);
@@ -4535,6 +5594,10 @@
           loadLocalSeasonality(false);
         } else if (isNewsEvents && document.getElementById('newsEventsStatus').textContent === 'Event calendar not loaded') {
           loadMacroEventsCalendar(false);
+        } else if (isStockYtd && !stockYtdRows.length && kiteLoginButton.classList.contains('kite-authenticated')) {
+          loadStockYtd(false);
+        } else if (isEarnings && !earningsPayload) {
+          loadEarnings(false);
         }
         if (window.innerWidth <= 700) setNavigation(false);
       });
@@ -4557,6 +5620,7 @@
     loadDashboardFnoSummary(false);
     loadDashboardScreenerSummary(false);
     loadDashboardSeasonalitySummary(false);
+    loadDashboardEventsSummary(false);
   </script>
 </body>
 </html>

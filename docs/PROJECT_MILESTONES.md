@@ -250,19 +250,63 @@ point-in-time-universe validation are next.
    October–December 2026 India and U.S. macro events from reviewed official
    MoSPI, Federal Reserve, and U.S. BLS calendar snapshots, converts specified
    release times to IST, and supports region and event-type filters. The source
-   table distinguishes verified snapshots from date-pending sources.
-23. **RBI date-safety boundary — complete.** RBI remains visible as an official
-   source, but its 2026–27 dated schedule is marked `date_confirmation_required`
-   rather than populated from an unverified calendar. Weekend MoSPI releases
-   carry the official next-working-day caveat. This is a reviewed snapshot, not
-   an automatically synchronized calendar; dates must be rechecked at source.
+   table distinguishes verified snapshots from any date-pending sources.
+23. **RBI date-safety boundary — corrected and complete.** The official RBI
+   23-Mar-2026 MPC schedule is now verified and supplies the 5–7 October 2026,
+   2–4 December 2026, and 3–5 February 2027 meetings. Multi-day events remain
+   visible through their end date, fixing the omission of an in-progress meeting.
+   No policy-decision time is assumed because the official schedule does not
+   state one. Weekend MoSPI releases retain the next-working-day caveat.
 24. **News work paused by owner direction.** The earlier corporate-filings source
    review and manual NSE CSV importer remain dormant and are not exposed in the
    active workspace. Unscheduled news, headlines, sentiment, surprise estimates,
    impact scores, recommendations, and trade interpretation are out of scope.
-25. **Next executable step:** add a concise Events Calendar Dashboard card using
-   the same contract (next event, seven-day count, source readiness), then extend
-   calendar coverage only when dates can be verified from official sources.
+25. **Dashboard summary layer — Events Calendar slice complete.** The Dashboard
+   now reuses `macro-events-calendar-v1` to show the next event, seven- and
+   thirty-day counts, total upcoming events, India/U.S. coverage, snapshot date,
+   and verified versus date-pending source readiness. It links to the complete
+   calendar and repeats that the data is a reviewed snapshot whose official
+   dates must be verified; it does not introduce a second calendar contract.
+26. **Shared table-interpretation guidance — complete.** Audited all 21 populated
+   tables across Dashboard, Market Sentiment, F&O, Screener, Seasonality, and
+   Events Calendar. Every table now has nearby plain-language guidance explaining
+   what its rows and key columns mean, which readiness/sample checks matter, how
+   to compare typical outcomes with tail risk, and why descriptive evidence is
+   not automatically a recommendation. Empty future workspaces have no tables to
+   annotate yet. Extend calendar coverage only when official dates are verified.
+27. **Stock Data YTD v1 — complete.** The Stock Data YTD workspace now ranks
+   every security in the current official NIFTY 500 constituent snapshot by
+   calendar-year return. It shows company name, symbol, sector, completed close,
+   selected-year performance, and distance from the trailing 20- and 200-session
+   simple moving averages. The user can select any of the five available years,
+   reverse the best-to-worst order, filter by sector, and search by company or
+   symbol. Historical-year prices and averages are aligned to that year's final
+   available completed session. Partial and unavailable rows remain visible,
+   and the current-universe survivorship limitation is explicit.
+28. **Earnings Analysis v1 — complete.** Replaced the empty workspace with an
+   append-only local quarterly-results workflow. A reviewed CSV can import
+   consolidated or standalone issuer figures with fiscal quarter, reporting
+   date, revenue, net profit, EPS, declared currency/unit, and an HTTPS filing
+   source. The page calculates comparable revenue YoY/QoQ, profit and EPS YoY,
+   preserves absolute profit change when a percentage would be misleading, and
+   labels turnarounds, moves to loss, and partial-history rows. Search, sector,
+   and reporting-basis filters are available. Automated exchange scraping,
+   consensus estimates, surprise scores, recommendations, and signals remain
+   disabled.
+29. **Portfolio Analysis v1 — complete.** Replaced the empty workspace with a
+   local, read-only CSV/XLSX workflow. A selected file is previewed and analyzed
+   immediately using automatic recognition of common broker-export columns; no
+   manual mapping controls are shown. Holdings remain in request/browser memory
+   rather than being written to SQLite. The first slice validates symbols,
+   duplicates, quantities, weights, costs, values, and missing local prices;
+   then shows normalized position and sector weights, largest/top-five
+   concentration, cost-relative return when available, and current NIFTY 500
+   and locally observed F&O overlap. Invalid rows remain visible and excluded.
+30. **Next executable step:** extend Portfolio Analysis with trailing portfolio
+   volatility, beta, drawdown exposure, and position-level volatility
+   contribution using aligned local EOD returns. Keep the whole-market Dashboard
+   headline deferred until its evidence inputs, methodology, confidence rules,
+   and wording are designed and reviewed with the owner.
 
 ## Approved product-integration milestones
 
@@ -274,6 +318,9 @@ define important columns and states, explain what high/low or positive/negative
 values mean, and state the main limitations. It must help interpretation without
 turning descriptive evidence into a recommendation or repeating the table row by
 row.
+
+Status: complete for all 27 tables currently implemented. Apply the same contract
+when a future workspace introduces a new table.
 
 ### A. Dashboard as the workspace summary
 
@@ -323,9 +370,11 @@ Portfolio Analysis should combine the user's holdings with validated Market
 Sentiment and Seasonality evidence to indicate how the current allocation aligns
 with the market environment. It remains an analytical review, not execution.
 
-1. Accept local `.csv` and `.xlsx` uploads with an explicit preview-and-column-
-   mapping step. Required fields should be instrument/symbol and quantity or
-   portfolio weight; optional fields can include average cost and current value.
+1. Accept local `.csv` and `.xlsx` uploads with an automatic preview-and-analysis
+   step. Recognize common broker column names for instrument/symbol and quantity,
+   portfolio weight, or current value; optional fields can include average cost,
+   sector, and company name. Ambiguous files must fail visibly instead of asking
+   the user to configure mappings.
 2. Validate symbols, duplicates, quantities, weights, missing prices, and file
    structure before calculation. Reject unsupported or ambiguous rows visibly.
 3. Keep uploaded portfolio data local and in memory by default; do not transmit,
@@ -340,6 +389,12 @@ with the market environment. It remains an analytical review, not execution.
    review. Every suggestion must show the supporting evidence and uncertainty.
 7. Never place orders or imply certainty. Recommendations require user review and
    must remain separate from automated broker actions.
+8. A separate Home Loan Tracker tab now reads the workbook's loan-payment sheet
+   in memory, summarizes fiscal-year principal and interest, outstanding balance,
+   rate, and rental totals, and provides an editable reducing-balance early-
+   repayment calculator with payoff period, time saved, interest saved, and an
+   annual projection plus a dated month-by-month payment timeline. The suggested monthly payment is explicitly identified as
+   an editable estimate derived from the latest recorded annual payment.
 
 1. **Market sentiment and regime foundation** — implement the approved
    [Market Sentiment blueprint](MARKET_SENTIMENT_BLUEPRINT.md) in phases,

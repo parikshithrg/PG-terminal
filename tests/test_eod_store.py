@@ -346,6 +346,35 @@ class EODStoreTest(unittest.TestCase):
         with self.assertRaises(FuturesSnapshotConflictError):
             self.store.append_futures_eod_snapshots(contracts, changed, source="Kite NFO")
 
+    def test_earnings_import_is_append_only_and_preserves_revisions(self):
+        row = {
+            "symbol": "ABC",
+            "company_name": "ABC Limited",
+            "sector": "Industrials",
+            "basis": "consolidated",
+            "fiscal_year": "2026-27",
+            "quarter": "Q1",
+            "period_end": "2026-06-30",
+            "reported_at": "2026-07-20",
+            "currency": "INR",
+            "unit": "crore",
+            "revenue": 120.0,
+            "net_profit": 10.0,
+            "eps": 2.0,
+            "source_url": "https://example.test/abc.pdf",
+            "raw": {},
+        }
+        first = self.store.append_earnings_records([row], source_file_name="earnings.csv")
+        duplicate = self.store.append_earnings_records([row], source_file_name="earnings.csv")
+        revised = dict(row, revenue=121.0)
+        revision = self.store.append_earnings_records([revised], source_file_name="earnings-revised.csv")
+        self.assertEqual(first, {"inserted": 1, "duplicates": 0})
+        self.assertEqual(duplicate, {"inserted": 0, "duplicates": 1})
+        self.assertEqual(revision, {"inserted": 1, "duplicates": 0})
+        loaded = self.store.load_earnings_records()
+        self.assertEqual(len(loaded), 2)
+        self.assertNotEqual(loaded[0]["record_hash"], loaded[1]["record_hash"])
+
 
 if __name__ == "__main__":
     unittest.main()

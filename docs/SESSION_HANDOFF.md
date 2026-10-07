@@ -198,10 +198,59 @@ orders or position sizing.
   The events-only workspace contains 13 upcoming October–December 2026 India and
   U.S. macro events from reviewed MoSPI, Federal Reserve, and U.S. BLS calendar
   snapshots. It shows IST times where official times are specified, filters by
-  region and event type, and exposes source readiness and limitations. RBI is
-  deliberately date-pending because a current official 2026–27 schedule was not
-  verified; no dates are guessed. News, sentiment, surprise, impact, and trading
-  labels remain off. The prior NSE importer is dormant and not exposed.
+  region and event type, and exposes source readiness and limitations. RBI's
+  official 23-Mar-2026 schedule now supplies the October and December 2026 and
+  February 2027 MPC meetings. Multi-day meetings remain visible through their
+  end date; no decision time is guessed. News, sentiment, surprise, impact, and
+  trading labels remain off. The prior NSE importer is dormant and not exposed.
+- Added the Events Calendar summary to the Dashboard using that same contract.
+  It shows the next event, seven- and thirty-day counts, total upcoming events,
+  India/U.S. coverage, snapshot date, and verified versus pending source counts,
+  with refresh and `View details` actions. It remains a reviewed snapshot and
+  does not imply live synchronization or event impact.
+- Completed the shared interpretation-guidance milestone for all 27 implemented
+  tables. Dashboard, Market Sentiment validation/comparison, F&O positioning,
+  Screener, Seasonality, and Events Calendar tables now each have nearby guidance
+  covering column meaning, sample/readiness checks, useful comparisons, and the
+  boundary between descriptive evidence and recommendations. Future tables must
+  follow the same contract when introduced.
+- Added `nifty500-stock-ytd-v1` and replaced the empty Stock Data YTD workspace
+  with a complete current-constituent ranking. One rate-limited Kite retrieval
+  now supplies roughly five years of completed daily candles for the official
+  NIFTY 500 snapshot and also reuses that history for market breadth. The table
+  shows company, symbol, sector, selected-year completed close, calendar-year
+  return, and distance from the 20- and 200-session moving averages. It supports
+  five year choices, best/least-performing order, sector filtering, and search;
+  all missing rows remain visible and historical selections carry an explicit
+  current-membership survivorship warning.
+- Added `earnings-analysis-v1` and replaced the empty Earnings Analysis page with
+  a reviewed CSV import workflow backed by append-only local storage. The parser
+  requires company identity, sector, reporting basis, fiscal year/quarter,
+  period and report dates, currency/unit, revenue, net profit, EPS, and an HTTPS
+  filing source. The latest-quarter table calculates comparable revenue YoY/QoQ,
+  profit/EPS YoY, absolute profit change, and explicit turnaround/loss states;
+  it withholds misleading growth percentages on zero or negative bases.
+  Automated exchange scraping, estimates, surprises, recommendations, and trade
+  signals remain disabled.
+- Added `portfolio-analysis-v1` and replaced the empty Portfolio Analysis page
+  with a one-step local CSV/XLSX upload workflow. Common broker-export headings
+  are recognized automatically; the file is previewed and analyzed immediately,
+  with no manual mapping selectors. Uploads are parsed in local server memory
+  and returned to browser memory; holdings are never written to
+  SQLite. The page validates duplicate/invalid rows, builds normalized position
+  and sector allocations from mapped weights, current values, or quantity times
+  the latest stored close, and shows concentration plus current NIFTY 500/local
+  F&O overlap. Four new tables include interpretation guidance. Automated tests
+  cover CSV, dependency-free XLSX parsing, duplicates, weight-based portfolios,
+  and concentration.
+- Extended Portfolio Analysis with a separate `home-loan-tracker-v1` tab. An
+  uploaded XLSX loan sheet is parsed in memory to show fiscal-year principal,
+  interest, total payments, outstanding principal/rate, and rental totals. The
+  tab includes editable regular-payment, lump-sum, and additional-monthly-
+  payment assumptions, then calculates baseline and accelerated payoff periods,
+  time and interest saved, an annual reducing-balance schedule, and a dated
+  month-by-month payment timeline from the selected first-payment date. No loan
+  data is persisted.
 - The latest verified stored-session board (28-Sep-26) showed Nifty Auto as the
   sole long research match, Nifty Financial Services and Nifty PSU Bank as
   countertrend watches, the two MidSmall indices as tactical watches, eleven
@@ -238,15 +287,19 @@ orders or position sizing.
 
 ## Next work
 
-1. Add a concise Events Calendar Dashboard card from the existing contract: next
-   scheduled event, seven-day count, and official-source readiness. Do not revive
-   news ingestion unless the owner changes scope.
-2. Continue daily collection for institutional flows, macro context, global risk,
+1. Live-check the first full NIFTY 500 five-year retrieval after reconnecting
+   Kite, including year switching, coverage counts, and reverse ranking order.
+2. Extend Portfolio Analysis with aligned trailing volatility, beta, drawdown,
+   and position-level volatility contribution. Keep holdings local/read-only and
+   keep the whole-market Dashboard headline deferred until its inputs,
+   methodology, confidence rules, and wording are explicitly designed and
+   reviewed.
+3. Continue daily collection for institutional flows, macro context, global risk,
    and futures/OI; freeze their directional thresholds only after adequate
    coverage, then test them out of sample.
-3. Source and audit authoritative dated index membership before populating the
+4. Source and audit authoritative dated index membership before populating the
    new point-in-time schema; never infer historical membership from today's list.
-4. Display any decision layer only after its evidence and limitations are
+5. Display any decision layer only after its evidence and limitations are
    reviewable in the interface.
 
 ## Approved longer-range product milestones
@@ -256,8 +309,8 @@ orders or position sizing.
 2. Recompose Market Sentiment as a macro-to-micro decision story: broad risk
    context, walk-forward validation, macro/global drivers, independent sector/
    index states, simultaneous long/short candidates, and stock-level follow-through.
-3. Build Portfolio Analysis around local `.csv`/`.xlsx` upload, preview and
-   column mapping. Combine holdings with validated sentiment and seasonality to
+3. Build Portfolio Analysis around one-step local `.csv`/`.xlsx` upload with
+   automatic broker-column recognition and preview. Combine holdings with validated sentiment and seasonality to
    provide evidence-linked, scenario-based allocation review prompts. Keep the
    workflow local, read-only, and separate from broker execution.
 
