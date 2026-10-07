@@ -2150,10 +2150,11 @@
                 <div class="selector-field"><label for="loanEmiInput">Regular monthly payment</label><input id="loanEmiInput" type="number" min="0" step="100" inputmode="decimal"></div>
                 <div class="selector-field"><label for="loanStartDateInput">First payment date</label><input id="loanStartDateInput" type="date"></div>
                 <div class="selector-field"><label for="loanLumpSumInput">One-time early payment</label><input id="loanLumpSumInput" type="number" min="0" step="1000" value="0" inputmode="decimal"></div>
+                <div class="selector-field"><label for="loanAnnualLumpSumInput">Annual lump-sum payment</label><input id="loanAnnualLumpSumInput" type="number" min="0" step="1000" value="0" inputmode="decimal"></div>
                 <div class="selector-field"><label for="loanExtraMonthlyInput">Additional monthly payment</label><input id="loanExtraMonthlyInput" type="number" min="0" step="100" value="0" inputmode="decimal"></div>
                 <button class="panel-button loan-calculate-button" id="calculateLoanButton" type="button">Calculate repayment</button>
               </div>
-              <div class="analysis-note">The calculator assumes a constant reducing-balance rate, monthly interest, and payment at month-end. It excludes fees, rate changes, tax effects, and lender-specific prepayment rules.</div>
+              <div class="analysis-note">The calculator assumes a constant reducing-balance rate, monthly interest, and payment at month-end. The annual lump sum is applied after every 12th monthly payment. It excludes fees, rate changes, tax effects, and lender-specific prepayment rules.</div>
             </section>
 
             <section class="summary-grid loan-result-grid" aria-label="Loan repayment results">
@@ -2173,8 +2174,8 @@
             <section class="analysis-section">
               <h2>Monthly payment timeline</h2>
               <p class="section-note" id="loanTimelineNote">Enter valid repayment assumptions to generate the payment timeline.</p>
-              <div class="table-guide"><strong>How to read:</strong> The one-time early payment is deducted before Month 1. Each later row applies one month of interest to the opening balance, then splits that month’s payment between interest and principal. The final payment can be smaller than the entered monthly amount.</div>
-              <div class="table-wrap"><table><thead><tr><th>Payment</th><th>Payment date</th><th>Opening balance</th><th>Payment amount</th><th>Principal repaid</th><th>Interest paid</th><th>Closing balance</th></tr></thead><tbody id="loanTimelineBody"><tr><td colspan="7">No monthly payment timeline calculated.</td></tr></tbody></table></div>
+              <div class="table-guide"><strong>How to read:</strong> The one-time early payment is deducted before Month 1. Each row applies one month of interest, the regular monthly payment, and—after every 12th payment—the annual lump sum. The annual lump sum and final regular payment are capped at the remaining balance.</div>
+              <div class="table-wrap"><table><thead><tr><th>Payment</th><th>Payment date</th><th>Opening balance</th><th>Regular payment</th><th>Annual lump sum</th><th>Principal repaid</th><th>Interest paid</th><th>Total paid</th><th>Closing balance</th></tr></thead><tbody id="loanTimelineBody"><tr><td colspan="9">No monthly payment timeline calculated.</td></tr></tbody></table></div>
             </section>
 
             <section class="analysis-section">
@@ -4744,8 +4745,8 @@
       return result.toISOString().slice(0, 10);
     }
 
-    function buildLoanAmortization(principal, annualRatePct, monthlyPayment) {
-      if (![principal, annualRatePct, monthlyPayment].every(Number.isFinite) || principal < 0 || annualRatePct < 0 || monthlyPayment <= 0) return null;
+    function buildLoanAmortization(principal, annualRatePct, monthlyPayment, annualLumpSum = 0) {
+      if (![principal, annualRatePct, monthlyPayment, annualLumpSum].every(Number.isFinite) || principal < 0 || annualRatePct < 0 || monthlyPayment <= 0 || annualLumpSum < 0) return null;
       if (principal === 0) return { months: 0, totalInterest: 0, schedule: [], timeline: [] };
       const monthlyRate = annualRatePct / 1200;
       if (monthlyRate > 0 && monthlyPayment <= principal * monthlyRate) return null;
@@ -4759,15 +4760,20 @@
         if (!schedule[yearIndex]) {
           schedule[yearIndex] = { year: yearIndex + 1, opening: balance, principal: 0, interest: 0, payment: 0, closing: balance };
         }
+        const paymentNumber = months + 1;
         const interest = balance * monthlyRate;
-        const payment = Math.min(monthlyPayment, balance + interest);
-        const principalPaid = payment - interest;
-        if (principalPaid <= 0) return null;
+        const regularPayment = Math.min(monthlyPayment, balance + interest);
+        const regularPrincipal = regularPayment - interest;
+        if (regularPrincipal <= 0) return null;
         const opening = balance;
-        balance = Math.max(0, balance - principalPaid);
+        balance = Math.max(0, balance - regularPrincipal);
+        const annualPayment = paymentNumber % 12 === 0 ? Math.min(annualLumpSum, balance) : 0;
+        balance = Math.max(0, balance - annualPayment);
+        const principalPaid = regularPrincipal + annualPayment;
+        const payment = regularPayment + annualPayment;
         months += 1;
         totalInterest += interest;
-        timeline.push({ month: months, opening, payment, principal: principalPaid, interest, closing: balance });
+        timeline.push({ month: months, opening, regularPayment, annualPayment, payment, principal: principalPaid, interest, closing: balance });
         schedule[yearIndex].principal += principalPaid;
         schedule[yearIndex].interest += interest;
         schedule[yearIndex].payment += payment;
@@ -4783,11 +4789,12 @@
       const emi = Number(document.getElementById('loanEmiInput').value);
       const firstPaymentDate = document.getElementById('loanStartDateInput').value;
       const lumpSum = Number(document.getElementById('loanLumpSumInput').value || 0);
+      const annualLumpSum = Number(document.getElementById('loanAnnualLumpSumInput').value || 0);
       const extraMonthly = Number(document.getElementById('loanExtraMonthlyInput').value || 0);
-      const baseline = buildLoanAmortization(principal, rate, emi);
+      const baseline = buildLoanAmortization(principal, rate, emi, 0);
       const scenarioPrincipal = Math.max(0, principal - Math.max(0, lumpSum));
-      const scenario = buildLoanAmortization(scenarioPrincipal, rate, emi + Math.max(0, extraMonthly));
-      if (!baseline || !scenario || !loanMonthDate(firstPaymentDate, 0) || lumpSum < 0 || extraMonthly < 0) {
+      const scenario = buildLoanAmortization(scenarioPrincipal, rate, emi + Math.max(0, extraMonthly), Math.max(0, annualLumpSum));
+      if (!baseline || !scenario || !loanMonthDate(firstPaymentDate, 0) || lumpSum < 0 || annualLumpSum < 0 || extraMonthly < 0) {
         document.getElementById('loanBaselinePeriodValue').textContent = '—';
         document.getElementById('loanScenarioPeriodValue').textContent = '—';
         document.getElementById('loanMonthsSavedValue').textContent = '—';
@@ -4795,7 +4802,7 @@
         document.getElementById('loanScheduleNote').textContent = 'The monthly payment must exceed monthly interest and all inputs must be non-negative.';
         loanScheduleBody.innerHTML = '<tr><td colspan="6">Enter a sustainable monthly payment to calculate the schedule.</td></tr>';
         document.getElementById('loanTimelineNote').textContent = 'Enter a valid first-payment date and sustainable repayment assumptions.';
-        loanTimelineBody.innerHTML = '<tr><td colspan="7">No monthly payment timeline calculated.</td></tr>';
+        loanTimelineBody.innerHTML = '<tr><td colspan="9">No monthly payment timeline calculated.</td></tr>';
         return false;
       }
       const monthsSaved = Math.max(0, baseline.months - scenario.months);
@@ -4804,17 +4811,18 @@
       document.getElementById('loanScenarioPeriodValue').textContent = loanPeriod(scenario.months);
       document.getElementById('loanMonthsSavedValue').textContent = loanPeriod(monthsSaved, '0 mo');
       document.getElementById('loanInterestSavedValue').textContent = portfolioNumber(interestSaved, true);
-      document.getElementById('loanScheduleNote').textContent = `Projection uses ${portfolioNumber(scenarioPrincipal, true)} after the one-time payment and ${portfolioNumber(emi + Math.max(0, extraMonthly), true)} per month.`;
+      document.getElementById('loanScheduleNote').textContent = `Projection uses ${portfolioNumber(scenarioPrincipal, true)} after the one-time payment, ${portfolioNumber(emi + Math.max(0, extraMonthly), true)} per month, and ${portfolioNumber(Math.max(0, annualLumpSum), true)} after every 12th payment.`;
       loanScheduleBody.innerHTML = scenario.schedule.length
         ? scenario.schedule.map((row) => `<tr><td>Year ${row.year}</td><td>${portfolioNumber(row.opening, true)}</td><td>${portfolioNumber(row.principal, true)}</td><td>${portfolioNumber(row.interest, true)}</td><td>${portfolioNumber(row.payment, true)}</td><td>${portfolioNumber(row.closing, true)}</td></tr>`).join('')
         : '<tr><td colspan="6">The one-time payment clears the outstanding principal immediately.</td></tr>';
       const payoffDate = scenario.timeline.length ? loanMonthDate(firstPaymentDate, scenario.timeline.length - 1) : null;
+      const annualPaymentsApplied = scenario.timeline.filter((row) => row.annualPayment > 0).length;
       document.getElementById('loanTimelineNote').textContent = scenario.timeline.length
-        ? `${scenario.timeline.length} monthly payments projected from ${formatDisplayDate(firstPaymentDate)} through ${formatDisplayDate(payoffDate)}.`
+        ? `${scenario.timeline.length} monthly payments projected from ${formatDisplayDate(firstPaymentDate)} through ${formatDisplayDate(payoffDate)} · ${annualPaymentsApplied} annual lump-sum payment${annualPaymentsApplied === 1 ? '' : 's'} applied.`
         : 'The one-time early payment clears the balance before the first monthly payment.';
       loanTimelineBody.innerHTML = scenario.timeline.length
-        ? scenario.timeline.map((row) => `<tr><td>${row.month}</td><td>${formatDisplayDate(loanMonthDate(firstPaymentDate, row.month - 1))}</td><td>${portfolioNumber(row.opening, true)}</td><td>${portfolioNumber(row.payment, true)}</td><td>${portfolioNumber(row.principal, true)}</td><td>${portfolioNumber(row.interest, true)}</td><td>${portfolioNumber(row.closing, true)}</td></tr>`).join('')
-        : '<tr><td colspan="7">No monthly payments remain after the one-time early payment.</td></tr>';
+        ? scenario.timeline.map((row) => `<tr><td>${row.month}</td><td>${formatDisplayDate(loanMonthDate(firstPaymentDate, row.month - 1))}</td><td>${portfolioNumber(row.opening, true)}</td><td>${portfolioNumber(row.regularPayment, true)}</td><td>${row.annualPayment > 0 ? portfolioNumber(row.annualPayment, true) : '—'}</td><td>${portfolioNumber(row.principal, true)}</td><td>${portfolioNumber(row.interest, true)}</td><td>${portfolioNumber(row.payment, true)}</td><td>${portfolioNumber(row.closing, true)}</td></tr>`).join('')
+        : '<tr><td colspan="9">No monthly payments remain after the one-time early payment.</td></tr>';
       return true;
     }
 
@@ -4826,9 +4834,10 @@
         loanHistoryBody.innerHTML = '<tr><td colspan="5">No loan-payment history loaded.</td></tr>';
         loanTotalsBody.innerHTML = '<tr><td colspan="6">No tracker totals loaded.</td></tr>';
         loanScheduleBody.innerHTML = '<tr><td colspan="6">No repayment scenario calculated.</td></tr>';
-        loanTimelineBody.innerHTML = '<tr><td colspan="7">No monthly payment timeline calculated.</td></tr>';
+        loanTimelineBody.innerHTML = '<tr><td colspan="9">No monthly payment timeline calculated.</td></tr>';
         ['loanPrincipalInput', 'loanRateInput', 'loanEmiInput', 'loanStartDateInput'].forEach((id) => { document.getElementById(id).value = ''; });
         document.getElementById('loanLumpSumInput').value = '0';
+        document.getElementById('loanAnnualLumpSumInput').value = '0';
         document.getElementById('loanExtraMonthlyInput').value = '0';
         document.getElementById('loanTimelineNote').textContent = 'Enter valid repayment assumptions to generate the payment timeline.';
         document.getElementById('loanHistoryNote').textContent = 'Upload an XLSX workbook containing a loan worksheet.';
@@ -4855,6 +4864,7 @@
       document.getElementById('loanEmiInput').value = homeLoanTracker.suggested_monthly_payment ?? '';
       document.getElementById('loanStartDateInput').value = homeLoanTracker.outstanding_as_of ? loanMonthDate(homeLoanTracker.outstanding_as_of, 1) : '';
       document.getElementById('loanLumpSumInput').value = '0';
+      document.getElementById('loanAnnualLumpSumInput').value = '0';
       document.getElementById('loanExtraMonthlyInput').value = '0';
       document.getElementById('loanCalculatorNote').textContent = homeLoanTracker.suggested_payment_basis
         ? `Monthly payment starts at ${portfolioNumber(homeLoanTracker.suggested_monthly_payment, true)}, estimated from ${homeLoanTracker.suggested_payment_basis}. Edit it if this includes irregular early payments.`

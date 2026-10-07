@@ -246,8 +246,8 @@ orders or position sizing.
 - Extended Portfolio Analysis with a separate `home-loan-tracker-v1` tab. An
   uploaded XLSX loan sheet is parsed in memory to show fiscal-year principal,
   interest, total payments, outstanding principal/rate, and rental totals. The
-  tab includes editable regular-payment, lump-sum, and additional-monthly-
-  payment assumptions, then calculates baseline and accelerated payoff periods,
+  tab includes editable regular-payment, upfront lump-sum, recurring annual
+  lump-sum, and additional-monthly-payment assumptions, then calculates baseline and accelerated payoff periods,
   time and interest saved, an annual reducing-balance schedule, and a dated
   month-by-month payment timeline from the selected first-payment date. No loan
   data is persisted.

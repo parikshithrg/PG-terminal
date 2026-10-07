@@ -393,7 +393,9 @@ with the market environment. It remains an analytical review, not execution.
    in memory, summarizes fiscal-year principal and interest, outstanding balance,
    rate, and rental totals, and provides an editable reducing-balance early-
    repayment calculator with payoff period, time saved, interest saved, and an
-   annual projection plus a dated month-by-month payment timeline. The suggested monthly payment is explicitly identified as
+   annual projection plus a dated month-by-month payment timeline. The calculator
+   supports an upfront lump sum, additional monthly payments, and a recurring
+   lump sum after every 12th payment. The suggested monthly payment is explicitly identified as
    an editable estimate derived from the latest recorded annual payment.
 
 1. **Market sentiment and regime foundation** — implement the approved
