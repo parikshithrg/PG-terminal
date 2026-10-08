@@ -321,6 +321,30 @@ orders or position sizing.
   NIFTY 50 and 10Y G-Sec comparisons, observed excess return, valuation date,
   and available risk context. It deliberately does not label outperformance as
   validated alpha.
+- Expanded the EOD action into a fault-isolated fourteen-stage refresh. It now
+  includes the five-year NIFTY 500 stock-history/ranking cache, reloads all
+  dashboard and workspace summaries, and revalues a currently loaded portfolio
+  from AMFI NAV, user-enabled Google Finance, and local EOD prices before using
+  uploaded values as fallbacks. A failed provider does not stop later stages;
+  unavailable stages are named in the completion notice.
+- Rebuilt the top of Dashboard as `dashboard-market-story-v1`: a connected
+  infographic for current regime, full NIFTY 500 breadth, momentum, volatility,
+  derivatives, 5/20/60-session historical analogues, seasonality, macro
+  catalysts, and the evidence that could change the view. It also ranks the
+  strongest/weakest stored indices and equal-weight NIFTY 500 sectors by
+  20-session excess return versus Nifty 50. The NIFTY 500 context is persisted
+  after EOD refresh so it survives a server restart. A loaded portfolio is
+  merged only in browser memory to show asset mix, beta, drawdown, and a
+  labelled beta-scaled analogue sensitivity. No component is presented as a
+  forecast or trade signal.
+- Removed the duplicated four-index strip and the long Kite OHLC snapshot from
+  Dashboard. Market Sentiment, F&O, Screener, Seasonality, and Events now appear
+  as compact square summary cards with one direct details action; their full
+  analysis remains available in the corresponding workspace.
+- Replaced the Dashboard breadth table with two cards for strongest and weakest
+  sector participation. Rankings average the shares above 20-, 50-, and 200-day
+  moving averages and require at least five evaluated stocks plus 60% sector
+  coverage, preventing one-stock classifications from dominating the summary.
 
 ## Next work
 

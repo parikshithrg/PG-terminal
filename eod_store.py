@@ -247,8 +247,87 @@ class EODStore:
 
                     CREATE INDEX IF NOT EXISTS earnings_records_period_idx
                     ON earnings_records(symbol, basis, period_end, imported_at);
+
+                    CREATE TABLE IF NOT EXISTS workspace_snapshots (
+                        snapshot_key TEXT NOT NULL,
+                        as_of_date TEXT NOT NULL,
+                        payload_hash TEXT NOT NULL,
+                        payload_json TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        schema_version INTEGER NOT NULL,
+                        PRIMARY KEY (snapshot_key, as_of_date, payload_hash)
+                    );
+
+                    CREATE INDEX IF NOT EXISTS workspace_snapshots_latest_idx
+                    ON workspace_snapshots(snapshot_key, as_of_date, created_at);
                     """
                 )
+
+    def save_workspace_snapshot(
+        self,
+        *,
+        snapshot_key: str,
+        as_of_date: date,
+        payload: dict[str, object],
+        created_at: str | None = None,
+    ) -> dict[str, int]:
+        if (
+            not re.fullmatch(r"[a-z0-9][a-z0-9-]{2,63}", snapshot_key)
+            or not isinstance(as_of_date, date)
+            or not isinstance(payload, dict)
+        ):
+            raise ValueError("invalid_workspace_snapshot")
+        try:
+            encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        except (TypeError, ValueError) as error:
+            raise ValueError("invalid_workspace_snapshot") from error
+        payload_hash = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+        timestamp = created_at or datetime.now(timezone.utc).isoformat()
+        with closing(self._connect()) as connection:
+            with connection:
+                cursor = connection.execute(
+                    """
+                    INSERT OR IGNORE INTO workspace_snapshots (
+                        snapshot_key, as_of_date, payload_hash, payload_json,
+                        created_at, schema_version
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        snapshot_key,
+                        as_of_date.isoformat(),
+                        payload_hash,
+                        encoded,
+                        timestamp,
+                        SCHEMA_VERSION,
+                    ),
+                )
+        return {"inserted": int(cursor.rowcount == 1), "duplicates": int(cursor.rowcount == 0)}
+
+    def load_latest_workspace_snapshot(self, snapshot_key: str) -> dict[str, object] | None:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]{2,63}", snapshot_key):
+            raise ValueError("invalid_workspace_snapshot")
+        with closing(self._connect()) as connection:
+            row = connection.execute(
+                """
+                SELECT as_of_date, payload_json, created_at
+                FROM workspace_snapshots
+                WHERE snapshot_key = ?
+                ORDER BY as_of_date DESC, created_at DESC
+                LIMIT 1
+                """,
+                (snapshot_key,),
+            ).fetchone()
+        if row is None:
+            return None
+        payload = json.loads(row["payload_json"])
+        if not isinstance(payload, dict):
+            raise ValueError("invalid_workspace_snapshot")
+        return {
+            "snapshot_key": snapshot_key,
+            "as_of_date": date.fromisoformat(row["as_of_date"]),
+            "created_at": row["created_at"],
+            "payload": payload,
+        }
 
     @staticmethod
     def instrument_id(kind: str, display_name: str) -> str:

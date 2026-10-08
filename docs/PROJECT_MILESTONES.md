@@ -505,6 +505,44 @@ portfolio performance rather than a current-holdings approximation:
 This remains a read-only research workflow. Candidate ranking must not be
 presented as guaranteed alpha, a recommendation, or an automated trade.
 
+### Unified EOD refresh — complete
+
+- A single EOD update now refreshes current and completed index data,
+  institutional flows, RBI/currency context, permitted global-risk series,
+  futures/OI, NIFTY 500 breadth and five-year ranking history, monthly leaders,
+  ten-year local history, sentiment, and its saved evidence snapshot.
+- After acquisition, every derived workspace is reloaded: Dashboard summaries,
+  Screener, Seasonality, Events, Earnings, regime-validation readiness, and the
+  current in-memory Portfolio story.
+- If a portfolio is loaded, the refresh prefers current AMFI NAV, Google Finance
+  when the user enabled it, and newly stored local EOD prices. Uploaded values
+  remain visible fallbacks for instruments without an approved current source.
+- Stages are fault-isolated: one unavailable provider no longer prevents later
+  datasets and workspaces from refreshing, and the completion notice identifies
+  unavailable stages instead of claiming an all-clear.
+
+### Connected Dashboard market story — complete
+
+- The Dashboard now opens with an infographic narrative that connects the
+  validated Nifty 50 regime, full NIFTY 500 breadth, 20-session tape, realised
+  volatility, futures/OI positioning, historical regime outcomes,
+  current-month seasonality, and reviewed macro catalysts.
+- Each completed NIFTY 500 EOD refresh persists a restart-safe market-context
+  snapshot. The story ranks the strongest and weakest stored indices and the
+  strongest and weakest equal-weight NIFTY 500 sectors by aligned 20-session
+  excess return versus Nifty 50, with coverage and survivorship limits visible.
+- Historical analogues show 5-, 20-, and 60-session mean/median outcomes,
+  positive frequency, worst return, and average maximum drawdown for the current
+  trailing-only regime. Overlapping-window and survivorship-bias limitations are
+  visible beside the results.
+- An uploaded portfolio is joined locally in the browser. The story explains its
+  equity and defensive allocation, beta, current-holdings drawdown, and a clearly
+  labelled beta-scaled sensitivity to the 20-session historical analogue. This
+  is scenario context, not a forecast, recommendation, or promise of protection.
+- The final panel names the evidence that could change the view—participation,
+  derivatives-history readiness, and the next verified macro catalyst—so the
+  narrative remains falsifiable rather than becoming a static opinion.
+
 ## Validation work for observed seasonality
 
 Before treating the apparent April strength as a usable effect, add median

@@ -375,6 +375,42 @@ class EODStoreTest(unittest.TestCase):
         self.assertEqual(len(loaded), 2)
         self.assertNotEqual(loaded[0]["record_hash"], loaded[1]["record_hash"])
 
+    def test_workspace_snapshot_persists_latest_market_context(self):
+        first = {
+            "ok": True,
+            "as_of_date": "2026-10-07",
+            "breadth": {"evaluated": 492, "above_50dma_pct": 24.0},
+        }
+        second = {
+            "ok": True,
+            "as_of_date": "2026-10-08",
+            "breadth": {"evaluated": 495, "above_50dma_pct": 27.0},
+        }
+        self.assertEqual(
+            self.store.save_workspace_snapshot(
+                snapshot_key="nifty500-market-context",
+                as_of_date=date(2026, 10, 7),
+                payload=first,
+            ),
+            {"inserted": 1, "duplicates": 0},
+        )
+        self.assertEqual(
+            self.store.save_workspace_snapshot(
+                snapshot_key="nifty500-market-context",
+                as_of_date=date(2026, 10, 7),
+                payload=first,
+            ),
+            {"inserted": 0, "duplicates": 1},
+        )
+        self.store.save_workspace_snapshot(
+            snapshot_key="nifty500-market-context",
+            as_of_date=date(2026, 10, 8),
+            payload=second,
+        )
+        loaded = self.store.load_latest_workspace_snapshot("nifty500-market-context")
+        self.assertEqual(loaded["as_of_date"], date(2026, 10, 8))
+        self.assertEqual(loaded["payload"], second)
+
 
 if __name__ == "__main__":
     unittest.main()

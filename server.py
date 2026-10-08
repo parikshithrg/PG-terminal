@@ -1860,6 +1860,142 @@ def calculate_market_breadth(
     return rows, as_of, evaluated
 
 
+def calculate_nifty500_market_context(
+    constituents: list[dict[str, str]],
+    stock_histories: dict[str, list[tuple[date, float]]],
+    index_histories: dict[str, list[tuple[date, float]]],
+    *,
+    window_sessions: int = 20,
+) -> dict[str, object]:
+    """Summarise full-universe breadth and equal-weight relative strength."""
+    if window_sessions < 1 or not constituents:
+        raise ValueError("nifty500_market_context_unavailable")
+
+    def clean(history: list[tuple[date, float]]) -> list[tuple[date, float]]:
+        by_date = {
+            session_date: float(close)
+            for session_date, close in history
+            if isinstance(session_date, date)
+            and isinstance(close, (int, float))
+            and not isinstance(close, bool)
+            and math.isfinite(float(close))
+            and float(close) > 0
+        }
+        return sorted(by_date.items())
+
+    cleaned_stocks = {
+        symbol: clean(history) for symbol, history in stock_histories.items()
+    }
+    latest_dates = [history[-1][0] for history in cleaned_stocks.values() if history]
+    if not latest_dates:
+        raise ValueError("nifty500_market_context_unavailable")
+    as_of = max(latest_dates)
+
+    evaluated_breadth = 0
+    above_50 = 0
+    above_200 = 0
+    positive_20 = 0
+    sector_returns: dict[str, list[float]] = defaultdict(list)
+    constituent_by_symbol = {
+        str(item.get("symbol") or ""): item for item in constituents if item.get("symbol")
+    }
+    for symbol, constituent in constituent_by_symbol.items():
+        history = cleaned_stocks.get(symbol, [])
+        if not history or history[-1][0] != as_of:
+            continue
+        closes = [close for _, close in history]
+        if len(closes) >= 201:
+            evaluated_breadth += 1
+            above_50 += closes[-1] > sum(closes[-50:]) / 50
+            above_200 += closes[-1] > sum(closes[-200:]) / 200
+        if len(closes) >= window_sessions + 1:
+            stock_return = (closes[-1] / closes[-(window_sessions + 1)] - 1) * 100
+            positive_20 += stock_return > 0
+            sector_returns[str(constituent.get("sector") or "Unclassified")].append(stock_return)
+
+    benchmark_history = clean(index_histories.get("Nifty 50", []))
+    benchmark_history = [item for item in benchmark_history if item[0] <= as_of]
+    if (
+        len(benchmark_history) < window_sessions + 1
+        or benchmark_history[-1][0] != as_of
+    ):
+        raise ValueError("nifty500_market_context_unavailable")
+    benchmark_return = (
+        benchmark_history[-1][1] / benchmark_history[-(window_sessions + 1)][1] - 1
+    ) * 100
+
+    index_rows: list[dict[str, object]] = []
+    for instrument, raw_history in index_histories.items():
+        if instrument == "Nifty 50":
+            continue
+        history = [item for item in clean(raw_history) if item[0] <= as_of]
+        if len(history) < window_sessions + 1 or history[-1][0] != as_of:
+            continue
+        instrument_return = (history[-1][1] / history[-(window_sessions + 1)][1] - 1) * 100
+        index_rows.append(
+            {
+                "name": instrument,
+                "return_pct": round(instrument_return, 2),
+                "excess_vs_nifty50_pct": round(instrument_return - benchmark_return, 2),
+            }
+        )
+
+    sector_rows = [
+        {
+            "name": sector,
+            "return_pct": round(sum(returns) / len(returns), 2),
+            "excess_vs_nifty50_pct": round(sum(returns) / len(returns) - benchmark_return, 2),
+            "stocks_evaluated": len(returns),
+        }
+        for sector, returns in sector_returns.items()
+        if returns
+    ]
+
+    def ranked(rows: list[dict[str, object]]) -> dict[str, object]:
+        ordered = sorted(
+            rows,
+            key=lambda item: (float(item["excess_vs_nifty50_pct"]), str(item["name"])),
+        )
+        return {
+            "evaluated": len(ordered),
+            "strongest": ordered[-1] if ordered else None,
+            "weakest": ordered[0] if ordered else None,
+        }
+
+    return {
+        "ok": True,
+        "contract_version": "nifty500-market-context-v1",
+        "as_of_date": as_of.isoformat(),
+        "universe": "NIFTY 500",
+        "breadth": {
+            "official_count": len(constituent_by_symbol),
+            "evaluated": evaluated_breadth,
+            "coverage_pct": round(100 * evaluated_breadth / len(constituent_by_symbol), 1),
+            "above_50dma_pct": round(100 * above_50 / evaluated_breadth, 1) if evaluated_breadth else None,
+            "above_200dma_pct": round(100 * above_200 / evaluated_breadth, 1) if evaluated_breadth else None,
+            "positive_20d": positive_20,
+            "evaluated_20d": sum(len(rows) for rows in sector_returns.values()),
+            "positive_20d_pct": round(100 * positive_20 / sum(len(rows) for rows in sector_returns.values()), 1)
+            if sector_returns else None,
+        },
+        "relative_strength": {
+            "window_sessions": window_sessions,
+            "benchmark": {
+                "name": "Nifty 50",
+                "return_pct": round(benchmark_return, 2),
+            },
+            "indices": ranked(index_rows),
+            "sectors": ranked(sector_rows),
+            "method": "Equal-weight completed-session return minus the Nifty 50 return over the same trailing window.",
+        },
+        "limitations": [
+            "Breadth and sector returns use the current official NIFTY 500 constituents and carry survivorship bias.",
+            "Sector returns are equal-weight observations, not official sector-index returns.",
+            "Relative strength is a simple return difference, not risk-adjusted alpha.",
+        ],
+    }
+
+
 def build_stock_ytd_table(
     constituents: list[dict[str, str]],
     histories: dict[str, list[tuple[date, float]]],
@@ -5051,6 +5187,327 @@ def build_dashboard_screener_summary(
     }
 
 
+def build_dashboard_market_story(
+    sentiment_summary: dict[str, object],
+    screener_summary: dict[str, object],
+    fno_summary: dict[str, object],
+    regime_validation: dict[str, object],
+    seasonality_payload: dict[str, object],
+    events_payload: dict[str, object],
+    nifty500_context: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Connect validated local evidence into a compact, non-prescriptive story."""
+    required = (
+        sentiment_summary,
+        screener_summary,
+        fno_summary,
+        regime_validation,
+        seasonality_payload,
+        events_payload,
+    )
+    if any(payload.get("ok") is not True for payload in required):
+        raise ValueError("dashboard_market_story_unavailable")
+    current = regime_validation.get("current_state")
+    if not isinstance(current, dict) or not current.get("classification_ready"):
+        raise ValueError("dashboard_market_story_unavailable")
+
+    evidence = current.get("evidence")
+    evidence = evidence if isinstance(evidence, dict) else {}
+    observations = screener_summary.get("observations")
+    observations = observations if isinstance(observations, dict) else {}
+    screener_coverage = screener_summary.get("coverage")
+    screener_coverage = screener_coverage if isinstance(screener_coverage, dict) else {}
+    positioning = fno_summary.get("positioning")
+    positioning = positioning if isinstance(positioning, dict) else {}
+    sentiment_evidence = sentiment_summary.get("evidence")
+    sentiment_evidence = sentiment_evidence if isinstance(sentiment_evidence, dict) else {}
+    futures_confirmation = sentiment_summary.get("futures_short_confirmation")
+    futures_confirmation = futures_confirmation if isinstance(futures_confirmation, dict) else {}
+
+    regime_key = str(
+        current.get("transition_label_key")
+        or current.get("base_label_key")
+        or "uncertain_market"
+    )
+    regime_label = str(
+        current.get("transition_label")
+        or current.get("base_label")
+        or "Uncertain market"
+    )
+    regime_tones = {
+        "positive_market": "constructive",
+        "cautiously_positive": "cautious",
+        "uncertain_market": "mixed",
+        "weak_market": "defensive",
+        "high_risk_market": "high_risk",
+        "recovering_market": "recovering",
+    }
+    tone = regime_tones.get(regime_key, "mixed")
+    score = float(current.get("score") or 0.0)
+    nifty50_above_50 = float(evidence.get("above_50dma_pct") or 0.0)
+    nifty50_above_200 = float(evidence.get("above_200dma_pct") or 0.0)
+    nifty500_context = nifty500_context if isinstance(nifty500_context, dict) else {}
+    nifty500_breadth = nifty500_context.get("breadth")
+    nifty500_breadth = nifty500_breadth if isinstance(nifty500_breadth, dict) else {}
+    nifty500_ready = bool(
+        nifty500_context.get("ok") is True
+        and nifty500_breadth.get("above_50dma_pct") is not None
+        and nifty500_breadth.get("above_200dma_pct") is not None
+    )
+    above_50 = float(nifty500_breadth.get("above_50dma_pct") or 0.0) if nifty500_ready else nifty50_above_50
+    above_200 = float(nifty500_breadth.get("above_200dma_pct") or 0.0) if nifty500_ready else nifty50_above_200
+    volatility_percentile = float(evidence.get("realised_volatility_percentile") or 0.0)
+    ready_stocks = int(
+        nifty500_breadth.get("evaluated_20d")
+        if nifty500_ready else screener_coverage.get("ready") or 0
+    )
+    positive_stocks = int(
+        nifty500_breadth.get("positive_20d")
+        if nifty500_ready else observations.get("positive_20d") or 0
+    )
+    positive_share = round(100 * positive_stocks / ready_stocks, 1) if ready_stocks else 0.0
+    nifty_20d = float(screener_summary.get("benchmark_return_20d_pct") or 0.0)
+    bullish = int(positioning.get("bullish") or 0)
+    bearish = int(positioning.get("bearish") or 0)
+    unclear = int(positioning.get("unclear") or 0)
+    directional = bullish + bearish
+    bullish_share = round(100 * bullish / directional, 1) if directional else 50.0
+
+    def signal_state(value: float, positive_at: float, negative_below: float) -> str:
+        if value >= positive_at:
+            return "positive"
+        if value < negative_below:
+            return "negative"
+        return "mixed"
+
+    signals = [
+        {
+            "key": "trend",
+            "label": "Regime",
+            "state": signal_state(score, 25.0, -25.0),
+            "value": regime_label,
+            "meter_pct": round(max(0.0, min(100.0, (score + 100.0) / 2.0)), 1),
+            "detail": f"Validated score {score:+.1f}; trailing inputs only.",
+        },
+        {
+            "key": "breadth",
+            "label": "Participation",
+            "state": signal_state((above_50 + above_200) / 2.0, 60.0, 33.0) if nifty500_ready else "mixed",
+            "value": f"{above_50:.0f}% / {above_200:.0f}%" if nifty500_ready else "EOD update required",
+            "meter_pct": round(max(0.0, min(100.0, (above_50 + above_200) / 2.0)), 1) if nifty500_ready else 0.0,
+            "detail": (
+                f"NIFTY 500 stocks above 50-day / 200-day averages ({int(nifty500_breadth.get('evaluated') or 0)}/{int(nifty500_breadth.get('official_count') or 0)} evaluated)."
+                if nifty500_ready else "Run EOD update to build full NIFTY 500 breadth."
+            ),
+        },
+        {
+            "key": "momentum",
+            "label": "20-session tape",
+            "state": "positive" if nifty_20d > 1 else "negative" if nifty_20d < -1 else "mixed",
+            "value": f"{nifty_20d:+.2f}%",
+            "meter_pct": round(max(0.0, min(100.0, positive_share)), 1),
+            "detail": (
+                f"{positive_stocks}/{ready_stocks} NIFTY 500 stocks positive over 20 sessions."
+                if nifty500_ready else f"{positive_stocks}/{ready_stocks} liquid equities positive over 20 sessions; NIFTY 500 pending."
+            ),
+        },
+        {
+            "key": "derivatives",
+            "label": "Futures positioning",
+            "state": "positive" if bullish > bearish * 1.25 else "negative" if bearish > bullish * 1.25 else "mixed",
+            "value": f"{bearish} bearish / {bullish} bullish",
+            "meter_pct": bullish_share,
+            "detail": f"{unclear} unclear; only {int(fno_summary.get('stored_history_sessions') or 0)} stored sessions.",
+        },
+        {
+            "key": "volatility",
+            "label": "Realised volatility",
+            "state": "negative" if volatility_percentile >= 80 else "positive" if volatility_percentile <= 30 else "mixed",
+            "value": f"{volatility_percentile:.0f}th percentile",
+            "meter_pct": round(max(0.0, min(100.0, 100.0 - volatility_percentile)), 1),
+            "detail": "Lower meter means a more elevated volatility backdrop.",
+        },
+    ]
+
+    headline_map = {
+        "positive_market": "Broad conditions are constructive, with risk participation in control.",
+        "cautiously_positive": "The market is constructive, but confirmation is not broad enough for complacency.",
+        "uncertain_market": "Signals disagree; the market lacks a durable directional edge.",
+        "weak_market": "Participation is narrow and the derivatives tape leans bearish.",
+        "high_risk_market": "Stress is broad; downside and volatility evidence dominate the tape.",
+        "recovering_market": "Risk conditions are improving, but recovery confirmation remains incomplete.",
+    }
+    participation_text = (
+        f"Across the NIFTY 500, {above_50:.0f}% of {int(nifty500_breadth.get('evaluated') or 0)} evaluated stocks are above the 50-day average and "
+        f"{positive_stocks} of {ready_stocks} are positive over 20 sessions. "
+        if nifty500_ready else
+        "Full NIFTY 500 participation is pending the next EOD update; the regime remains based on validated Nifty 50 evidence. "
+    )
+    narrative = (
+        f"Nifty 50 is classified as {regime_label.lower()} through {current.get('as_of_date')}. "
+        f"{participation_text}"
+        f"Futures positioning has {bearish} bearish versus {bullish} bullish quadrants; this is descriptive because its history is still short."
+    )
+
+    state_rows = regime_validation.get("by_state")
+    state_rows = state_rows if isinstance(state_rows, list) else regime_validation.get("by_regime")
+    state_rows = state_rows if isinstance(state_rows, list) else []
+    matching_state = next(
+        (
+            row
+            for row in state_rows
+            if isinstance(row, dict) and row.get("label_key") == regime_key
+        ),
+        None,
+    )
+    if matching_state is None and regime_key == "recovering_market":
+        matching_state = next(
+            (
+                row
+                for row in state_rows
+                if isinstance(row, dict) and row.get("label_key") == "uncertain_market"
+            ),
+            None,
+        )
+    analog_horizons: list[dict[str, object]] = []
+    matching_horizons = matching_state.get("horizons") if isinstance(matching_state, dict) else {}
+    matching_horizons = matching_horizons if isinstance(matching_horizons, dict) else {}
+    for horizon in (5, 20, 60):
+        row = matching_horizons.get(horizon) or matching_horizons.get(str(horizon))
+        if not isinstance(row, dict):
+            continue
+        analog_horizons.append(
+            {
+                "sessions": horizon,
+                "mean_return_pct": row.get("mean_return_pct"),
+                "median_return_pct": row.get("median_return_pct"),
+                "positive_rate_pct": row.get("positive_rate_pct"),
+                "worst_return_pct": row.get("worst_return_pct"),
+                "mean_max_drawdown_pct": row.get("mean_max_drawdown_pct"),
+            }
+        )
+
+    as_of_text = str(current.get("as_of_date") or sentiment_summary.get("as_of_date") or "")
+    try:
+        month_label = date.fromisoformat(as_of_text[:10]).strftime("%b")
+    except ValueError:
+        month_label = ""
+    month_rows = seasonality_payload.get("month_rows")
+    month_rows = month_rows if isinstance(month_rows, list) else []
+    current_month = next(
+        (
+            row
+            for row in month_rows
+            if isinstance(row, dict) and row.get("period") == month_label
+        ),
+        None,
+    )
+    events = events_payload.get("events")
+    events = events if isinstance(events, list) else []
+    catalysts = [
+        {
+            "title": event.get("title"),
+            "start_at": event.get("start_at"),
+            "end_at": event.get("end_at"),
+            "days_until": event.get("days_until"),
+            "region": event.get("region"),
+            "category": event.get("category"),
+            "source_label": event.get("source_label"),
+        }
+        for event in events[:3]
+        if isinstance(event, dict)
+    ]
+
+    available_clusters = int(sentiment_evidence.get("available_clusters") or 0)
+    total_clusters = int(sentiment_evidence.get("total_clusters") or 0)
+    fresh = str((sentiment_summary.get("freshness") or {}).get("state")) == "fresh"
+    history_ready = bool(futures_confirmation.get("history_ready"))
+    confidence = "high" if fresh and available_clusters == total_clusters and history_ready else (
+        "moderate" if fresh and available_clusters >= max(1, total_clusters - 1) else "limited"
+    )
+    next_event = catalysts[0] if catalysts else None
+    relative_strength = nifty500_context.get("relative_strength")
+    relative_strength = relative_strength if isinstance(relative_strength, dict) else {
+        "window_sessions": 20,
+        "benchmark": {"name": "Nifty 50", "return_pct": None},
+        "indices": {"evaluated": 0, "strongest": None, "weakest": None},
+        "sectors": {"evaluated": 0, "strongest": None, "weakest": None},
+        "method": "Run EOD update to calculate relative strength from aligned completed sessions.",
+    }
+    watchpoints = [
+        {
+            "label": "Participation",
+            "text": (
+                f"NIFTY 500 breadth is {above_50:.0f}% above 50-day and {above_200:.0f}% above 200-day averages. Watch for sustained, broad improvement rather than a one-day bounce."
+                if nifty500_ready else "Full NIFTY 500 breadth is not stored yet. Run EOD update before interpreting market participation."
+            ),
+        },
+        {
+            "label": "Derivatives confirmation",
+            "text": f"Only {int(futures_confirmation.get('stored_history_sessions') or 0)}/{int(futures_confirmation.get('history_sessions_required') or 0)} required futures-history sessions are stored, so no directional confirmation is claimed.",
+        },
+        {
+            "label": "Next catalyst",
+            "text": (
+                f"{next_event.get('title')} is the next reviewed macro event. Verify its official source before relying on the date or time."
+                if next_event else "No future event remains in the reviewed calendar snapshot."
+            ),
+        },
+    ]
+
+    return {
+        "ok": True,
+        "contract_version": "dashboard-market-story-v1",
+        "scope": "connected_evidence_not_forecast",
+        "as_of_date": current.get("as_of_date") or sentiment_summary.get("as_of_date"),
+        "regime": {
+            "key": regime_key,
+            "label": regime_label,
+            "tone": tone,
+            "score": score,
+            "close": current.get("close"),
+        },
+        "headline": headline_map.get(regime_key, headline_map["uncertain_market"]),
+        "narrative": narrative,
+        "confidence": {
+            "label": confidence,
+            "fresh": fresh,
+            "available_clusters": available_clusters,
+            "total_clusters": total_clusters,
+            "futures_history_ready": history_ready,
+        },
+        "signals": signals,
+        "historical_analogue": {
+            "label": matching_state.get("label") if isinstance(matching_state, dict) else regime_label,
+            "sessions_observed": int(matching_state.get("sessions") or 0) if isinstance(matching_state, dict) else 0,
+            "horizons": analog_horizons,
+            "method": "Trailing-only regime classifications with overlapping forward windows.",
+        },
+        "seasonality": {
+            "month": month_label,
+            "count": int(current_month.get("count") or 0) if isinstance(current_month, dict) else 0,
+            "average_return_pct": current_month.get("average_return_pct") if isinstance(current_month, dict) else None,
+            "median_return_pct": current_month.get("median_return_pct") if isinstance(current_month, dict) else None,
+            "positive_months_pct": current_month.get("positive_months_pct") if isinstance(current_month, dict) else None,
+            "holdout_survived": int((seasonality_payload.get("held_out_summary") or {}).get("survived") or 0),
+        },
+        "market_context": {
+            "breadth": nifty500_breadth if nifty500_ready else None,
+            "relative_strength": relative_strength,
+            "as_of_date": nifty500_context.get("as_of_date"),
+        },
+        "catalysts": catalysts,
+        "watchpoints": watchpoints,
+        "limitations": [
+            "This joins validated observations; it does not forecast the market or recommend a trade.",
+            "Historical regime windows overlap and are not independent observations.",
+            "NIFTY 500 breadth and sector returns use current constituents and therefore carry survivorship bias.",
+            "Sector relative strength is an equal-weight stock observation, not an official sector-index return.",
+            "Portfolio sensitivity is calculated in the browser only after a holdings upload.",
+        ],
+    }
+
+
 def build_news_events_workspace(
     *,
     reviewed_on: date,
@@ -6800,6 +7257,7 @@ def build_portfolio_analysis(
     gsec_benchmark_history: list[dict[str, object]] | None = None,
     position_history_overrides: dict[int, dict[str, object]] | None = None,
     valuation_date: date | None = None,
+    refresh_prices: bool = False,
 ) -> dict[str, object]:
     """Validate and summarize an uploaded portfolio without persisting holdings."""
     if not rows or len(rows) > MAX_PORTFOLIO_ROWS or not isinstance(mapping, dict):
@@ -6902,21 +7360,66 @@ def build_portfolio_analysis(
         market_quote = market_quotes.get(symbol, {})
         google_latest = _portfolio_number(market_quote.get("latest_price"))
         google_last_close = _portfolio_number(market_quote.get("last_close"))
-        price = google_latest if google_latest is not None and google_latest > 0 else (
-            uploaded_price if uploaded_price is not None and uploaded_price > 0 else local_price
+        history_override = position_history_overrides.get(index, {})
+        override_history = history_override.get("history")
+        override_latest = (
+            override_history[-1]
+            if isinstance(override_history, list) and override_history
+            else None
         )
+        override_price = (
+            _portfolio_number(override_latest.get("close"))
+            if isinstance(override_latest, dict)
+            else None
+        )
+        override_date_value = override_latest.get("date") if isinstance(override_latest, dict) else None
+        override_price_date = (
+            override_date_value.isoformat()
+            if isinstance(override_date_value, date)
+            else str(override_date_value or "") or None
+        )
+        if refresh_prices:
+            price = google_latest if google_latest is not None and google_latest > 0 else (
+                override_price if override_price is not None and override_price > 0 else (
+                    local_price if local_price is not None and local_price > 0 else uploaded_price
+                )
+            )
+        else:
+            price = google_latest if google_latest is not None and google_latest > 0 else (
+                uploaded_price if uploaded_price is not None and uploaded_price > 0 else local_price
+            )
         last_close = (
             google_last_close
             if google_last_close is not None and google_last_close > 0
-            else local_price
+            else (
+                override_price
+                if refresh_prices and override_price is not None and override_price > 0
+                else local_price
+            )
         )
         observed_at = str(market_quote.get("observed_at") or "") or None
-        price_date = observed_at[:10] if observed_at else local_price_date
-        last_close_date = local_price_date
-        price_source = "google_finance" if google_latest is not None else (
-            "uploaded_price_fallback" if uploaded_price is not None and uploaded_price > 0 else (
-                "local_eod_fallback" if local_price is not None else "unavailable"
-            )
+        if google_latest is not None and google_latest > 0:
+            price_source = "google_finance"
+            price_date = observed_at[:10] if observed_at else local_price_date
+        elif refresh_prices and override_price is not None and override_price > 0:
+            price_source = "amfi_nav"
+            price_date = override_price_date
+        elif refresh_prices and local_price is not None and local_price > 0:
+            price_source = "local_eod"
+            price_date = local_price_date
+        elif uploaded_price is not None and uploaded_price > 0:
+            price_source = "uploaded_price_fallback"
+            price_date = None
+        elif local_price is not None and local_price > 0:
+            price_source = "local_eod_fallback"
+            price_date = local_price_date
+        else:
+            price_source = "unavailable"
+            price_date = None
+        last_close_date = (
+            override_price_date
+            if refresh_prices and google_last_close is None and override_price is not None
+            else local_price_date
         )
         metadata = constituent_lookup.get(symbol, {})
         uploaded_sector = str(row.get(str(mapping.get("sector")), "")).strip() if mapping.get("sector") else ""
@@ -6937,8 +7440,6 @@ def build_portfolio_analysis(
         exclude_from_risk = bool(
             re.search(r"\bncd\b|\bdebenture\b|\bfixed deposit\b", risk_label)
         )
-        history_override = position_history_overrides.get(index, {})
-        override_history = history_override.get("history")
         risk_history_key = (
             f"portfolio-row-{index}"
             if isinstance(override_history, list) and override_history
@@ -6985,9 +7486,21 @@ def build_portfolio_analysis(
                 if not item["reasons"] and item["uploaded_weight"] is not None else None
             )
     elif mapping.get("current_value"):
-        basis = "uploaded_current_value"
+        basis = "refreshed_price_with_uploaded_value_fallback" if refresh_prices else "uploaded_current_value"
         for item in prepared:
-            item["basis_value"] = item["provided_current_value"] if not item["reasons"] else None
+            has_refreshed_price = item.get("price_source") in {"google_finance", "amfi_nav", "local_eod"}
+            item["basis_value"] = (
+                float(item["quantity"]) * float(item["latest_price"])
+                if (
+                    refresh_prices
+                    and not item["reasons"]
+                    and has_refreshed_price
+                    and item.get("quantity") is not None
+                    and float(item["quantity"]) > 0
+                    and item.get("latest_price") is not None
+                )
+                else (item["provided_current_value"] if not item["reasons"] else None)
+            )
     else:
         basis = "quantity_times_latest_close"
         for item in prepared:
@@ -7183,6 +7696,8 @@ def build_portfolio_analysis(
             "excluded_rows": len(positions) - len(eligible),
             "priced_positions": sum(item["latest_price"] is not None for item in positions),
             "google_finance_priced": sum(item["price_source"] == "google_finance" for item in positions),
+            "amfi_nav_priced": sum(item["price_source"] == "amfi_nav" for item in positions),
+            "local_eod_priced": sum(item["price_source"] == "local_eod" for item in positions),
             "uploaded_price_fallback": sum(item["price_source"] == "uploaded_price_fallback" for item in positions),
             "local_eod_fallback": sum(item["price_source"] == "local_eod_fallback" for item in positions),
             "sector_classified": sum(item["sector"] != "Unclassified" for item in eligible),
@@ -7225,8 +7740,12 @@ def build_portfolio_analysis(
         "limitations": [
             "The uploaded file and mapped holdings are processed by the local server for this request and are not written to the database.",
             "Weights are normalized across eligible rows; cash and assets without a mapped row are not inferred.",
-            "Last close uses Google Finance when available and is dated from the corresponding local completed EOD session; it can be delayed or unavailable.",
-            "Current-value and return calculations can use the newest Google Finance quote, with uploaded LTP/NAV and then local completed EOD data as fallbacks.",
+            "Last close uses the approved price source available for that instrument and can be delayed or unavailable.",
+            (
+                "An EOD-triggered revaluation prefers user-enabled Google Finance, reviewed AMFI NAV, and newly stored local EOD prices; uploaded values remain explicit fallbacks."
+                if refresh_prices
+                else "Current-value and return calculations use user-enabled Google Finance first, with uploaded LTP/NAV and then local completed EOD data as fallbacks."
+            ),
             "Asset classes are inferred from instrument names and exchange-price evidence; uncertain holdings remain in Other and are not silently guessed.",
             "Risk ratios use a current-holdings, constant-weight historical backtest rather than the investor's actual transaction history; they require at least 126 aligned sessions and 90% daily portfolio-weight coverage.",
             "Reviewed Direct-Growth mutual-fund mappings use official AMFI NAV history; unmatched funds remain unavailable rather than being assigned a similar scheme.",
@@ -7449,6 +7968,9 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         if path == "/api/dashboard/screener-summary":
             self._send_dashboard_screener_summary()
             return
+        if path == "/api/dashboard/market-story":
+            self._send_dashboard_market_story()
+            return
         if path == "/api/seasonality/local":
             self._send_local_seasonality(urllib.parse.urlsplit(self.path).query)
             return
@@ -7542,6 +8064,62 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         try:
             payload = build_dashboard_screener_summary(
                 self._calculate_local_screener_payload()
+            )
+            self._send_json(HTTPStatus.OK, payload)
+        except ValueError as error:
+            self._send_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"ok": False, "reason": str(error)},
+            )
+
+    def _send_dashboard_market_story(self) -> None:
+        try:
+            with _SESSION_LOCK:
+                cached_breadth = _BREADTH_CACHE.get("payload")
+            nifty500_context = (
+                cached_breadth.get("market_context")
+                if isinstance(cached_breadth, dict) else None
+            )
+            if not isinstance(nifty500_context, dict):
+                stored_context = _get_eod_store().load_latest_workspace_snapshot(
+                    "nifty500-market-context"
+                )
+                nifty500_context = (
+                    stored_context.get("payload")
+                    if isinstance(stored_context, dict) else None
+                )
+            futures_rows = _get_eod_store().load_futures_eod_snapshots()
+            futures_summary = build_dashboard_fno_summary(
+                calculate_futures_oi_summary(futures_rows),
+                stored_history_sessions=len(
+                    {
+                        item["date"]
+                        for item in futures_rows
+                        if isinstance(item.get("date"), date)
+                    }
+                ),
+            )
+            payload = build_dashboard_market_story(
+                build_dashboard_market_sentiment_summary(
+                    self._calculate_sentiment_payload(),
+                    self._calculate_cross_index_validation_payload(),
+                ),
+                build_dashboard_screener_summary(
+                    self._calculate_local_screener_payload()
+                ),
+                futures_summary,
+                self._calculate_regime_validation_payload(
+                    target_index="Nifty 50",
+                    benchmark_index=None,
+                ),
+                self._calculate_local_seasonality_payload(
+                    kind="index",
+                    instrument="Nifty 50",
+                ),
+                build_macro_events_calendar(
+                    today=datetime.now(INDIA_TIMEZONE).date()
+                ),
+                nifty500_context,
             )
             self._send_json(HTTPStatus.OK, payload)
         except ValueError as error:
@@ -8866,6 +9444,35 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             )
 
         rows, as_of, evaluated = calculate_market_breadth(constituents, histories)
+        store = _get_eod_store()
+        index_histories = {
+            str(item["display_name"]): [
+                (row["date"], float(row["close"]))
+                for row in store.load_candles(
+                    kind="index",
+                    display_name=str(item["display_name"]),
+                )
+            ]
+            for item in store.list_instruments(kind="index")
+        }
+        try:
+            market_context = calculate_nifty500_market_context(
+                constituents,
+                histories,
+                index_histories,
+            )
+        except ValueError as error:
+            market_context = {
+                "ok": False,
+                "reason": str(error),
+                "as_of_date": as_of.isoformat(),
+            }
+        if market_context.get("ok") is True:
+            store.save_workspace_snapshot(
+                snapshot_key="nifty500-market-context",
+                as_of_date=as_of,
+                payload=market_context,
+            )
         monthly_returns = calculate_month_to_date_returns(histories, as_of=as_of)
         stock_ytd_by_year = {
             year: build_stock_ytd_table(constituents, histories, as_of=as_of, year=year)
@@ -8888,6 +9495,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             "unmatched_instrument_count": len(missing_symbols),
             "historical_requests": requested,
             "rows": rows,
+            "market_context": market_context,
             "one_day_change_definition": "percentage-point change in share above 20DMA",
             "universe_source": NIFTY500_CONSTITUENTS_URL,
             "price_source": "Kite Connect historical daily candles",
@@ -9988,6 +10596,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         rows = payload.get("rows")
         mapping = payload.get("mapping")
         use_google_finance = payload.get("use_google_finance") is True
+        refresh_prices = payload.get("refresh_prices") is True
         if (
             not isinstance(rows, list)
             or not all(isinstance(row, dict) for row in rows)
@@ -10051,6 +10660,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 gsec_benchmark_history=gsec_history,
                 position_history_overrides=position_history_overrides,
                 valuation_date=valuation_date,
+                refresh_prices=refresh_prices,
             )
         except ValueError as error:
             self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": str(error)})
@@ -10077,6 +10687,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 "amfi_nav_resolved_positions": len(position_history_overrides),
                 "amfi_nav_requested_positions": len(resolved_amfi_by_row),
                 "amfi_nav_failures": amfi_failures,
+                "price_refresh_requested": refresh_prices,
             },
         )
 

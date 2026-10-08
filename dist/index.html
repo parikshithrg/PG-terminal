@@ -425,6 +425,8 @@
     .leader-result { color: #25282d; font-size: 14px; font-weight: 650; text-align: right; }
 
     .summary-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+    .summary-grid[hidden] { display: none !important; }
+    .table-wrap[hidden] { display: none !important; }
     .summary-value { margin-top: 10px; color: #21242a; font-size: 24px; font-weight: 730; }
     .summary-meta { margin-top: 5px; color: var(--muted); font-size: 13px; }
     .positive { color: var(--success); }
@@ -468,6 +470,186 @@
     .workspace-summary-actions { padding-top: 14px; border-top: 1px solid var(--line); }
     .workspace-summary-note { max-width: 700px; color: var(--muted); font-size: 12px; }
     .workspace-summary-buttons { display: flex; gap: 8px; }
+
+    .workspace-compact-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 28px;
+      align-items: stretch;
+    }
+    .workspace-compact-section { min-width: 0; margin-top: 0; }
+    .workspace-compact-section .workspace-summary-card {
+      display: flex;
+      height: 100%;
+      min-height: 330px;
+      flex-direction: column;
+      padding: 18px;
+    }
+    .workspace-compact-section .workspace-summary-kicker,
+    .workspace-compact-section .workspace-summary-readiness,
+    .workspace-compact-section .workspace-summary-note,
+    .workspace-compact-section .workspace-summary-buttons .panel-button:not(.primary) { display: none; }
+    .workspace-compact-section .workspace-summary-head { align-items: flex-start; }
+    .workspace-compact-section .workspace-summary-headline { margin-top: 0; font-size: 19px; }
+    .workspace-compact-section .workspace-summary-status {
+      max-width: 150px;
+      white-space: normal;
+      text-align: right;
+      line-height: 1.2;
+      font-size: 11px;
+    }
+    .workspace-compact-section .workspace-summary-copy {
+      display: -webkit-box;
+      min-height: 52px;
+      margin: 11px 0 13px;
+      overflow: hidden;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
+      line-height: 1.4;
+    }
+    .workspace-compact-section .workspace-summary-selector { margin: 10px 0 0; }
+    .workspace-compact-section .workspace-summary-selector label { display: none; }
+    .workspace-compact-section .workspace-summary-selector select { width: 100%; min-width: 0; }
+    .workspace-compact-section .workspace-summary-selector + .workspace-summary-copy { min-height: 39px; margin-top: 9px; -webkit-line-clamp: 2; line-clamp: 2; }
+    .workspace-compact-section .workspace-summary-metrics {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
+    }
+    .workspace-compact-section .workspace-summary-metric { min-width: 0; padding: 9px; }
+    .workspace-compact-section .workspace-summary-metric strong { overflow-wrap: anywhere; font-size: 18px; }
+    .workspace-compact-section .workspace-summary-metric span { display: block; margin-top: 2px; line-height: 1.25; }
+    .workspace-compact-section .workspace-summary-actions {
+      justify-content: flex-end;
+      margin-top: auto;
+      padding-top: 12px;
+    }
+    .workspace-compact-section .workspace-summary-buttons { width: 100%; }
+    .workspace-compact-section .workspace-summary-buttons .primary { width: 100%; }
+
+    .breadth-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 15px;
+    }
+    .breadth-summary-card {
+      min-width: 0;
+      padding: 18px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+    .breadth-summary-card.strongest { border-top: 3px solid var(--success); }
+    .breadth-summary-card.weakest { border-top: 3px solid var(--danger); }
+    .breadth-summary-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+    .breadth-summary-card h3 { margin: 7px 0 4px; color: var(--heading); font-size: 20px; }
+    .breadth-summary-coverage { color: var(--muted); font-size: 12px; }
+    .breadth-summary-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+    .breadth-summary-metric { padding: 10px; background: var(--surface-soft); }
+    .breadth-summary-metric strong { display: block; color: var(--heading); font-size: 19px; }
+    .breadth-summary-metric span { color: var(--muted); font-size: 11px; }
+
+    .market-story {
+      margin-top: 24px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    .market-story-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(220px, 290px);
+      gap: 22px;
+      padding: 24px;
+      background: linear-gradient(135deg, var(--surface-soft), var(--panel));
+    }
+    .market-story-kicker { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .07em; }
+    .market-story h2 { margin: 7px 0 8px; color: var(--heading); font-size: 28px; line-height: 1.2; }
+    .market-story-narrative { max-width: 820px; margin: 0; color: var(--text-soft); font-size: 14px; }
+    .market-story-meta { display: flex; flex-wrap: wrap; gap: 7px 16px; margin-top: 14px; color: var(--muted); font-size: 12px; }
+    .market-story-meta strong { color: var(--text-soft); }
+    .market-story-regime {
+      align-self: stretch;
+      padding: 16px;
+      border-left: 4px solid var(--warning);
+      background: var(--surface-soft);
+    }
+    .market-story-regime-label { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+    .market-story-regime strong { display: block; margin-top: 6px; color: var(--heading); font-size: 24px; }
+    .market-story-regime-score { margin-top: 3px; color: var(--text-soft); font-size: 13px; }
+    .market-story.tone-constructive .market-story-regime,
+    .market-story.tone-recovering .market-story-regime { border-left-color: var(--success); }
+    .market-story.tone-defensive .market-story-regime,
+    .market-story.tone-high_risk .market-story-regime { border-left-color: var(--danger); }
+    .story-score-track,
+    .story-signal-track,
+    .story-allocation-track { position: relative; overflow: hidden; height: 7px; margin-top: 12px; border-radius: 99px; background: var(--line); }
+    .story-score-fill,
+    .story-signal-fill { height: 100%; width: 50%; background: var(--warning); transition: width 240ms ease; }
+    .market-story.tone-constructive .story-score-fill,
+    .market-story.tone-recovering .story-score-fill { background: var(--success); }
+    .market-story.tone-defensive .story-score-fill,
+    .market-story.tone-high_risk .story-score-fill { background: var(--danger); }
+    .story-signal-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .story-signal { min-width: 0; padding: 16px; border-right: 1px solid var(--line); }
+    .story-signal:last-child { border-right: 0; }
+    .story-signal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .story-signal-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+    .story-signal-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--warning); }
+    .story-signal.positive .story-signal-dot,
+    .story-signal.positive .story-signal-fill { background: var(--success); }
+    .story-signal.negative .story-signal-dot,
+    .story-signal.negative .story-signal-fill { background: var(--danger); }
+    .story-signal strong { display: block; margin-top: 8px; color: var(--heading); font-size: 18px; }
+    .story-signal p { min-height: 36px; margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+    .market-story-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr); }
+    .market-story-panel { min-width: 0; padding: 22px 24px; border-bottom: 1px solid var(--line); }
+    .market-story-panel:nth-child(odd) { border-right: 1px solid var(--line); }
+    .market-story-panel h3 { margin: 0; color: var(--heading); font-size: 18px; }
+    .market-story-panel-copy { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+    .story-horizon-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 15px; }
+    .story-horizon { padding: 13px; background: var(--surface-soft); }
+    .story-horizon-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+    .story-horizon strong { display: block; margin: 6px 0 4px; color: var(--heading); font-size: 22px; }
+    .story-horizon span { display: block; color: var(--muted); font-size: 11px; }
+    .story-horizon .negative { color: var(--danger); }
+    .story-portfolio-status { display: inline-block; margin-top: 10px; color: var(--brand-deep); font-size: 12px; font-weight: 650; }
+    .story-portfolio-copy { margin: 8px 0 0; color: var(--text-soft); font-size: 13px; }
+    .story-portfolio-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+    .story-portfolio-metric { padding: 10px; background: var(--surface-soft); }
+    .story-portfolio-metric strong { display: block; color: var(--heading); font-size: 17px; }
+    .story-portfolio-metric span { color: var(--muted); font-size: 11px; }
+    .story-allocation-track { display: flex; height: 9px; }
+    .story-allocation-track span { display: block; height: 100%; }
+    .story-catalyst-list,
+    .story-watch-list { display: grid; gap: 11px; margin-top: 14px; }
+    .story-catalyst,
+    .story-watch { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 11px; align-items: start; }
+    .story-catalyst-date { min-width: 72px; color: var(--brand-deep); font-size: 12px; font-weight: 700; }
+    .story-catalyst strong,
+    .story-watch strong { display: block; color: var(--heading); font-size: 13px; }
+    .story-catalyst span,
+    .story-watch span { color: var(--muted); font-size: 12px; }
+    .story-watch::before { content: ''; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--warning); }
+    .story-seasonality { margin-top: 14px; padding: 12px; background: var(--surface-soft); color: var(--text-soft); font-size: 12px; }
+    .story-relative-strength { padding: 22px 24px; border-bottom: 1px solid var(--line); }
+    .story-relative-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
+    .story-relative-head h3 { margin: 0; color: var(--heading); font-size: 18px; }
+    .story-relative-head p { max-width: 690px; margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+    .story-relative-benchmark { color: var(--text-soft); font-size: 12px; white-space: nowrap; }
+    .story-strength-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 15px; }
+    .story-strength-card { min-width: 0; padding: 14px; background: var(--surface-soft); }
+    .story-strength-card.strongest { box-shadow: inset 0 3px 0 var(--success); }
+    .story-strength-card.weakest { box-shadow: inset 0 3px 0 var(--danger); }
+    .story-strength-label { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+    .story-strength-card strong { display: block; margin-top: 7px; color: var(--heading); font-size: 17px; }
+    .story-strength-card span:last-child { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; }
+    .story-strength-card .positive { color: var(--success); }
+    .story-strength-card .negative { color: var(--danger); }
+    .market-story-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 15px 24px; }
+    .market-story-limit { max-width: 760px; color: var(--muted); font-size: 11px; }
+    .market-story-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
     .section-title {
       margin: 0 0 4px;
@@ -903,6 +1085,15 @@
     @media (max-width: 900px) {
       .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .workspace-summary-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .workspace-compact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .market-story-hero { grid-template-columns: 1fr; }
+      .story-signal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .story-signal { border-bottom: 1px solid var(--line); }
+      .story-signal:nth-child(2n) { border-right: 0; }
+      .story-signal:last-child { grid-column: 1 / -1; border-bottom: 0; }
+      .market-story-grid { grid-template-columns: 1fr; }
+      .market-story-panel:nth-child(odd) { border-right: 0; }
+      .story-strength-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .evidence-grid, .source-state-grid { grid-template-columns: 1fr; }
       .brand-note { display: none; }
       main { padding-inline: 22px; }
@@ -931,10 +1122,15 @@
       .score-guide-grid { grid-template-columns: 1fr; }
       .score-guide-status { display: none; }
       .workspace-summary-actions { align-items: flex-start; flex-direction: column; }
+      .workspace-compact-section .workspace-summary-actions { align-items: stretch; }
+      .market-story-footer { align-items: flex-start; flex-direction: column; }
     }
 
     @media (max-width: 430px) {
       .summary-grid { grid-template-columns: 1fr; }
+      .workspace-compact-grid { grid-template-columns: 1fr; }
+      .workspace-compact-section .workspace-summary-card { min-height: 0; aspect-ratio: auto; }
+      .breadth-summary-grid { grid-template-columns: 1fr; }
       .loan-calculator-grid { grid-template-columns: 1fr; }
       .seasonality-headline-grid { grid-template-columns: 1fr; }
       .action-button { min-height: 32px; padding-inline: 7px; }
@@ -943,6 +1139,21 @@
       .theme-toggle { min-width: 34px; padding-inline: 8px; }
       .theme-toggle-text { display: none; }
       .credential-panel { position: fixed; top: 62px; right: 12px; }
+      .market-story-hero,
+      .market-story-panel,
+      .story-relative-strength,
+      .market-story-footer { padding: 17px; }
+      .market-story h2 { font-size: 23px; }
+      .story-signal-grid,
+      .story-horizon-grid,
+      .story-portfolio-metrics { grid-template-columns: 1fr; }
+      .story-signal,
+      .story-signal:nth-child(2n),
+      .story-signal:last-child { grid-column: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      .story-signal:last-child { border-bottom: 0; }
+      .story-relative-head { align-items: flex-start; flex-direction: column; }
+      .story-relative-benchmark { white-space: normal; }
+      .story-strength-grid { grid-template-columns: 1fr; }
     }
   </style>
   <link rel="stylesheet" href="styles.css">
@@ -990,7 +1201,7 @@
           </form>
         </div>
       </div>
-      <button class="action-button" id="eodUpdateButton" type="button" aria-live="polite" disabled>EOD update</button>
+      <button class="action-button" id="eodUpdateButton" type="button" aria-live="polite" aria-label="Refresh all supported market data and workspace summaries" title="Refresh all supported market data and workspace summaries" disabled>EOD update</button>
     </div>
   </header>
 
@@ -1030,7 +1241,7 @@
             <div class="as-of" id="dashboardAsOf">Connect Kite for current index data</div>
           </div>
 
-        <section class="summary-grid" aria-label="Market summary">
+        <section class="summary-grid" aria-label="Market summary" hidden>
           <article class="summary-card">
             <div class="summary-label">NIFTY 50</div>
             <div class="summary-value" id="nifty50Value">—</div>
@@ -1051,6 +1262,83 @@
             <div class="summary-value" id="niftyEnergyValue">—</div>
             <div class="summary-meta" id="niftyEnergyMeta">Not loaded</div>
           </article>
+        </section>
+
+        <section class="market-story tone-mixed" id="dashboardMarketStory" aria-labelledby="dashboardMarketStoryTitle" aria-live="polite">
+          <div class="market-story-hero">
+            <div>
+              <div class="market-story-kicker">Connected market story · validated local evidence</div>
+              <h2 id="dashboardMarketStoryTitle">Building the current market story…</h2>
+              <p class="market-story-narrative" id="dashboardMarketStoryNarrative">Connecting regime, breadth, price strength, derivatives, historical outcomes, seasonality, events, and the current in-memory portfolio.</p>
+              <div class="market-story-meta">
+                <span><strong>As of</strong> <span id="dashboardStoryAsOf">—</span></span>
+                <span><strong>Evidence confidence</strong> <span id="dashboardStoryConfidence">Loading</span></span>
+                <span><strong>Nifty 50 close</strong> <span id="dashboardStoryClose">—</span></span>
+              </div>
+            </div>
+            <div class="market-story-regime">
+              <span class="market-story-regime-label">Current validated regime</span>
+              <strong id="dashboardStoryRegime">Loading…</strong>
+              <div class="market-story-regime-score" id="dashboardStoryScore">Score —</div>
+              <div class="story-score-track" aria-hidden="true"><div class="story-score-fill" id="dashboardStoryScoreFill"></div></div>
+            </div>
+          </div>
+
+          <div class="story-signal-grid" id="dashboardStorySignals" aria-label="Connected market signals">
+            <article class="story-signal"><div class="story-signal-head"><span class="story-signal-label">Loading</span><i class="story-signal-dot"></i></div><strong>—</strong><p>Waiting for local evidence.</p><div class="story-signal-track"><div class="story-signal-fill"></div></div></article>
+          </div>
+
+          <div class="market-story-grid">
+            <article class="market-story-panel">
+              <h3>What similar regimes showed</h3>
+              <p class="market-story-panel-copy" id="dashboardStoryHistoryNote">Trailing-only historical outcomes are loading.</p>
+              <div class="story-horizon-grid" id="dashboardStoryHorizons"></div>
+            </article>
+            <article class="market-story-panel">
+              <h3>How this maps to the portfolio</h3>
+              <span class="story-portfolio-status" id="dashboardStoryPortfolioStatus">Upload required</span>
+              <p class="story-portfolio-copy" id="dashboardStoryPortfolioCopy">Upload holdings in Portfolio Analysis to connect the market story with asset mix, beta, and drawdown history.</p>
+              <div class="story-allocation-track" id="dashboardStoryAllocation" aria-label="Portfolio asset allocation"></div>
+              <div class="story-portfolio-metrics">
+                <div class="story-portfolio-metric"><strong id="dashboardStoryPortfolioBeta">—</strong><span>Portfolio beta</span></div>
+                <div class="story-portfolio-metric"><strong id="dashboardStoryPortfolioDefensive">—</strong><span>Debt + cash</span></div>
+                <div class="story-portfolio-metric"><strong id="dashboardStoryPortfolioScenario">—</strong><span>20-session analogue sensitivity</span></div>
+              </div>
+            </article>
+            <article class="market-story-panel">
+              <h3>Upcoming catalysts and seasonality</h3>
+              <p class="market-story-panel-copy">Scheduled events can change the story; seasonality remains supporting evidence only.</p>
+              <div class="story-catalyst-list" id="dashboardStoryCatalysts"></div>
+              <div class="story-seasonality" id="dashboardStorySeasonality">Seasonality evidence is loading.</div>
+            </article>
+            <article class="market-story-panel">
+              <h3>What could change the view</h3>
+              <p class="market-story-panel-copy">These are evidence checks, not trade triggers.</p>
+              <div class="story-watch-list" id="dashboardStoryWatchpoints"></div>
+            </article>
+          </div>
+
+          <div class="story-relative-strength" aria-labelledby="dashboardStoryRelativeTitle">
+            <div class="story-relative-head">
+              <div>
+                <h3 id="dashboardStoryRelativeTitle">Where relative strength is concentrated</h3>
+                <p id="dashboardStoryRelativeNote">Comparing aligned 20-session index and equal-weight NIFTY 500 sector returns with Nifty 50.</p>
+              </div>
+              <div class="story-relative-benchmark" id="dashboardStoryRelativeBenchmark">Nifty 50 benchmark · loading</div>
+            </div>
+            <div class="story-strength-grid" id="dashboardStoryRelativeGrid" aria-label="Strongest and weakest relative-strength observations">
+              <article class="story-strength-card"><span class="story-strength-label">Loading</span><strong>—</strong><span>Waiting for the NIFTY 500 EOD context.</span></article>
+            </div>
+          </div>
+
+          <div class="market-story-footer">
+            <div class="market-story-limit" id="dashboardStoryLimit">Historical windows overlap, current-constituent breadth carries survivorship bias, and no result is a forecast or recommendation.</div>
+            <div class="market-story-actions">
+              <button class="panel-button" id="refreshDashboardStoryButton" type="button">Refresh story</button>
+              <button class="panel-button" id="viewStoryPortfolioButton" type="button">Portfolio detail</button>
+              <button class="panel-button primary" id="viewStorySentimentButton" type="button">Market evidence</button>
+            </div>
+          </div>
         </section>
 
         <section class="dashboard-section" aria-labelledby="dashboardPortfolioTitle">
@@ -1084,7 +1372,8 @@
           </div>
         </section>
 
-        <section class="dashboard-section" aria-labelledby="dashboardSentimentTitle">
+        <div class="workspace-compact-grid" aria-label="Workspace summaries">
+        <section class="dashboard-section workspace-compact-section" aria-labelledby="dashboardSentimentTitle">
           <div class="workspace-summary-card">
             <div class="workspace-summary-head">
               <div>
@@ -1116,7 +1405,7 @@
           </div>
         </section>
 
-        <section class="dashboard-section" aria-labelledby="dashboardFnoTitle">
+        <section class="dashboard-section workspace-compact-section" aria-labelledby="dashboardFnoTitle">
           <div class="workspace-summary-card">
             <div class="workspace-summary-head">
               <div>
@@ -1148,7 +1437,7 @@
           </div>
         </section>
 
-        <section class="dashboard-section" aria-labelledby="dashboardScreenerTitle">
+        <section class="dashboard-section workspace-compact-section" aria-labelledby="dashboardScreenerTitle">
           <div class="workspace-summary-card">
             <div class="workspace-summary-head">
               <div>
@@ -1184,7 +1473,7 @@
           </div>
         </section>
 
-        <section class="dashboard-section" aria-labelledby="dashboardSeasonalityTitle">
+        <section class="dashboard-section workspace-compact-section" aria-labelledby="dashboardSeasonalityTitle">
           <div class="workspace-summary-card">
             <div class="workspace-summary-head">
               <div>
@@ -1221,7 +1510,7 @@
           </div>
         </section>
 
-        <section class="dashboard-section" aria-labelledby="dashboardEventsTitle">
+        <section class="dashboard-section workspace-compact-section" aria-labelledby="dashboardEventsTitle">
           <div class="workspace-summary-card">
             <div class="workspace-summary-head">
               <div>
@@ -1252,8 +1541,9 @@
             </div>
           </div>
         </section>
+        </div>
 
-        <section aria-labelledby="marketSnapshotTitle">
+        <section aria-labelledby="marketSnapshotTitle" hidden>
           <div class="section-heading-row">
             <h2 class="section-title" id="marketSnapshotTitle">Market snapshot</h2>
             <button class="panel-button" id="refreshIndexButton" type="button" disabled>Refresh indices</button>
@@ -1274,12 +1564,33 @@
 
         <section class="dashboard-section" aria-labelledby="marketBreadthTitle">
           <div class="section-heading-row">
-            <h2 class="section-title" id="marketBreadthTitle">Market breadth by sector</h2>
+            <h2 class="section-title" id="marketBreadthTitle">Market breadth</h2>
             <button class="panel-button" id="loadBreadthButton" type="button" disabled>Load breadth</button>
           </div>
           <p class="section-note" id="marketBreadthNote">Connect Kite, then load NIFTY 500 breadth from completed daily candles. Universe and industry mapping come from the official NIFTY 500 constituent file.</p>
-          <div class="table-guide"><strong>How to read:</strong> The moving-average percentages show how much of each sector is participating in its trend. Higher values mean broader participation; a positive 1d change means participation improved since the prior session. Read the stock count first—small groups are less representative.</div>
-          <div class="table-wrap">
+          <div class="breadth-summary-grid" aria-label="Strongest and weakest sector participation">
+            <article class="breadth-summary-card strongest">
+              <div class="breadth-summary-label">Strongest participation</div>
+              <h3 id="marketBreadthStrongestSector">Awaiting breadth</h3>
+              <div class="breadth-summary-coverage" id="marketBreadthStrongestCoverage">Run EOD update to evaluate NIFTY 500 sectors.</div>
+              <div class="breadth-summary-metrics">
+                <div class="breadth-summary-metric"><strong id="marketBreadthStrongest20">—</strong><span>Above 20DMA</span></div>
+                <div class="breadth-summary-metric"><strong id="marketBreadthStrongest50">—</strong><span>Above 50DMA</span></div>
+                <div class="breadth-summary-metric"><strong id="marketBreadthStrongest200">—</strong><span>Above 200DMA</span></div>
+              </div>
+            </article>
+            <article class="breadth-summary-card weakest">
+              <div class="breadth-summary-label">Weakest participation</div>
+              <h3 id="marketBreadthWeakestSector">Awaiting breadth</h3>
+              <div class="breadth-summary-coverage" id="marketBreadthWeakestCoverage">Run EOD update to evaluate NIFTY 500 sectors.</div>
+              <div class="breadth-summary-metrics">
+                <div class="breadth-summary-metric"><strong id="marketBreadthWeakest20">—</strong><span>Above 20DMA</span></div>
+                <div class="breadth-summary-metric"><strong id="marketBreadthWeakest50">—</strong><span>Above 50DMA</span></div>
+                <div class="breadth-summary-metric"><strong id="marketBreadthWeakest200">—</strong><span>Above 200DMA</span></div>
+              </div>
+            </article>
+          </div>
+          <div class="table-wrap" hidden>
             <table>
               <thead>
                 <tr>
@@ -2396,6 +2707,9 @@
     const menuButton = document.getElementById('menuButton');
     const scrim = document.getElementById('scrim');
     const dashboardView = document.getElementById('dashboardView');
+    const refreshDashboardStoryButton = document.getElementById('refreshDashboardStoryButton');
+    const viewStoryPortfolioButton = document.getElementById('viewStoryPortfolioButton');
+    const viewStorySentimentButton = document.getElementById('viewStorySentimentButton');
     const viewDashboardPortfolioButton = document.getElementById('viewDashboardPortfolioButton');
     const refreshDashboardSentimentButton = document.getElementById('refreshDashboardSentimentButton');
     const viewMarketSentimentButton = document.getElementById('viewMarketSentimentButton');
@@ -2536,6 +2850,7 @@
     let earningsPayload = null;
     let portfolioPreview = null;
     let portfolioAnalysis = null;
+    let dashboardMarketStory = null;
     let homeLoanTracker = null;
     const displayMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -3156,6 +3471,171 @@
         document.getElementById('futuresOiTableNote').textContent = 'Two observations of the same contract are required. These states do not affect the regime score.';
         document.getElementById('futuresOiSafeguards').textContent = 'Noise and coverage safeguards will appear with data.';
         renderFuturesOiTable();
+      }
+    }
+
+    function dashboardStoryPercent(value, signed = true) {
+      if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
+      const numeric = Number(value);
+      return `${signed && numeric > 0 ? '+' : ''}${numeric.toFixed(2)}%`;
+    }
+
+    function renderDashboardStoryPortfolio(result = portfolioAnalysis, story = dashboardMarketStory) {
+      const status = document.getElementById('dashboardStoryPortfolioStatus');
+      const copy = document.getElementById('dashboardStoryPortfolioCopy');
+      const allocationTrack = document.getElementById('dashboardStoryAllocation');
+      const betaElement = document.getElementById('dashboardStoryPortfolioBeta');
+      const defensiveElement = document.getElementById('dashboardStoryPortfolioDefensive');
+      const scenarioElement = document.getElementById('dashboardStoryPortfolioScenario');
+      if (!result) {
+        status.textContent = 'Upload required';
+        copy.textContent = 'Upload holdings in Portfolio Analysis to connect the market story with asset mix, beta, and drawdown history.';
+        allocationTrack.innerHTML = '';
+        allocationTrack.setAttribute('aria-label', 'Portfolio allocation unavailable');
+        betaElement.textContent = '—';
+        defensiveElement.textContent = '—';
+        scenarioElement.textContent = '—';
+        return;
+      }
+      const allocations = Array.isArray(result.asset_allocation) ? result.asset_allocation : [];
+      const allocationMap = Object.fromEntries(allocations.map((row) => [String(row.asset_class), Number(row.weight_pct || 0)]));
+      const defensiveWeight = Number(allocationMap.Debt || 0) + Number(allocationMap.Cash || 0);
+      const equityWeight = Number(allocationMap.Equity || 0);
+      const risk = result.risk_metrics || {};
+      const beta = risk.status === 'available' && Number.isFinite(Number(risk.beta)) ? Number(risk.beta) : null;
+      const drawdown = risk.status === 'available' ? risk.maximum_drawdown_pct : null;
+      const horizon20 = story && story.historical_analogue && Array.isArray(story.historical_analogue.horizons)
+        ? story.historical_analogue.horizons.find((row) => Number(row.sessions) === 20)
+        : null;
+      const meanSensitivity = beta !== null && horizon20 && Number.isFinite(Number(horizon20.mean_return_pct))
+        ? beta * Number(horizon20.mean_return_pct)
+        : null;
+      const worstSensitivity = beta !== null && horizon20 && Number.isFinite(Number(horizon20.worst_return_pct))
+        ? beta * Number(horizon20.worst_return_pct)
+        : null;
+      status.textContent = beta === null
+        ? 'Current mix available · risk history incomplete'
+        : beta < 0.7 ? 'Lower equity sensitivity' : beta <= 1.2 ? 'Near-market equity sensitivity' : 'Above-market equity sensitivity';
+      const betaText = beta === null ? 'beta is unavailable' : `beta is ${beta.toFixed(2)}`;
+      const drawdownText = drawdown === null || drawdown === undefined ? '' : ` Its current-holdings maximum drawdown was ${dashboardStoryPercent(drawdown, false)}.`;
+      copy.textContent = `The uploaded mix is ${equityWeight.toFixed(2)}% equity and ${defensiveWeight.toFixed(2)}% debt plus cash; ${betaText}. This describes sensitivity, not protection from fund, duration, credit, commodity, or currency risk.${drawdownText}`;
+      allocationTrack.innerHTML = allocations
+        .filter((row) => Number(row.weight_pct) > 0)
+        .map((row) => `<span style="width:${Math.max(0, Math.min(100, Number(row.weight_pct)))}%;background:${portfolioAssetColor(String(row.asset_class || 'Other'))}" title="${escapeHtml(String(row.asset_class || 'Other'))} ${Number(row.weight_pct).toFixed(2)}%"></span>`)
+        .join('');
+      allocationTrack.setAttribute('aria-label', allocations.map((row) => `${row.asset_class} ${Number(row.weight_pct).toFixed(2)}%`).join(', '));
+      betaElement.textContent = beta === null ? '—' : beta.toFixed(2);
+      defensiveElement.textContent = `${defensiveWeight.toFixed(2)}%`;
+      scenarioElement.textContent = meanSensitivity === null
+        ? '—'
+        : `${dashboardStoryPercent(meanSensitivity)} mean · ${dashboardStoryPercent(worstSensitivity)} worst`;
+      scenarioElement.classList.remove('positive', 'negative');
+      if (worstSensitivity !== null) scenarioElement.classList.add(worstSensitivity < 0 ? 'negative' : 'positive');
+    }
+
+    function renderDashboardMarketStory(result) {
+      dashboardMarketStory = result;
+      const shell = document.getElementById('dashboardMarketStory');
+      const regime = result.regime || {};
+      shell.classList.remove('tone-constructive', 'tone-cautious', 'tone-mixed', 'tone-defensive', 'tone-high_risk', 'tone-recovering');
+      shell.classList.add(`tone-${regime.tone || 'mixed'}`);
+      document.getElementById('dashboardMarketStoryTitle').textContent = result.headline || 'Current market story unavailable';
+      document.getElementById('dashboardMarketStoryNarrative').textContent = result.narrative || 'Validated market evidence could not be connected.';
+      document.getElementById('dashboardStoryAsOf').textContent = formatDisplayDate(result.as_of_date);
+      const confidence = result.confidence || {};
+      document.getElementById('dashboardStoryConfidence').textContent = `${String(confidence.label || 'limited').replace(/^./, (value) => value.toUpperCase())} · ${Number(confidence.available_clusters || 0)}/${Number(confidence.total_clusters || 0)} clusters`;
+      document.getElementById('dashboardStoryClose').textContent = regime.close === null || regime.close === undefined ? '—' : formatPrice(regime.close);
+      document.getElementById('dashboardStoryRegime').textContent = regime.label || 'Unclassified';
+      document.getElementById('dashboardStoryScore').textContent = regime.score === null || regime.score === undefined ? 'Score —' : `Score ${Number(regime.score) > 0 ? '+' : ''}${Number(regime.score).toFixed(1)}`;
+      document.getElementById('dashboardStoryScoreFill').style.width = `${Math.max(0, Math.min(100, (Number(regime.score || 0) + 100) / 2))}%`;
+
+      const signals = Array.isArray(result.signals) ? result.signals : [];
+      document.getElementById('dashboardStorySignals').innerHTML = signals.map((signal) => `<article class="story-signal ${escapeHtml(signal.state || 'mixed')}">
+        <div class="story-signal-head"><span class="story-signal-label">${escapeHtml(signal.label || 'Signal')}</span><i class="story-signal-dot" aria-hidden="true"></i></div>
+        <strong>${escapeHtml(signal.value === null || signal.value === undefined ? '—' : String(signal.value))}</strong>
+        <p>${escapeHtml(signal.detail || '')}</p>
+        <div class="story-signal-track" aria-hidden="true"><div class="story-signal-fill" style="width:${Math.max(0, Math.min(100, Number(signal.meter_pct || 0)))}%"></div></div>
+      </article>`).join('');
+
+      const analogue = result.historical_analogue || {};
+      document.getElementById('dashboardStoryHistoryNote').textContent = `${analogue.label || regime.label || 'Current regime'} · ${Number(analogue.sessions_observed || 0).toLocaleString('en-IN')} historical sessions. Forward windows overlap and are descriptive, not forecasts.`;
+      const horizons = Array.isArray(analogue.horizons) ? analogue.horizons : [];
+      document.getElementById('dashboardStoryHorizons').innerHTML = horizons.length
+        ? horizons.map((row) => `<div class="story-horizon">
+          <span class="story-horizon-label">Next ${Number(row.sessions)} sessions</span>
+          <strong class="${stockYtdMetricClass(row.mean_return_pct)}">${dashboardStoryPercent(row.mean_return_pct)}</strong>
+          <span>Mean return · median ${dashboardStoryPercent(row.median_return_pct)}</span>
+          <span>${Number(row.positive_rate_pct || 0).toFixed(1)}% positive · worst <span class="negative">${dashboardStoryPercent(row.worst_return_pct, false)}</span></span>
+          <span>Mean max drawdown ${dashboardStoryPercent(row.mean_max_drawdown_pct, false)}</span>
+        </div>`).join('')
+        : '<div class="story-horizon"><span>Historical analogue unavailable.</span></div>';
+
+      const catalysts = Array.isArray(result.catalysts) ? result.catalysts : [];
+      document.getElementById('dashboardStoryCatalysts').innerHTML = catalysts.length
+        ? catalysts.map((event) => `<div class="story-catalyst"><span class="story-catalyst-date">${formatDisplayDate(String(event.start_at || '').slice(0, 10))}</span><div><strong>${escapeHtml(event.title || 'Scheduled event')}</strong><span>${escapeHtml(event.region || '—')} · ${escapeHtml(String(event.category || '').replaceAll('_', ' '))} · ${Number(event.days_until || 0)} day${Number(event.days_until || 0) === 1 ? '' : 's'}</span></div></div>`).join('')
+        : '<div class="story-catalyst"><span class="story-catalyst-date">—</span><div><strong>No reviewed catalyst</strong><span>The calendar snapshot has no future event.</span></div></div>';
+      const seasonality = result.seasonality || {};
+      const storySeasonalityMedian = seasonality.median_return_pct === null || seasonality.median_return_pct === undefined
+        ? ''
+        : `; median ${dashboardStoryPercent(seasonality.median_return_pct)}`;
+      document.getElementById('dashboardStorySeasonality').textContent = seasonality.average_return_pct === null || seasonality.average_return_pct === undefined
+        ? `${seasonality.month || 'Current-month'} seasonality is unavailable.`
+        : `${seasonality.month}: average ${dashboardStoryPercent(seasonality.average_return_pct)} across ${Number(seasonality.count || 0)} completed years${storySeasonalityMedian}. ${Number(seasonality.holdout_survived || 0)}/12 month effects survived both chronological halves, so this remains weak supporting evidence.`;
+
+      const marketContext = result.market_context || {};
+      const relativeStrength = marketContext.relative_strength || {};
+      const relativeBenchmark = relativeStrength.benchmark || {};
+      const strengthIndices = relativeStrength.indices || {};
+      const strengthSectors = relativeStrength.sectors || {};
+      const strengthRows = [
+        ['Strongest index', strengthIndices.strongest, 'strongest'],
+        ['Weakest index', strengthIndices.weakest, 'weakest'],
+        ['Strongest sector', strengthSectors.strongest, 'strongest'],
+        ['Weakest sector', strengthSectors.weakest, 'weakest'],
+      ];
+      document.getElementById('dashboardStoryRelativeBenchmark').textContent = relativeBenchmark.return_pct === null || relativeBenchmark.return_pct === undefined
+        ? 'Nifty 50 benchmark · EOD update required'
+        : `Nifty 50 · ${dashboardStoryPercent(relativeBenchmark.return_pct)} over ${Number(relativeStrength.window_sessions || 20)} sessions`;
+      document.getElementById('dashboardStoryRelativeNote').textContent = relativeStrength.method
+        || 'Run EOD update to compare aligned index and NIFTY 500 sector returns with Nifty 50.';
+      const availableStrengthRows = strengthRows.filter(([, row]) => row && row.excess_vs_nifty50_pct !== null && row.excess_vs_nifty50_pct !== undefined);
+      document.getElementById('dashboardStoryRelativeGrid').innerHTML = availableStrengthRows.length
+        ? availableStrengthRows.map(([label, row, state]) => {
+          const stockCount = row.stocks_evaluated ? ` · ${Number(row.stocks_evaluated)} stocks` : '';
+          return `<article class="story-strength-card ${state}">
+            <span class="story-strength-label">${escapeHtml(label)}</span>
+            <strong>${escapeHtml(row.name || '—')}</strong>
+            <span><span class="${stockYtdMetricClass(row.excess_vs_nifty50_pct)}">${dashboardStoryPercent(row.excess_vs_nifty50_pct)} vs Nifty 50</span> · return ${dashboardStoryPercent(row.return_pct)}${stockCount}</span>
+          </article>`;
+        }).join('')
+        : '<article class="story-strength-card"><span class="story-strength-label">NIFTY 500 context pending</span><strong>Run EOD update</strong><span>The next completed refresh will store breadth and relative-strength rankings for future sessions.</span></article>';
+      const watchpoints = Array.isArray(result.watchpoints) ? result.watchpoints : [];
+      document.getElementById('dashboardStoryWatchpoints').innerHTML = watchpoints.map((item) => `<div class="story-watch"><div><strong>${escapeHtml(item.label || 'Evidence check')}</strong><span>${escapeHtml(item.text || '')}</span></div></div>`).join('');
+      const limitations = Array.isArray(result.limitations) ? result.limitations : [];
+      document.getElementById('dashboardStoryLimit').textContent = limitations.join(' ');
+      renderDashboardStoryPortfolio(portfolioAnalysis, result);
+    }
+
+    async function loadDashboardMarketStory(showSuccess = false) {
+      refreshDashboardStoryButton.disabled = true;
+      refreshDashboardStoryButton.textContent = 'Refreshing…';
+      try {
+        const response = await fetch('/api/dashboard/market-story', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) throw new Error(result.reason || 'market_story_unavailable');
+        renderDashboardMarketStory(result);
+        if (showSuccess) showNotice(`Market story refreshed through ${formatDisplayDate(result.as_of_date)}.`);
+        return true;
+      } catch (_error) {
+        dashboardMarketStory = null;
+        document.getElementById('dashboardMarketStoryTitle').textContent = 'The connected market story is unavailable';
+        document.getElementById('dashboardMarketStoryNarrative').textContent = 'Run EOD update to rebuild regime, breadth, derivatives, historical, seasonality, and event evidence.';
+        document.getElementById('dashboardStoryConfidence').textContent = 'Unavailable';
+        renderDashboardStoryPortfolio(portfolioAnalysis, null);
+        return false;
+      } finally {
+        refreshDashboardStoryButton.disabled = false;
+        refreshDashboardStoryButton.textContent = 'Refresh story';
       }
     }
 
@@ -4547,6 +5027,13 @@
       eodDatasetStatus.textContent = 'Not updated';
       marketBreadthBody.innerHTML = '<tr><td colspan="6">Connect Kite to load market breadth.</td></tr>';
       marketBreadthNote.textContent = 'Connect Kite, then load NIFTY 500 breadth from completed daily candles. Universe and industry mapping come from the official NIFTY 500 constituent file.';
+      ['Strongest', 'Weakest'].forEach((kind) => {
+        document.getElementById(`marketBreadth${kind}Sector`).textContent = 'Awaiting breadth';
+        document.getElementById(`marketBreadth${kind}Coverage`).textContent = 'Run EOD update to evaluate NIFTY 500 sectors.';
+        ['20', '50', '200'].forEach((window) => {
+          document.getElementById(`marketBreadth${kind}${window}`).textContent = '—';
+        });
+      });
     }
 
     function renderIndexUnavailable(message) {
@@ -4670,11 +5157,43 @@
       updateMarketBreadthSortHeaders();
     }
 
+    function renderMarketBreadthSummary(rows) {
+      const eligible = rows
+        .filter((row) => {
+          const evaluated = Number(row.evaluated || 0);
+          const total = Number(row.stocks || 0);
+          return evaluated >= 5 && total > 0 && evaluated / total >= 0.6;
+        })
+        .map((row) => {
+          const values = [row.above_20dma_pct, row.above_50dma_pct, row.above_200dma_pct]
+            .filter((value) => value !== null && value !== undefined)
+            .map(Number);
+          return values.length ? {...row, participation_score: values.reduce((sum, value) => sum + value, 0) / values.length} : null;
+        })
+        .filter(Boolean)
+        .sort((left, right) => left.participation_score - right.participation_score || String(left.sector).localeCompare(String(right.sector)));
+      const selections = {
+        Strongest: eligible.length ? eligible[eligible.length - 1] : null,
+        Weakest: eligible.length ? eligible[0] : null,
+      };
+      Object.entries(selections).forEach(([kind, row]) => {
+        document.getElementById(`marketBreadth${kind}Sector`).textContent = row ? row.sector : 'Unavailable';
+        document.getElementById(`marketBreadth${kind}Coverage`).textContent = row
+          ? `${Number(row.evaluated).toLocaleString('en-IN')} of ${Number(row.stocks).toLocaleString('en-IN')} sector stocks evaluated · composite participation ${row.participation_score.toFixed(1)}%`
+          : 'No sector has enough completed history.';
+        [['20', 'above_20dma_pct'], ['50', 'above_50dma_pct'], ['200', 'above_200dma_pct']].forEach(([window, key]) => {
+          const value = row && row[key] !== null && row[key] !== undefined ? `${Number(row[key]).toFixed(0)}%` : '—';
+          document.getElementById(`marketBreadth${kind}${window}`).textContent = value;
+        });
+      });
+    }
+
     function renderMarketBreadth(result) {
       marketBreadthRows = [...result.rows];
       renderMarketBreadthRows();
+      renderMarketBreadthSummary(marketBreadthRows);
       const cacheText = result.cache_hit ? ' · cached locally' : '';
-      marketBreadthNote.textContent = `NIFTY 500 breadth as of ${formatDisplayDate(result.as_of_date)}: ${result.evaluated_count}/${result.universe_count} securities evaluated${cacheText}. 1d chg is the percentage-point change in %>20DMA. Prices: Kite daily candles; classification: official NIFTY 500 constituent file.`;
+      marketBreadthNote.textContent = `NIFTY 500 breadth as of ${formatDisplayDate(result.as_of_date)}: ${result.evaluated_count}/${result.universe_count} securities evaluated${cacheText}. Cards rank sectors with at least five evaluated stocks and 60% coverage by their average participation above 20-, 50-, and 200-day moving averages.`;
       eodDatasetStatus.textContent = `Updated through ${formatDisplayDate(result.as_of_date)}`;
     }
 
@@ -5275,11 +5794,14 @@
         document.getElementById('portfolioSummaryNote').textContent += ' The official NIFTY 10Y G-Sec history is currently unavailable, so no bond return is estimated.';
       }
       const googleSourceState = String(result.google_finance_source_status || 'disabled');
-      const priceSourceSummary = googleSourceState === 'available'
-        ? 'Google Finance primary, uploaded LTP/NAV and local EOD fallbacks'
-        : (googleSourceState === 'unavailable'
-          ? 'Google Finance unavailable, uploaded LTP/NAV and local EOD fallbacks'
-          : 'Google Finance off, uploaded LTP/NAV and local EOD prices only');
+      const sourceCoverage = result.coverage || {};
+      const priceSourceSummary = result.price_refresh_requested
+        ? `EOD refresh: ${Number(sourceCoverage.amfi_nav_priced || 0)} AMFI NAV · ${Number(sourceCoverage.local_eod_priced || 0)} local EOD · ${Number(sourceCoverage.google_finance_priced || 0)} Google Finance · ${Number(sourceCoverage.uploaded_price_fallback || 0)} uploaded fallback`
+        : (googleSourceState === 'available'
+          ? 'Google Finance primary, uploaded LTP/NAV and local EOD fallbacks'
+          : (googleSourceState === 'unavailable'
+            ? 'Google Finance unavailable, uploaded LTP/NAV and local EOD fallbacks'
+            : 'Google Finance off, uploaded LTP/NAV and local EOD prices only'));
       document.getElementById('portfolioAsOfNote').textContent = result.as_of_date
         ? `Prices observed through ${formatDisplayDate(result.as_of_date)} · ${priceSourceSummary} · weight basis: ${String(result.weight_basis || '').replaceAll('_', ' ')}.`
         : `Weight basis: ${String(result.weight_basis || '').replaceAll('_', ' ')}. No market price was available.`;
@@ -5295,11 +5817,12 @@
       portfolioIssuesBody.innerHTML = issues.length ? issues.map((row) => `<tr><td>${Number(row.row_number).toLocaleString('en-IN')}</td><td>${escapeHtml(row.symbol)}</td><td>${escapeHtml(String(row.reason).replaceAll('_', ' '))}</td></tr>`).join('')
         : '<tr><td colspan="3">No validation issues were found.</td></tr>';
       document.getElementById('portfolioContractNote').textContent = `${result.contract_version || 'portfolio-analysis-v1'}. ${(result.limitations || []).join(' ')}`;
-      document.getElementById('portfolioUploadStatus').textContent = `${Number(coverage.eligible_positions || 0)} eligible positions · ${Number(coverage.amfi_history_positions || 0)} AMFI histories · ${Number(coverage.google_finance_priced || 0)} Google Finance · ${Number(coverage.uploaded_price_fallback || 0)} uploaded LTP/NAV · ${Number(coverage.local_eod_fallback || 0)} local EOD fallback · data remains in memory only.`;
+      document.getElementById('portfolioUploadStatus').textContent = `${Number(coverage.eligible_positions || 0)} eligible positions · ${Number(coverage.amfi_history_positions || 0)} AMFI histories · ${Number(coverage.amfi_nav_priced || 0)} AMFI current NAV · ${Number(coverage.google_finance_priced || 0)} Google Finance · ${Number(coverage.local_eod_priced || 0)} refreshed local EOD · ${Number(coverage.uploaded_price_fallback || 0)} uploaded fallback · data remains in memory only.`;
       renderDashboardPortfolioSummary(result);
+      renderDashboardStoryPortfolio(result, dashboardMarketStory);
     }
 
-    async function analyzePortfolio() {
+    async function analyzePortfolio(showSuccess = true, refreshPrices = false) {
       if (!portfolioPreview || !Array.isArray(portfolioPreview.rows)) {
         showNotice('Preview a holdings file before analysis.');
         return false;
@@ -5317,6 +5840,7 @@
             rows: portfolioPreview.rows,
             mapping,
             use_google_finance: portfolioGoogleFinanceInput.checked,
+            refresh_prices: refreshPrices,
           }),
         });
         const result = await response.json();
@@ -5325,7 +5849,7 @@
           return false;
         }
         renderPortfolioAnalysis(result);
-        showNotice('Portfolio validation and allocation analysis complete.');
+        if (showSuccess) showNotice('Portfolio validation and allocation analysis complete.');
         return true;
       } catch (_error) {
         showNotice('The local portfolio analysis service is unavailable.');
@@ -5359,6 +5883,7 @@
       document.getElementById('portfolioAsOfNote').textContent = 'Upload a file to calculate normalized holdings weights.';
       document.getElementById('portfolioContractNote').textContent = 'The portfolio-analysis contract has not been loaded.';
       renderDashboardPortfolioSummary(null);
+      renderDashboardStoryPortfolio(null, dashboardMarketStory);
       renderHomeLoanTracker(null);
       setPortfolioTab('holdings');
       showNotice('Portfolio data cleared from browser memory.');
@@ -5492,14 +6017,42 @@
       }
     }
 
+    async function refreshAllWorkspaceViewsAfterEod() {
+      const workspaceTasks = [
+        loadDashboardMarketStory(false),
+        loadDashboardMarketSentimentSummary(false),
+        loadDashboardFnoSummary(false),
+        loadDashboardScreenerSummary(false),
+        loadDashboardSeasonalitySummary(false),
+        loadDashboardEventsSummary(false),
+        loadLocalScreener(false),
+        loadLocalSeasonality(false),
+        loadMacroEventsCalendar(false),
+        loadEarnings(false),
+      ];
+      workspaceTasks.push((async () => {
+        const universeUpdated = await loadRegimeValidationUniverse();
+        if (!universeUpdated || refreshRegimeValidationButton.disabled) return universeUpdated;
+        return loadRegimeValidation(false);
+      })());
+      if (portfolioPreview && Array.isArray(portfolioPreview.rows)) {
+        workspaceTasks.push(analyzePortfolio(false, true));
+      } else {
+        renderDashboardPortfolioSummary(portfolioAnalysis);
+      }
+      const results = await Promise.allSettled(workspaceTasks);
+      return results.every((result) => result.status === 'fulfilled' && result.value !== false);
+    }
+
     async function runEodUpdate() {
       if (!kiteLoginButton.classList.contains('kite-authenticated')) {
         showNotice('Connect Kite before running the EOD update.');
         return;
       }
       eodUpdateButton.disabled = true;
-      const totalStages = 12;
+      const totalStages = 14;
       let completedStages = 0;
+      const failedStages = [];
       const updateProgress = (stage) => {
         const percentage = Math.round(completedStages * 100 / totalStages);
         eodUpdateButton.classList.add('eod-running');
@@ -5512,7 +6065,13 @@
       };
       const runStage = async (stage, operation) => {
         updateProgress(stage);
-        const result = await operation();
+        let result = false;
+        try {
+          result = await operation();
+        } catch (_error) {
+          result = false;
+        }
+        if (result !== true) failedStages.push(stage);
         completedStages += 1;
         updateProgress(`${stage} complete`);
         return result;
@@ -5528,6 +6087,7 @@
         const globalRiskUpdated = await runStage('Updating global risk context', refreshGlobalRisk);
         const futuresOiUpdated = await runStage('Updating futures and open interest', refreshFuturesOi);
         const breadthUpdated = await runStage('Updating NIFTY 500 breadth', loadMarketBreadth);
+        const stockHistoryUpdated = await runStage('Updating five-year NIFTY 500 stock history', () => loadStockYtd(false));
         const monthlyLeadersUpdated = await runStage(
           'Calculating current-month leaders',
           () => breadthUpdated ? loadMonthlyLeaders() : Promise.resolve(false),
@@ -5540,18 +6100,21 @@
           'Saving the sentiment evidence snapshot',
           () => sentimentUpdated ? saveSentimentFactorSnapshot() : Promise.resolve(false),
         );
-        if (indexUpdated && eodIndicesUpdated && institutionalFlowsUpdated && confirmedFpiUpdated && macroContextUpdated && globalRiskUpdated && futuresOiUpdated && breadthUpdated && monthlyLeadersUpdated && historicalLeadersUpdated && sentimentUpdated && factorSnapshotSaved) {
-          showNotice('EOD update completed. Market summaries and sentiment are ready.');
+        const workspacesRefreshed = await runStage('Refreshing every workspace and portfolio story', refreshAllWorkspaceViewsAfterEod);
+        if (indexUpdated && eodIndicesUpdated && institutionalFlowsUpdated && confirmedFpiUpdated && macroContextUpdated && globalRiskUpdated && futuresOiUpdated && breadthUpdated && stockHistoryUpdated && monthlyLeadersUpdated && historicalLeadersUpdated && sentimentUpdated && factorSnapshotSaved && workspacesRefreshed) {
+          showNotice('EOD update completed. All market data, workspaces, and the in-memory portfolio story are refreshed.');
         } else {
-          showNotice('EOD update finished with unavailable data. Review the dashboard and sentiment status.');
+          const failedSummary = failedStages.slice(0, 3).join(' · ');
+          const remaining = Math.max(0, failedStages.length - 3);
+          showNotice(`EOD update completed with ${failedStages.length} unavailable stage${failedStages.length === 1 ? '' : 's'}: ${failedSummary}${remaining ? ` · +${remaining} more` : ''}.`);
         }
       } finally {
         window.setTimeout(() => {
           eodUpdateButton.classList.remove('eod-running');
           eodUpdateButton.style.removeProperty('--eod-progress');
           eodUpdateButton.textContent = 'EOD update';
-          eodUpdateButton.title = '';
-          eodUpdateButton.setAttribute('aria-label', 'Run EOD update');
+          eodUpdateButton.title = 'Refresh all supported market data and workspace summaries';
+          eodUpdateButton.setAttribute('aria-label', 'Refresh all supported market data and workspace summaries');
           eodUpdateButton.disabled = !kiteLoginButton.classList.contains('kite-authenticated');
         }, 900);
       }
@@ -5794,6 +6357,13 @@
     refreshRegimeValidationButton.addEventListener('click', () => loadRegimeValidation(true));
     document.getElementById('loadCrossIndexComparisonButton').addEventListener('click', loadCrossIndexComparison);
     refreshDashboardSentimentButton.addEventListener('click', () => loadDashboardMarketSentimentSummary(true));
+    refreshDashboardStoryButton.addEventListener('click', () => loadDashboardMarketStory(true));
+    viewStoryPortfolioButton.addEventListener('click', () => {
+      document.querySelector('.nav-button[data-page="Portfolio Analysis"]').click();
+    });
+    viewStorySentimentButton.addEventListener('click', () => {
+      document.querySelector('.nav-button[data-page="Market Sentiment"]').click();
+    });
     viewDashboardPortfolioButton.addEventListener('click', () => {
       document.querySelector('.nav-button[data-page="Portfolio Analysis"]').click();
     });
@@ -5923,6 +6493,8 @@
         emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isEarnings || isPortfolio ? '' : button.dataset.page;
         if (isDashboard) {
           renderDashboardPortfolioSummary(portfolioAnalysis);
+          renderDashboardStoryPortfolio(portfolioAnalysis, dashboardMarketStory);
+          loadDashboardMarketStory(false);
           loadDashboardMarketSentimentSummary(false);
           loadDashboardFnoSummary(false);
           loadDashboardScreenerSummary(false);
@@ -5968,6 +6540,8 @@
     updateThemeControl();
     restoreKiteStatus();
     renderDashboardPortfolioSummary(null);
+    renderDashboardStoryPortfolio(null, null);
+    loadDashboardMarketStory(false);
     loadDashboardMarketSentimentSummary(false);
     loadDashboardFnoSummary(false);
     loadDashboardScreenerSummary(false);

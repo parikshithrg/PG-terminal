@@ -19,10 +19,12 @@ from server import (
     classify_network_error,
     completed_history_date,
     calculate_market_breadth,
+    calculate_nifty500_market_context,
     calculate_candidate_regime,
     calculate_domestic_sentiment_core,
     calculate_regime_walk_forward_validation,
     build_dashboard_market_sentiment_summary,
+    build_dashboard_market_story,
     build_dashboard_fno_summary,
     build_dashboard_screener_summary,
     build_dashboard_seasonality_summary,
@@ -644,6 +646,123 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
             result["observations"]["lowest_20d_excess"]["symbol"], "GAMMA"
         )
         self.assertEqual(result["contract_version"], "local-stock-screener-v1")
+
+    def test_dashboard_market_story_connects_current_history_and_catalysts(self):
+        result = build_dashboard_market_story(
+            {
+                "ok": True,
+                "as_of_date": "2026-10-07",
+                "freshness": {"state": "fresh"},
+                "evidence": {"available_clusters": 5, "total_clusters": 6},
+                "futures_short_confirmation": {
+                    "stored_history_sessions": 4,
+                    "history_sessions_required": 252,
+                    "history_ready": False,
+                },
+            },
+            {
+                "ok": True,
+                "benchmark_return_20d_pct": -4.95,
+                "coverage": {"ready": 210},
+                "observations": {"positive_20d": 31},
+            },
+            {
+                "ok": True,
+                "stored_history_sessions": 4,
+                "positioning": {"bullish": 33, "bearish": 87, "unclear": 90},
+            },
+            {
+                "ok": True,
+                "current_state": {
+                    "classification_ready": True,
+                    "as_of_date": "2026-10-07",
+                    "transition_label_key": "weak_market",
+                    "transition_label": "Weak market",
+                    "score": -50.0,
+                    "close": 22603.05,
+                    "evidence": {
+                        "above_50dma_pct": 14.0,
+                        "above_200dma_pct": 14.0,
+                        "realised_volatility_percentile": 55.6,
+                    },
+                },
+                "by_state": [
+                    {
+                        "label_key": "weak_market",
+                        "label": "Weak market",
+                        "sessions": 154,
+                        "horizons": {
+                            5: {"mean_return_pct": 0.3, "median_return_pct": 0.34, "positive_rate_pct": 53.9, "worst_return_pct": -6.11, "mean_max_drawdown_pct": -1.57},
+                            20: {"mean_return_pct": 1.68, "median_return_pct": 1.48, "positive_rate_pct": 67.5, "worst_return_pct": -5.91, "mean_max_drawdown_pct": -3.81},
+                            60: {"mean_return_pct": 3.51, "median_return_pct": 3.35, "positive_rate_pct": 80.5, "worst_return_pct": -11.68, "mean_max_drawdown_pct": -6.07},
+                        },
+                    }
+                ],
+            },
+            {
+                "ok": True,
+                "month_rows": [
+                    {"period": "Oct", "count": 9, "average_return_pct": 1.2, "median_return_pct": 0.8, "positive_months_pct": 66.7}
+                ],
+                "held_out_summary": {"survived": 0},
+            },
+            {
+                "ok": True,
+                "events": [
+                    {
+                        "title": "India CPI",
+                        "start_at": "2026-10-12",
+                        "end_at": None,
+                        "days_until": 5,
+                        "region": "India",
+                        "category": "inflation",
+                        "source_label": "MoSPI",
+                    }
+                ],
+            },
+            {
+                "ok": True,
+                "as_of_date": "2026-10-07",
+                "breadth": {
+                    "official_count": 500,
+                    "evaluated": 492,
+                    "coverage_pct": 98.4,
+                    "above_50dma_pct": 24.0,
+                    "above_200dma_pct": 31.0,
+                    "positive_20d": 126,
+                    "evaluated_20d": 492,
+                },
+                "relative_strength": {
+                    "window_sessions": 20,
+                    "benchmark": {"name": "Nifty 50", "return_pct": -4.95},
+                    "indices": {
+                        "evaluated": 18,
+                        "strongest": {"name": "Nifty FMCG", "return_pct": -1.0, "excess_vs_nifty50_pct": 3.95},
+                        "weakest": {"name": "Nifty IT", "return_pct": -8.0, "excess_vs_nifty50_pct": -3.05},
+                    },
+                    "sectors": {
+                        "evaluated": 20,
+                        "strongest": {"name": "FMCG", "return_pct": -0.5, "excess_vs_nifty50_pct": 4.45, "stocks_evaluated": 25},
+                        "weakest": {"name": "Information Technology", "return_pct": -8.5, "excess_vs_nifty50_pct": -3.55, "stocks_evaluated": 32},
+                    },
+                    "method": "test method",
+                },
+            },
+        )
+        self.assertEqual(result["contract_version"], "dashboard-market-story-v1")
+        self.assertEqual(result["regime"]["key"], "weak_market")
+        self.assertEqual(result["confidence"]["label"], "moderate")
+        self.assertEqual(result["historical_analogue"]["sessions_observed"], 154)
+        self.assertEqual(len(result["historical_analogue"]["horizons"]), 3)
+        self.assertEqual(result["seasonality"]["month"], "Oct")
+        self.assertEqual(result["catalysts"][0]["title"], "India CPI")
+        self.assertEqual(result["signals"][1]["value"], "24% / 31%")
+        self.assertIn("NIFTY 500", result["signals"][1]["detail"])
+        self.assertEqual(
+            result["market_context"]["relative_strength"]["indices"]["strongest"]["name"],
+            "Nifty FMCG",
+        )
+        self.assertIn("narrow", result["headline"])
 
     def test_news_events_foundation_keeps_unsourced_live_items_empty(self):
         result = build_news_events_workspace(
@@ -1485,6 +1604,37 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "historical_month_data_unavailable"):
             rank_historical_month_averages({"EMPTY": (float("nan"), 10)})
 
+    def test_nifty500_context_extends_breadth_and_ranks_relative_strength(self):
+        start = date(2026, 3, 17)
+        sessions = [start + timedelta(days=offset) for offset in range(205)]
+        constituents = [
+            {"symbol": "ALPHA", "name": "Alpha", "sector": "Technology"},
+            {"symbol": "BETA", "name": "Beta", "sector": "Banks"},
+            {"symbol": "GAMMA", "name": "Gamma", "sector": "Technology"},
+        ]
+        stock_histories = {
+            "ALPHA": [(session, 100 + offset * 1.0) for offset, session in enumerate(sessions)],
+            "BETA": [(session, 200 - offset * 0.25) for offset, session in enumerate(sessions)],
+            "GAMMA": [(session, 100 + offset * 0.5) for offset, session in enumerate(sessions)],
+        }
+        index_histories = {
+            "Nifty 50": [(session, 100 + offset * 0.2) for offset, session in enumerate(sessions)],
+            "Nifty IT": [(session, 100 + offset * 0.5) for offset, session in enumerate(sessions)],
+            "Nifty Bank": [(session, 100 + offset * 0.05) for offset, session in enumerate(sessions)],
+        }
+        result = calculate_nifty500_market_context(
+            constituents,
+            stock_histories,
+            index_histories,
+        )
+        self.assertEqual(result["breadth"]["official_count"], 3)
+        self.assertEqual(result["breadth"]["evaluated"], 3)
+        self.assertEqual(result["breadth"]["above_50dma_pct"], 66.7)
+        self.assertEqual(result["relative_strength"]["indices"]["strongest"]["name"], "Nifty IT")
+        self.assertEqual(result["relative_strength"]["indices"]["weakest"]["name"], "Nifty Bank")
+        self.assertEqual(result["relative_strength"]["sectors"]["strongest"]["name"], "Technology")
+        self.assertEqual(result["relative_strength"]["sectors"]["weakest"]["name"], "Banks")
+
     def test_market_breadth_uses_completed_aligned_histories(self):
         start = date(2026, 1, 1)
         dates = [start + timedelta(days=index) for index in range(201)]
@@ -2140,6 +2290,49 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(position["latest_price"], 378.3)
         self.assertEqual(position["price_source"], "google_finance")
         self.assertEqual(result["coverage"]["google_finance_priced"], 1)
+
+    def test_portfolio_eod_refresh_revalues_positions_from_fresh_sources(self):
+        result = build_portfolio_analysis(
+            [
+                {"Instrument": "ICICI Pru short term fund", "Symbol": "MF", "Qty": "100", "LTP": "70", "Current": "7000"},
+                {"Instrument": "BEL", "Symbol": "BEL", "Qty": "10", "LTP": "350", "Current": "3500"},
+                {"Instrument": "NCD", "Symbol": "SHRIRAM FIN", "Qty": "1", "LTP": "100000", "Current": "100000"},
+            ],
+            {
+                "symbol": "Symbol",
+                "quantity": "Qty",
+                "weight": None,
+                "average_cost": None,
+                "current_value": "Current",
+                "latest_price": "LTP",
+                "entry_date": None,
+                "invested_value": None,
+                "sector": None,
+                "name": "Instrument",
+            },
+            {"BEL": [{"date": date(2026, 10, 8), "close": 380.0}]},
+            position_history_overrides={
+                2: {
+                    "history": [{"date": date(2026, 10, 8), "close": 71.5}],
+                    "scheme_code": "120754",
+                    "source": "AMFI",
+                }
+            },
+            valuation_date=date(2026, 10, 8),
+            refresh_prices=True,
+        )
+        positions = {position["company_name"]: position for position in result["positions"]}
+        self.assertEqual(result["weight_basis"], "refreshed_price_with_uploaded_value_fallback")
+        self.assertEqual(positions["ICICI Pru short term fund"]["latest_price"], 71.5)
+        self.assertEqual(positions["ICICI Pru short term fund"]["current_value"], 7150.0)
+        self.assertEqual(positions["ICICI Pru short term fund"]["price_source"], "amfi_nav")
+        self.assertEqual(positions["BEL"]["latest_price"], 380.0)
+        self.assertEqual(positions["BEL"]["current_value"], 3800.0)
+        self.assertEqual(positions["BEL"]["price_source"], "local_eod")
+        self.assertEqual(positions["NCD"]["current_value"], 100000.0)
+        self.assertEqual(positions["NCD"]["price_source"], "uploaded_price_fallback")
+        self.assertEqual(result["coverage"]["amfi_nav_priced"], 1)
+        self.assertEqual(result["coverage"]["local_eod_priced"], 1)
 
     def test_portfolio_summary_calculates_returns_benchmark_and_xirr(self):
         result = build_portfolio_analysis(
