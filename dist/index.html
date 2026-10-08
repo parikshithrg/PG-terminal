@@ -397,6 +397,14 @@
       gap: 14px;
       margin-bottom: 28px;
     }
+    .portfolio-summary-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .portfolio-risk-grid {
+      grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+      margin: 14px 0 12px;
+    }
+    .portfolio-risk-grid .summary-card { min-height: 96px; padding: 14px 15px; }
+    .portfolio-risk-grid .summary-value { font-size: 21px; }
+    .portfolio-risk-section { margin: 22px 0 28px; }
 
     .summary-card {
       min-height: 112px;
@@ -516,6 +524,58 @@
       color: var(--text);
       background: #fff;
     }
+    .portfolio-price-consent {
+      display: grid;
+      gap: 6px;
+      align-content: center;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--surface-soft);
+    }
+    .portfolio-price-consent label {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .portfolio-price-consent input {
+      width: auto;
+      min-height: 0;
+      margin-top: 2px;
+      padding: 0;
+      accent-color: #0ea5c9;
+    }
+    .portfolio-price-consent small { color: var(--muted); line-height: 1.45; }
+    .portfolio-price-date { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .portfolio-asset-section { margin-bottom: 28px; }
+    .portfolio-asset-section h2,
+    .portfolio-performance-title { margin: 0 0 4px; color: #2b2e33; font-size: 17px; }
+    .portfolio-asset-bar {
+      display: flex;
+      width: 100%;
+      height: 18px;
+      margin-top: 14px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface-soft);
+    }
+    .portfolio-asset-segment { min-width: 2px; height: 100%; }
+    .portfolio-asset-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+      gap: 10px;
+      margin: 12px 0;
+    }
+    .portfolio-asset-card { padding: 12px 13px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+    .portfolio-asset-label { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
+    .portfolio-asset-swatch { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+    .portfolio-asset-card strong { display: block; margin-top: 7px; color: var(--heading); font-size: 20px; }
+    .portfolio-asset-card small { display: block; margin-top: 3px; color: var(--muted); line-height: 1.4; }
     .universe-source { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 12px; }
     .universe-action-row {
       grid-column: 1 / -1;
@@ -991,6 +1051,37 @@
             <div class="summary-value" id="niftyEnergyValue">—</div>
             <div class="summary-meta" id="niftyEnergyMeta">Not loaded</div>
           </article>
+        </section>
+
+        <section class="dashboard-section" aria-labelledby="dashboardPortfolioTitle">
+          <div class="workspace-summary-card">
+            <div class="workspace-summary-head">
+              <div>
+                <div class="workspace-summary-kicker">Personal performance story · current uploaded holdings</div>
+                <h2 class="workspace-summary-headline" id="dashboardPortfolioTitle">Portfolio</h2>
+              </div>
+              <span class="workspace-summary-status unavailable" id="dashboardPortfolioStatus">Upload required</span>
+            </div>
+            <p class="workspace-summary-copy" id="dashboardPortfolioCopy">Upload the latest holdings file in Portfolio Analysis to bring current returns and benchmark context into this dashboard.</p>
+            <div class="workspace-summary-metrics" aria-label="Portfolio performance summary">
+              <div class="workspace-summary-metric"><strong id="dashboardPortfolioCurrentValue">—</strong><span>Current value</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardPortfolioNetReturn">—</strong><span>Net return</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardPortfolioXirr">—</strong><span>Portfolio XIRR</span></div>
+              <div class="workspace-summary-metric"><strong id="dashboardPortfolioExcess">—</strong><span>Observed excess vs NIFTY 50</span></div>
+            </div>
+            <div class="workspace-summary-readiness">
+              <span><strong>As of</strong> <span id="dashboardPortfolioAsOf">—</span></span>
+              <span><strong>NIFTY 50 matched</strong> <span id="dashboardPortfolioBenchmark">—</span></span>
+              <span><strong>10Y G-Sec matched</strong> <span id="dashboardPortfolioGsec">—</span></span>
+              <span><strong>Risk history</strong> <span id="dashboardPortfolioRiskCoverage">—</span></span>
+            </div>
+            <div class="workspace-summary-actions">
+              <div class="workspace-summary-note" id="dashboardPortfolioNote">The dashboard keeps no copy of your holdings. Portfolio results appear here only after an in-memory analysis in this browser session.</div>
+              <div class="workspace-summary-buttons">
+                <button class="panel-button primary" id="viewDashboardPortfolioButton" type="button">Open portfolio</button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section class="dashboard-section" aria-labelledby="dashboardSentimentTitle">
@@ -2070,7 +2161,7 @@
           <div class="analysis-intro">
             <div>
               <h1 id="portfolioTitle">Portfolio Analysis</h1>
-              <p class="analysis-caption">Local holdings validation, weights, and concentration</p>
+              <p class="analysis-caption">Holdings validation, weights, and current price tracking</p>
             </div>
             <button class="panel-button" id="clearPortfolioButton" type="button">Clear portfolio</button>
           </div>
@@ -2083,18 +2174,54 @@
               <label for="portfolioFileInput">Holdings file</label>
               <input id="portfolioFileInput" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
             </div>
+            <div class="portfolio-price-consent">
+              <label for="portfolioGoogleFinanceInput"><input id="portfolioGoogleFinanceInput" type="checkbox">Use Google Finance for NSE prices</label>
+              <small>When enabled, only the portfolio’s NSE symbols are sent to Google Finance. Quantities, costs, values, names, and the uploaded file stay on this computer.</small>
+            </div>
             <div class="universe-action-row">
               <span class="universe-action-status" id="portfolioUploadStatus">Choose a file and analysis will start automatically.</span>
             </div>
-            <p class="universe-source">PG-terminal automatically recognizes common broker columns for symbol, quantity, weight, average cost, current value, sector, and company name. Uploaded weight is preferred, then current value, then quantity × latest locally stored EOD close.</p>
+            <p class="universe-source">PG-terminal automatically recognizes common broker columns for symbol, quantity, weight, average cost, current value, LTP/NAV, and company name. Uploaded weight is preferred, then current value, then quantity × the latest available price.</p>
           </div>
 
           <div id="portfolioHoldingsPanel" role="tabpanel" aria-labelledby="portfolioHoldingsTab">
-            <section class="summary-grid" aria-label="Portfolio summary">
-              <article class="summary-card"><div class="summary-value" id="portfolioPositionsValue">—</div><div class="summary-meta">Eligible positions</div></article>
-              <article class="summary-card"><div class="summary-value" id="portfolioLargestValue">—</div><div class="summary-meta">Largest position</div></article>
-              <article class="summary-card"><div class="summary-value" id="portfolioTopFiveValue">—</div><div class="summary-meta">Top-five weight</div></article>
-              <article class="summary-card"><div class="summary-value" id="portfolioSectorValue">—</div><div class="summary-meta">Largest sector</div></article>
+            <section class="portfolio-asset-section" aria-labelledby="portfolioAssetTitle">
+              <h2 id="portfolioAssetTitle">Asset allocation</h2>
+              <p class="section-note" id="portfolioAssetNote">Upload holdings to classify the portfolio into equity, debt, commodity, hybrid, cash and other assets.</p>
+              <div class="portfolio-asset-bar" id="portfolioAssetBar" role="img" aria-label="No asset allocation loaded"></div>
+              <div class="portfolio-asset-grid" id="portfolioAssetCards"><article class="portfolio-asset-card"><span class="portfolio-asset-label">No allocation loaded</span><strong>—</strong><small>Upload a portfolio to begin.</small></article></div>
+              <div class="table-guide"><strong>How to read:</strong> Percentages use the same normalized portfolio weights as the position table. Current value is shown when every holding in that asset class has a usable value. Classification uses the instrument name and exchange-price evidence; uncertain holdings remain under Other.</div>
+            </section>
+
+            <h2 class="portfolio-performance-title">Portfolio performance</h2>
+            <section class="summary-grid portfolio-summary-grid" aria-label="Portfolio return summary">
+              <article class="summary-card"><div class="summary-value" id="portfolioInvestedValue">—</div><div class="summary-meta">Total amount invested</div></article>
+              <article class="summary-card"><div class="summary-value" id="portfolioCurrentReturnValue">—</div><div class="summary-meta">Current returns</div></article>
+              <article class="summary-card"><div class="summary-value" id="portfolioNetReturnValue">—</div><div class="summary-meta">Net returns</div></article>
+              <article class="summary-card"><div class="summary-value" id="portfolioBenchmarkReturnValue">—</div><div class="summary-meta">NIFTY 50 matched return</div></article>
+              <article class="summary-card"><div class="summary-value" id="portfolioGsecReturnValue">—</div><div class="summary-meta">10Y G-Sec matched return</div></article>
+              <article class="summary-card"><div class="summary-value" id="portfolioXirrValue">—</div><div class="summary-meta">Portfolio XIRR</div></article>
+            </section>
+            <div class="analysis-note" id="portfolioSummaryNote">Upload holdings with purchase dates and invested amounts to calculate portfolio-level returns, a cash-flow-matched NIFTY 50 comparison, and XIRR.</div>
+
+            <section class="portfolio-risk-section" aria-labelledby="portfolioRiskTitle">
+              <h2 class="portfolio-performance-title" id="portfolioRiskTitle">Risk-adjusted performance</h2>
+              <p class="section-note">Historical ratios use daily returns and compare the portfolio with NIFTY 50.</p>
+              <div class="summary-grid portfolio-risk-grid" aria-label="Portfolio risk ratios">
+                <article class="summary-card"><div class="summary-value" id="portfolioAnnualizedReturnValue">—</div><div class="summary-meta">Annualized return</div></article>
+                <article class="summary-card"><div class="summary-value" id="portfolioVolatilityValue">—</div><div class="summary-meta">Annualized volatility</div></article>
+                <article class="summary-card"><div class="summary-value" id="portfolioSharpeValue">—</div><div class="summary-meta">Sharpe ratio</div></article>
+                <article class="summary-card"><div class="summary-value" id="portfolioSortinoValue">—</div><div class="summary-meta">Sortino ratio</div></article>
+                <article class="summary-card"><div class="summary-value" id="portfolioBetaValue">—</div><div class="summary-meta">Beta vs NIFTY 50</div></article>
+                <article class="summary-card"><div class="summary-value" id="portfolioAlphaValue">—</div><div class="summary-meta">Jensen alpha</div></article>
+                <article class="summary-card"><div class="summary-value" id="portfolioDrawdownValue">—</div><div class="summary-meta">Maximum drawdown</div></article>
+                <article class="summary-card"><div class="summary-value" id="portfolioCalmarValue">—</div><div class="summary-meta">Calmar ratio</div></article>
+                <article class="summary-card"><div class="summary-value" id="portfolioTrackingErrorValue">—</div><div class="summary-meta">Tracking error</div></article>
+                <article class="summary-card"><div class="summary-value" id="portfolioInformationRatioValue">—</div><div class="summary-meta">Information ratio</div></article>
+                <article class="summary-card"><div class="summary-value" id="portfolioCorrelationValue">—</div><div class="summary-meta">NIFTY 50 correlation</div></article>
+              </div>
+              <div class="analysis-note" id="portfolioRiskNote">Upload holdings with sufficient local price history to calculate risk-adjusted performance.</div>
+              <div class="table-guide"><strong>How to read:</strong> Sharpe measures return per unit of total volatility; Sortino focuses on harmful downside variation. Beta measures sensitivity to NIFTY 50, while Jensen alpha estimates return beyond that beta exposure. Maximum drawdown is the largest peak-to-trough loss. Calmar compares annualized return with drawdown. Tracking error and information ratio describe consistency and reward relative to NIFTY 50.</div>
             </section>
 
             <section class="analysis-section">
@@ -2107,21 +2234,14 @@
             <section class="analysis-section">
             <h2>Position allocation</h2>
             <p class="section-note" id="portfolioAsOfNote">Upload a file to calculate normalized holdings weights.</p>
-            <div class="table-guide"><strong>How to read:</strong> Weight is normalized across valid included rows, not necessarily the investor’s entire net worth. Check Status and Price date first. Return since cost is shown only when a positive average cost and a local completed close are both available. NIFTY 500 and F&amp;O columns indicate coverage overlap, not investment suitability.</div>
-            <div class="table-wrap"><table><thead><tr><th>Symbol</th><th>Company</th><th>Sector</th><th>Quantity</th><th>Average cost</th><th>Latest close</th><th>Price date</th><th>Current value</th><th>Weight</th><th>Return since cost</th><th>NIFTY 500</th><th>Local F&amp;O</th><th>Status</th></tr></thead><tbody id="portfolioPositionsBody"><tr><td colspan="13">No portfolio has been analyzed.</td></tr></tbody></table></div>
-            </section>
-
-            <section class="analysis-section">
-            <h2>Sector concentration</h2>
-            <p class="section-note">Sector weights use an automatically detected sector column, otherwise the current official NIFTY 500 classification when available.</p>
-            <div class="table-guide"><strong>How to read:</strong> Larger weights identify where the portfolio is concentrated. Position count alone does not measure diversification because a few large holdings can dominate many small holdings. Unclassified positions remain visible instead of being guessed.</div>
-            <div class="table-wrap"><table><thead><tr><th>Sector</th><th>Weight</th><th>Positions</th></tr></thead><tbody id="portfolioSectorsBody"><tr><td colspan="3">No sector allocation available.</td></tr></tbody></table></div>
+            <div class="table-guide"><strong>How to read:</strong> Last close is the prior completed-session close, with its date shown below the value. Weight is normalized across valid included rows, not necessarily the investor’s entire net worth. Check Status for the valuation-price source; uploaded LTP/NAV and local EOD prices are explicit fallbacks. Return since cost requires a positive average cost and an available valuation price.</div>
+            <div class="table-wrap"><table><thead><tr><th>Symbol</th><th>Company</th><th>Quantity</th><th>Average cost</th><th>Last close<br><small>Date</small></th><th>Current value</th><th>Weight</th><th>Return since cost</th><th>Status</th></tr></thead><tbody id="portfolioPositionsBody"><tr><td colspan="9">No portfolio has been analyzed.</td></tr></tbody></table></div>
             </section>
 
             <section class="analysis-section">
             <h2>Validation issues</h2>
             <p class="section-note">Rows with duplicate symbols, invalid quantities or weights, or unavailable prices are never silently repaired.</p>
-            <div class="table-guide"><strong>How to read:</strong> Correct the listed source row and preview the file again. Duplicate symbols are excluded as a group so they cannot distort allocation. A missing price matters only when quantity × local close is the selected weight basis.</div>
+            <div class="table-guide"><strong>How to read:</strong> Correct the listed source row and preview the file again. Duplicate symbols are excluded as a group so they cannot distort allocation. A missing valuation price matters only when quantity × price is the selected weight basis.</div>
             <div class="table-wrap"><table><thead><tr><th>Source row</th><th>Symbol</th><th>Issue</th></tr></thead><tbody id="portfolioIssuesBody"><tr><td colspan="3">No validation run yet.</td></tr></tbody></table></div>
             </section>
 
@@ -2276,6 +2396,7 @@
     const menuButton = document.getElementById('menuButton');
     const scrim = document.getElementById('scrim');
     const dashboardView = document.getElementById('dashboardView');
+    const viewDashboardPortfolioButton = document.getElementById('viewDashboardPortfolioButton');
     const refreshDashboardSentimentButton = document.getElementById('refreshDashboardSentimentButton');
     const viewMarketSentimentButton = document.getElementById('viewMarketSentimentButton');
     const refreshDashboardFnoButton = document.getElementById('refreshDashboardFnoButton');
@@ -2312,9 +2433,9 @@
     const earningsBody = document.getElementById('earningsBody');
     const portfolioView = document.getElementById('portfolioView');
     const portfolioFileInput = document.getElementById('portfolioFileInput');
+    const portfolioGoogleFinanceInput = document.getElementById('portfolioGoogleFinanceInput');
     const clearPortfolioButton = document.getElementById('clearPortfolioButton');
     const portfolioPositionsBody = document.getElementById('portfolioPositionsBody');
-    const portfolioSectorsBody = document.getElementById('portfolioSectorsBody');
     const portfolioIssuesBody = document.getElementById('portfolioIssuesBody');
     const portfolioHoldingsTab = document.getElementById('portfolioHoldingsTab');
     const portfolioLoanTab = document.getElementById('portfolioLoanTab');
@@ -4888,7 +5009,15 @@
       const rows = Array.isArray(result.sample_rows) ? result.sample_rows : [];
       document.getElementById('portfolioPreviewHead').innerHTML = `<tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr>`;
       document.getElementById('portfolioPreviewBody').innerHTML = rows.length
-        ? rows.map((row) => `<tr>${headers.map((header) => `<td>${escapeHtml(row[header] ?? '')}</td>`).join('')}</tr>`).join('')
+        ? rows.map((row) => `<tr>${headers.map((header) => {
+          const value = row[header];
+          const percentageHeader = /%|percent|percentage/i.test(String(header));
+          const numericValue = typeof value === 'number' ? value : Number(String(value ?? '').replaceAll(',', '').trim());
+          const displayValue = percentageHeader && Number.isFinite(numericValue)
+            ? `${(Math.abs(numericValue) <= 1 ? numericValue * 100 : numericValue).toLocaleString('en-IN', { maximumFractionDigits: 2 })}%`
+            : (value ?? '');
+          return `<td>${escapeHtml(displayValue)}</td>`;
+        }).join('')}</tr>`).join('')
         : `<tr><td colspan="${Math.max(1, headers.length)}">No non-empty rows found.</td></tr>`;
       const sheet = result.sheet_name ? ` · sheet ${result.sheet_name}` : '';
       const mapping = result.detected_mapping || {};
@@ -4947,36 +5076,227 @@
       return currency ? `₹${formatted}` : formatted;
     }
 
+    function portfolioAssetColor(assetClass) {
+      return ({
+        Equity: '#3478d4',
+        Debt: '#159570',
+        Commodity: '#d49a16',
+        Hybrid: '#8754c7',
+        Cash: '#19a6b8',
+        Other: '#89919c',
+      })[assetClass] || '#89919c';
+    }
+
+    function renderPortfolioAssetAllocation(result) {
+      const allocations = (Array.isArray(result.asset_allocation) ? result.asset_allocation : [])
+        .filter((row) => Number(row.weight_pct) > 0);
+      const assetBar = document.getElementById('portfolioAssetBar');
+      const assetCards = document.getElementById('portfolioAssetCards');
+      if (!allocations.length) {
+        assetBar.innerHTML = '';
+        assetBar.setAttribute('aria-label', 'No asset allocation available');
+        assetCards.innerHTML = '<article class="portfolio-asset-card"><span class="portfolio-asset-label">No allocation available</span><strong>—</strong><small>Eligible portfolio weights are required.</small></article>';
+        document.getElementById('portfolioAssetNote').textContent = 'No eligible holdings were available for asset-class allocation.';
+        return;
+      }
+      assetBar.innerHTML = allocations.map((row) => {
+        const assetClass = String(row.asset_class || 'Other');
+        const weight = Number(row.weight_pct || 0);
+        return `<span class="portfolio-asset-segment" style="width:${Math.max(0, Math.min(100, weight))}% ;background:${portfolioAssetColor(assetClass)}" title="${escapeHtml(assetClass)} ${weight.toFixed(2)}%"></span>`;
+      }).join('');
+      assetBar.setAttribute('aria-label', allocations.map((row) => `${row.asset_class} ${Number(row.weight_pct).toFixed(2)}%`).join(', '));
+      assetCards.innerHTML = allocations.map((row) => {
+        const assetClass = String(row.asset_class || 'Other');
+        const positionCount = Number(row.position_count || 0);
+        const valueText = row.current_value === null || row.current_value === undefined ? 'Current value unavailable' : portfolioNumber(row.current_value, true);
+        return `<article class="portfolio-asset-card"><span class="portfolio-asset-label"><i class="portfolio-asset-swatch" style="background:${portfolioAssetColor(assetClass)}"></i>${escapeHtml(assetClass)}</span><strong>${Number(row.weight_pct).toFixed(2)}%</strong><small>${valueText} · ${positionCount.toLocaleString('en-IN')} position${positionCount === 1 ? '' : 's'}</small></article>`;
+      }).join('');
+      const classifiedPositions = allocations
+        .filter((row) => row.asset_class !== 'Other')
+        .reduce((total, row) => total + Number(row.position_count || 0), 0);
+      const totalPositions = allocations.reduce((total, row) => total + Number(row.position_count || 0), 0);
+      document.getElementById('portfolioAssetNote').textContent = `${classifiedPositions.toLocaleString('en-IN')} of ${totalPositions.toLocaleString('en-IN')} eligible positions were assigned to a recognized asset class. Other remains visible for review.`;
+    }
+
+    function renderPortfolioRiskMetrics(result) {
+      const metrics = result.risk_metrics || {};
+      const coverage = metrics.coverage || {};
+      const values = [
+        ['portfolioAnnualizedReturnValue', metrics.annualized_return_pct, '%', true],
+        ['portfolioVolatilityValue', metrics.annualized_volatility_pct, '%', false],
+        ['portfolioSharpeValue', metrics.sharpe_ratio, '', true],
+        ['portfolioSortinoValue', metrics.sortino_ratio, '', true],
+        ['portfolioBetaValue', metrics.beta, '', false],
+        ['portfolioAlphaValue', metrics.jensen_alpha_pct, '%', true],
+        ['portfolioDrawdownValue', metrics.maximum_drawdown_pct, '%', true],
+        ['portfolioCalmarValue', metrics.calmar_ratio, '', true],
+        ['portfolioTrackingErrorValue', metrics.tracking_error_pct, '%', false],
+        ['portfolioInformationRatioValue', metrics.information_ratio, '', true],
+        ['portfolioCorrelationValue', metrics.correlation, '', false],
+      ];
+      values.forEach(([id, value, suffix, directional]) => {
+        const element = document.getElementById(id);
+        element.classList.remove('positive', 'negative');
+        if (value === null || value === undefined) {
+          element.textContent = '—';
+          return;
+        }
+        const numeric = Number(value);
+        element.textContent = `${directional && numeric > 0 ? '+' : ''}${numeric.toFixed(2)}${suffix}`;
+        if (directional) element.classList.add(numeric >= 0 ? 'positive' : 'negative');
+      });
+      const historicalPositions = Number(coverage.historical_positions || 0);
+      const requiredPositions = Number(coverage.required_positions || 0);
+      const historyWeight = Number(coverage.historical_weight_pct || 0);
+      const minimumWeight = Number(coverage.minimum_weight_pct || 90);
+      const minimumSessions = Number(coverage.minimum_sessions || 126);
+      const excludedPositions = Number(coverage.excluded_positions || 0);
+      const excludedWeight = Number(coverage.excluded_weight_pct || 0);
+      const exclusionText = excludedPositions
+        ? ` ${excludedPositions.toLocaleString('en-IN')} non-mark-to-market debt position${excludedPositions === 1 ? '' : 's'} (${excludedWeight.toFixed(2)}% of the uploaded portfolio) ${excludedPositions === 1 ? 'is' : 'are'} excluded from these ratios.`
+        : '';
+      if (metrics.status === 'available') {
+        document.getElementById('portfolioRiskNote').textContent = `Current-holdings constant-weight backtest over ${Number(metrics.sessions || 0).toLocaleString('en-IN')} aligned sessions, ${formatDisplayDate(metrics.start_date)} to ${formatDisplayDate(metrics.end_date)}. Daily price coverage was at least ${Number(coverage.minimum_daily_weight_pct || 0).toFixed(2)}%. Sharpe, Sortino and alpha use the disclosed ${Number(metrics.risk_free_annual_pct || 0).toFixed(2)}% annual risk-free assumption; beta, alpha, tracking error and information ratio use NIFTY 50.${exclusionText}`;
+      } else {
+        document.getElementById('portfolioRiskNote').textContent = `Ratios are unavailable because usable histories cover ${historicalPositions.toLocaleString('en-IN')} of ${requiredPositions.toLocaleString('en-IN')} included positions and ${historyWeight.toFixed(2)}% of included portfolio weight. At least ${minimumWeight.toFixed(2)}% weight coverage and ${minimumSessions.toLocaleString('en-IN')} aligned sessions are required. Uploaded LTP/NAV values are sufficient for current returns, but not for historical risk ratios.${exclusionText}`;
+      }
+    }
+
+    function renderDashboardPortfolioSummary(result) {
+      const status = document.getElementById('dashboardPortfolioStatus');
+      const metricIds = [
+        'dashboardPortfolioCurrentValue',
+        'dashboardPortfolioNetReturn',
+        'dashboardPortfolioXirr',
+        'dashboardPortfolioExcess',
+      ];
+      const setMetric = (id, value, display, directional = false) => {
+        const element = document.getElementById(id);
+        element.classList.remove('positive', 'negative');
+        element.textContent = value === null || value === undefined ? '—' : display;
+        if (directional && value !== null && value !== undefined) {
+          element.classList.add(Number(value) >= 0 ? 'positive' : 'negative');
+        }
+      };
+      if (!result) {
+        status.textContent = 'Upload required';
+        status.className = 'workspace-summary-status unavailable';
+        document.getElementById('dashboardPortfolioCopy').textContent = 'Upload the latest holdings file in Portfolio Analysis to bring current returns and benchmark context into this dashboard.';
+        metricIds.forEach((id) => setMetric(id, null, '—'));
+        document.getElementById('dashboardPortfolioAsOf').textContent = '—';
+        document.getElementById('dashboardPortfolioBenchmark').textContent = '—';
+        document.getElementById('dashboardPortfolioGsec').textContent = '—';
+        document.getElementById('dashboardPortfolioRiskCoverage').textContent = '—';
+        document.getElementById('dashboardPortfolioNote').textContent = 'The dashboard keeps no copy of your holdings. Portfolio results appear here only after an in-memory analysis in this browser session.';
+        return;
+      }
+
+      const summary = result.portfolio_summary || {};
+      const benchmark = result.benchmark || {};
+      const gsec = result.gsec_benchmark || {};
+      const risk = result.risk_metrics || {};
+      const riskCoverage = risk.coverage || {};
+      const netReturn = summary.net_return_pct;
+      const benchmarkReturn = benchmark.return_pct;
+      const excessReturn = netReturn === null || netReturn === undefined || benchmarkReturn === null || benchmarkReturn === undefined
+        ? null
+        : Number(netReturn) - Number(benchmarkReturn);
+      const currentValue = summary.current_value;
+      const currentReturn = summary.current_return;
+      const invested = summary.total_invested;
+
+      status.textContent = excessReturn === null
+        ? 'Comparison incomplete'
+        : excessReturn >= 0 ? 'Ahead of matched NIFTY 50' : 'Behind matched NIFTY 50';
+      status.className = `workspace-summary-status ${excessReturn === null ? '' : excessReturn >= 0 ? 'ready' : 'defensive'}`.trim();
+      setMetric('dashboardPortfolioCurrentValue', currentValue, portfolioNumber(currentValue, true));
+      setMetric('dashboardPortfolioNetReturn', netReturn, stockYtdMetric(netReturn), true);
+      setMetric('dashboardPortfolioXirr', summary.portfolio_xirr_pct, stockYtdMetric(summary.portfolio_xirr_pct), true);
+      setMetric(
+        'dashboardPortfolioExcess',
+        excessReturn,
+        excessReturn === null ? '—' : `${excessReturn > 0 ? '+' : ''}${excessReturn.toFixed(2)} pt`,
+        true,
+      );
+      document.getElementById('dashboardPortfolioAsOf').textContent = formatDisplayDate(summary.valuation_date || result.as_of_date);
+      document.getElementById('dashboardPortfolioBenchmark').textContent = stockYtdMetric(benchmarkReturn);
+      document.getElementById('dashboardPortfolioGsec').textContent = stockYtdMetric(gsec.return_pct);
+      document.getElementById('dashboardPortfolioRiskCoverage').textContent = risk.status === 'available'
+        ? `${Number(riskCoverage.historical_weight_pct || 0).toFixed(2)}% · ${Number(risk.sessions || 0).toLocaleString('en-IN')} sessions`
+        : 'Not yet sufficient';
+
+      const returnAmount = currentReturn === null || currentReturn === undefined
+        ? 'an unavailable return amount'
+        : `${Number(currentReturn) >= 0 ? '+' : '-'}${portfolioNumber(Math.abs(Number(currentReturn)), true)}`;
+      const investedText = invested === null || invested === undefined ? 'the analyzed capital' : `${portfolioNumber(invested, true)} invested`;
+      const benchmarkStory = excessReturn === null
+        ? 'The matched NIFTY 50 comparison is incomplete.'
+        : `The cash-flow-matched NIFTY 50 return is ${stockYtdMetric(benchmarkReturn)}, leaving ${excessReturn >= 0 ? '+' : ''}${excessReturn.toFixed(2)} percentage points of observed excess return.`;
+      document.getElementById('dashboardPortfolioCopy').textContent = `The portfolio is ${stockYtdMetric(netReturn)} (${returnAmount}) on ${investedText}. ${benchmarkStory}`;
+
+      if (risk.status === 'available') {
+        document.getElementById('dashboardPortfolioNote').textContent = `Risk context: beta ${Number(risk.beta).toFixed(2)} · Sharpe ${Number(risk.sharpe_ratio).toFixed(2)} · maximum drawdown ${stockYtdMetric(risk.maximum_drawdown_pct)}. This is a current-holdings backtest; excluded instruments and a 0% risk-free assumption limit interpretation. Positive excess return is not yet validated alpha.`;
+      } else {
+        document.getElementById('dashboardPortfolioNote').textContent = 'Current returns are available, but the historical coverage threshold for portfolio risk ratios has not been met. Observed excess return is descriptive and is not yet validated alpha.';
+      }
+    }
+
     function renderPortfolioAnalysis(result) {
       portfolioAnalysis = result;
       const coverage = result.coverage || {};
-      const concentration = result.concentration || {};
+      const summary = result.portfolio_summary || {};
+      const benchmark = result.benchmark || {};
+      const gsecBenchmark = result.gsec_benchmark || {};
       const positions = Array.isArray(result.positions) ? result.positions : [];
-      const sectors = Array.isArray(result.sectors) ? result.sectors : [];
       const issues = Array.isArray(result.issues) ? result.issues : [];
-      document.getElementById('portfolioPositionsValue').textContent = Number(coverage.eligible_positions || 0).toLocaleString('en-IN');
-      document.getElementById('portfolioLargestValue').textContent = concentration.largest_position_pct === null || concentration.largest_position_pct === undefined ? '—' : `${Number(concentration.largest_position_pct).toFixed(2)}%`;
-      document.getElementById('portfolioTopFiveValue').textContent = concentration.top_five_pct === null || concentration.top_five_pct === undefined ? '—' : `${Number(concentration.top_five_pct).toFixed(2)}%`;
-      document.getElementById('portfolioSectorValue').textContent = sectors.length ? `${sectors[0].sector} ${Number(sectors[0].weight_pct).toFixed(1)}%` : '—';
-      document.getElementById('portfolioStatus').textContent = `${String(concentration.state || 'not_available').replaceAll('_', ' ')} · ${Number(coverage.excluded_rows || 0)} excluded rows`;
+      renderPortfolioAssetAllocation(result);
+      renderPortfolioRiskMetrics(result);
+      const setReturnMetric = (id, value, display) => {
+        const element = document.getElementById(id);
+        element.textContent = value === null || value === undefined ? '—' : display;
+        element.classList.remove('positive', 'negative');
+        const metricClass = value === null || value === undefined ? '' : stockYtdMetricClass(value);
+        if (metricClass) element.classList.add(metricClass);
+      };
+      document.getElementById('portfolioInvestedValue').textContent = portfolioNumber(summary.total_invested, true);
+      setReturnMetric('portfolioCurrentReturnValue', summary.current_return, summary.current_return > 0 ? `+${portfolioNumber(summary.current_return, true)}` : portfolioNumber(summary.current_return, true));
+      setReturnMetric('portfolioNetReturnValue', summary.net_return_pct, stockYtdMetric(summary.net_return_pct));
+      setReturnMetric('portfolioBenchmarkReturnValue', benchmark.return_pct, stockYtdMetric(benchmark.return_pct));
+      setReturnMetric('portfolioGsecReturnValue', gsecBenchmark.return_pct, stockYtdMetric(gsecBenchmark.return_pct));
+      setReturnMetric('portfolioXirrValue', summary.portfolio_xirr_pct, stockYtdMetric(summary.portfolio_xirr_pct));
+      document.getElementById('portfolioStatus').textContent = `${Number(coverage.eligible_positions || 0)} eligible positions · ${Number(coverage.excluded_rows || 0)} excluded rows`;
+      const requiredPositions = Number(summary.required_positions || 0);
+      const valuedPositions = Number(summary.valued_positions || 0);
+      const datedPositions = Number(summary.dated_positions || 0);
+      document.getElementById('portfolioSummaryNote').textContent = requiredPositions && valuedPositions === requiredPositions && datedPositions === requiredPositions
+        ? `Portfolio totals use all ${requiredPositions.toLocaleString('en-IN')} eligible positions through ${formatDisplayDate(summary.valuation_date)}. NIFTY 50 and 10Y G-Sec returns match each investment amount and entry date; XIRR is the annualized money-weighted portfolio return.`
+        : `Portfolio totals cover ${valuedPositions.toLocaleString('en-IN')} of ${requiredPositions.toLocaleString('en-IN')} eligible positions; ${datedPositions.toLocaleString('en-IN')} have usable purchase dates. Benchmark returns and XIRR remain unavailable until every eligible position has invested value, current value, and a valid purchase date.`;
+      if (result.gsec_benchmark_source_status === 'unavailable') {
+        document.getElementById('portfolioSummaryNote').textContent += ' The official NIFTY 10Y G-Sec history is currently unavailable, so no bond return is estimated.';
+      }
+      const googleSourceState = String(result.google_finance_source_status || 'disabled');
+      const priceSourceSummary = googleSourceState === 'available'
+        ? 'Google Finance primary, uploaded LTP/NAV and local EOD fallbacks'
+        : (googleSourceState === 'unavailable'
+          ? 'Google Finance unavailable, uploaded LTP/NAV and local EOD fallbacks'
+          : 'Google Finance off, uploaded LTP/NAV and local EOD prices only');
       document.getElementById('portfolioAsOfNote').textContent = result.as_of_date
-        ? `Local prices through ${formatDisplayDate(result.as_of_date)} · weight basis: ${String(result.weight_basis || '').replaceAll('_', ' ')}.`
-        : `Weight basis: ${String(result.weight_basis || '').replaceAll('_', ' ')}. No local price date was available.`;
+        ? `Prices observed through ${formatDisplayDate(result.as_of_date)} · ${priceSourceSummary} · weight basis: ${String(result.weight_basis || '').replaceAll('_', ' ')}.`
+        : `Weight basis: ${String(result.weight_basis || '').replaceAll('_', ' ')}. No market price was available.`;
       portfolioPositionsBody.innerHTML = positions.length ? positions.map((row) => `<tr>
-        <td>${escapeHtml(row.symbol || '—')}</td><td>${escapeHtml(row.company_name || '—')}</td><td>${escapeHtml(row.sector || 'Unclassified')}</td>
-        <td>${portfolioNumber(row.quantity)}</td><td>${portfolioNumber(row.average_cost, true)}</td><td>${portfolioNumber(row.latest_price, true)}</td>
-        <td>${row.price_date ? formatDisplayDate(row.price_date) : '—'}</td><td>${portfolioNumber(row.current_value, true)}</td>
+        <td>${escapeHtml(row.symbol || '—')}</td><td>${escapeHtml(row.company_name || '—')}</td>
+        <td>${portfolioNumber(row.quantity)}</td><td>${portfolioNumber(row.average_cost, true)}</td>
+        <td>${portfolioNumber(row.last_close, true)}${row.last_close_date ? `<span class="portfolio-price-date">${escapeHtml(formatDisplayDate(row.last_close_date))}</span>` : ''}</td>
+        <td>${portfolioNumber(row.current_value, true)}</td>
         <td>${row.weight_pct === null || row.weight_pct === undefined ? '—' : `${Number(row.weight_pct).toFixed(2)}%`}</td>
         <td class="${stockYtdMetricClass(row.return_since_average_cost_pct)}">${stockYtdMetric(row.return_since_average_cost_pct)}</td>
-        <td>${row.in_nifty500 ? 'Yes' : 'No / unknown'}</td><td>${row.in_local_fno_universe ? 'Yes' : 'No'}</td>
-        <td>${escapeHtml(String(row.status || 'excluded').replaceAll('_', ' '))}</td></tr>`).join('')
-        : '<tr><td colspan="13">No eligible portfolio positions.</td></tr>';
-      portfolioSectorsBody.innerHTML = sectors.length ? sectors.map((row) => `<tr><td>${escapeHtml(row.sector)}</td><td>${Number(row.weight_pct).toFixed(2)}%</td><td>${Number(row.position_count).toLocaleString('en-IN')}</td></tr>`).join('')
-        : '<tr><td colspan="3">No sector allocation available.</td></tr>';
+        <td>${escapeHtml(String(row.status && row.status !== 'ready' ? row.status : (row.price_source || 'unavailable')).replaceAll('_', ' '))}</td></tr>`).join('')
+        : '<tr><td colspan="9">No eligible portfolio positions.</td></tr>';
       portfolioIssuesBody.innerHTML = issues.length ? issues.map((row) => `<tr><td>${Number(row.row_number).toLocaleString('en-IN')}</td><td>${escapeHtml(row.symbol)}</td><td>${escapeHtml(String(row.reason).replaceAll('_', ' '))}</td></tr>`).join('')
         : '<tr><td colspan="3">No validation issues were found.</td></tr>';
       document.getElementById('portfolioContractNote').textContent = `${result.contract_version || 'portfolio-analysis-v1'}. ${(result.limitations || []).join(' ')}`;
-      document.getElementById('portfolioUploadStatus').textContent = `${Number(coverage.eligible_positions || 0)} eligible positions · ${Number(coverage.priced_positions || 0)} with local prices · data remains in memory only.`;
+      document.getElementById('portfolioUploadStatus').textContent = `${Number(coverage.eligible_positions || 0)} eligible positions · ${Number(coverage.amfi_history_positions || 0)} AMFI histories · ${Number(coverage.google_finance_priced || 0)} Google Finance · ${Number(coverage.uploaded_price_fallback || 0)} uploaded LTP/NAV · ${Number(coverage.local_eod_fallback || 0)} local EOD fallback · data remains in memory only.`;
+      renderDashboardPortfolioSummary(result);
     }
 
     async function analyzePortfolio() {
@@ -4993,7 +5313,11 @@
         const response = await fetch('/api/portfolio/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rows: portfolioPreview.rows, mapping }),
+          body: JSON.stringify({
+            rows: portfolioPreview.rows,
+            mapping,
+            use_google_finance: portfolioGoogleFinanceInput.checked,
+          }),
         });
         const result = await response.json();
         if (!response.ok || result.ok !== true) {
@@ -5014,17 +5338,27 @@
       portfolioAnalysis = null;
       homeLoanTracker = null;
       portfolioFileInput.value = '';
+      portfolioGoogleFinanceInput.checked = false;
       document.getElementById('portfolioStatus').textContent = 'Choose a CSV or XLSX holdings file';
       document.getElementById('portfolioUploadStatus').textContent = 'Choose a file and analysis will start automatically.';
       document.getElementById('portfolioPreviewNote').textContent = 'The first eight non-empty rows will appear here before analysis.';
       document.getElementById('portfolioPreviewHead').innerHTML = '<tr><th>Preview</th></tr>';
       document.getElementById('portfolioPreviewBody').innerHTML = '<tr><td>No file preview loaded.</td></tr>';
-      portfolioPositionsBody.innerHTML = '<tr><td colspan="13">No portfolio has been analyzed.</td></tr>';
-      portfolioSectorsBody.innerHTML = '<tr><td colspan="3">No sector allocation available.</td></tr>';
+      document.getElementById('portfolioAssetBar').innerHTML = '';
+      document.getElementById('portfolioAssetBar').setAttribute('aria-label', 'No asset allocation loaded');
+      document.getElementById('portfolioAssetCards').innerHTML = '<article class="portfolio-asset-card"><span class="portfolio-asset-label">No allocation loaded</span><strong>—</strong><small>Upload a portfolio to begin.</small></article>';
+      document.getElementById('portfolioAssetNote').textContent = 'Upload holdings to classify the portfolio into equity, debt, commodity, hybrid, cash and other assets.';
+      portfolioPositionsBody.innerHTML = '<tr><td colspan="9">No portfolio has been analyzed.</td></tr>';
       portfolioIssuesBody.innerHTML = '<tr><td colspan="3">No validation run yet.</td></tr>';
-      ['portfolioPositionsValue', 'portfolioLargestValue', 'portfolioTopFiveValue', 'portfolioSectorValue'].forEach((id) => { document.getElementById(id).textContent = '—'; });
+      ['portfolioInvestedValue', 'portfolioCurrentReturnValue', 'portfolioNetReturnValue', 'portfolioBenchmarkReturnValue', 'portfolioGsecReturnValue', 'portfolioXirrValue'].forEach((id) => {
+        const element = document.getElementById(id);
+        element.textContent = '—';
+        element.classList.remove('positive', 'negative');
+      });
+      document.getElementById('portfolioSummaryNote').textContent = 'Upload holdings with purchase dates and invested amounts to calculate portfolio-level returns, a cash-flow-matched NIFTY 50 comparison, and XIRR.';
       document.getElementById('portfolioAsOfNote').textContent = 'Upload a file to calculate normalized holdings weights.';
       document.getElementById('portfolioContractNote').textContent = 'The portfolio-analysis contract has not been loaded.';
+      renderDashboardPortfolioSummary(null);
       renderHomeLoanTracker(null);
       setPortfolioTab('holdings');
       showNotice('Portfolio data cleared from browser memory.');
@@ -5460,6 +5794,9 @@
     refreshRegimeValidationButton.addEventListener('click', () => loadRegimeValidation(true));
     document.getElementById('loadCrossIndexComparisonButton').addEventListener('click', loadCrossIndexComparison);
     refreshDashboardSentimentButton.addEventListener('click', () => loadDashboardMarketSentimentSummary(true));
+    viewDashboardPortfolioButton.addEventListener('click', () => {
+      document.querySelector('.nav-button[data-page="Portfolio Analysis"]').click();
+    });
     viewMarketSentimentButton.addEventListener('click', () => {
       document.querySelector('.nav-button[data-page="Market Sentiment"]').click();
     });
@@ -5502,6 +5839,9 @@
     earningsSectorSelect.addEventListener('change', renderEarningsTable);
     earningsSearchInput.addEventListener('input', renderEarningsTable);
     portfolioFileInput.addEventListener('change', previewPortfolioFile);
+    portfolioGoogleFinanceInput.addEventListener('change', () => {
+      if (portfolioPreview && Array.isArray(portfolioPreview.rows)) analyzePortfolio();
+    });
     clearPortfolioButton.addEventListener('click', clearPortfolio);
     portfolioHoldingsTab.addEventListener('click', () => setPortfolioTab('holdings'));
     portfolioLoanTab.addEventListener('click', () => setPortfolioTab('loan'));
@@ -5582,6 +5922,7 @@
         emptyView.hidden = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isEarnings || isPortfolio;
         emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isEarnings || isPortfolio ? '' : button.dataset.page;
         if (isDashboard) {
+          renderDashboardPortfolioSummary(portfolioAnalysis);
           loadDashboardMarketSentimentSummary(false);
           loadDashboardFnoSummary(false);
           loadDashboardScreenerSummary(false);
@@ -5626,6 +5967,7 @@
 
     updateThemeControl();
     restoreKiteStatus();
+    renderDashboardPortfolioSummary(null);
     loadDashboardMarketSentimentSummary(false);
     loadDashboardFnoSummary(false);
     loadDashboardScreenerSummary(false);

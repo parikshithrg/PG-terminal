@@ -15,12 +15,14 @@ import socket
 import ssl
 import threading
 import time
+import http.cookiejar
 import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
 import xml.etree.ElementTree as ET
 from collections import defaultdict, deque
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -46,6 +48,45 @@ NSE_INSTRUMENTS_URL = "https://api.kite.trade/instruments/NSE"
 NFO_INSTRUMENTS_URL = "https://api.kite.trade/instruments/NFO"
 FULL_QUOTE_URL = "https://api.kite.trade/quote"
 NIFTY500_CONSTITUENTS_URL = "https://www.niftyindices.com/IndexConstituent/ind_nifty500list.csv"
+GOOGLE_FINANCE_QUOTE_URL = "https://www.google.com/finance/quote/{symbol}:NSE?hl=en"
+NIFTY_GSEC_HISTORY_PAGE_URL = "https://www.niftyindices.com/reports"
+NIFTY_GSEC_HISTORY_URL = "https://www.niftyindices.com/BackPage/getHistoricaldatatabletoString"
+NIFTY_GSEC_SOURCE_URL = "https://www.niftyindices.com/indices/fixed-income/gsec-indices/nifty-10-yr-benchmark-gsec"
+NIFTY_GSEC_INDEX_NAME = "Nifty 10 yr Benchmark G-Sec"
+AMFI_NAV_HISTORY_URL = "https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx"
+AMFI_NAV_SOURCE_URL = "https://www.amfiindia.com/net-asset-value/nav-download"
+AMFI_PORTFOLIO_SCHEMES = (
+    {
+        "scheme_code": "120754",
+        "amc_id": "20",
+        "name": "ICICI Prudential Short Term Fund - Direct Plan - Growth",
+        "required_terms": ("icici", "short", "term", "fund"),
+    },
+    {
+        "scheme_code": "118632",
+        "amc_id": "21",
+        "name": "Nippon India Large Cap Fund - Direct Plan - Growth Option",
+        "required_terms": ("nippon", "large", "cap"),
+    },
+    {
+        "scheme_code": "120334",
+        "amc_id": "20",
+        "name": "ICICI Prudential Multi Asset Allocation Fund - Direct Plan - Growth",
+        "required_terms": ("icici", "multi", "asset"),
+    },
+    {
+        "scheme_code": "118989",
+        "amc_id": "9",
+        "name": "HDFC Mid Cap Fund - Direct Plan - Growth Option",
+        "required_terms": ("hdfc", "mid", "cap"),
+    },
+    {
+        "scheme_code": "118551",
+        "amc_id": "27",
+        "name": "Franklin U. S. Opportunities Equity Active Fund of Funds - Direct Plan - Growth",
+        "required_terms": ("franklin", "opportunities"),
+    },
+)
 NSE_FII_DII_URL = "https://www.nseindia.com/api/fiidiiTradeReact"
 NSE_FII_DII_SOURCE = "NSE FII/FPI & DII combined-exchange cash-market report"
 NSDL_FPI_MONTHLY_URL = "https://www.fpi.nsdl.co.in/web/Reports/Monthly.aspx"
@@ -427,9 +468,18 @@ MAX_PORTFOLIO_IMPORT_BYTES = 12 * 1024 * 1024
 MAX_PORTFOLIO_FILE_BYTES = 8 * 1024 * 1024
 MAX_PORTFOLIO_ROWS = 5000
 MAX_PORTFOLIO_COLUMNS = 100
+MAX_GOOGLE_FINANCE_RESPONSE_BYTES = 2 * 1024 * 1024
+MAX_GOOGLE_FINANCE_SYMBOLS = 100
+MAX_NIFTY_GSEC_RESPONSE_BYTES = 512 * 1024
+MAX_AMFI_NAV_RESPONSE_BYTES = 8 * 1024 * 1024
 REQUEST_TIMEOUT_SECONDS = 10
 BREADTH_CACHE_SECONDS = 15 * 60
 SEASONALITY_CACHE_SECONDS = 15 * 60
+GOOGLE_FINANCE_CACHE_SECONDS = 5 * 60
+NIFTY_GSEC_CACHE_SECONDS = 6 * 60 * 60
+AMFI_NAV_CACHE_SECONDS = 6 * 60 * 60
+AMFI_NAV_LOOKBACK_DAYS = 300
+AMFI_NAV_CHUNK_DAYS = 90
 HISTORICAL_LOOKBACK_DAYS = 420
 NIFTY500_HISTORY_LOOKBACK_DAYS = 1800
 SEASONALITY_LOOKBACK_YEARS = 10
@@ -478,6 +528,9 @@ _MONTHLY_LEADERS_CACHE: dict[str, object] = {}
 _HISTORICAL_MONTH_LEADERS_CACHE: dict[str, object] = {}
 _REGIME_VALIDATION_CACHE: dict[str, object] = {}
 _CROSS_INDEX_VALIDATION_CACHE: dict[str, object] = {}
+_NIFTY_GSEC_HISTORY_CACHE: dict[str, object] = {}
+_GOOGLE_FINANCE_QUOTE_CACHE: dict[str, dict[str, object]] = {}
+_AMFI_NAV_HISTORY_CACHE: dict[str, object] = {}
 _SESSION_LOCK = threading.Lock()
 _BREADTH_BUILD_LOCK = threading.Lock()
 _HISTORICAL_MONTH_LEADERS_LOCK = threading.Lock()
@@ -5852,6 +5905,18 @@ def infer_portfolio_mapping(
             "marketval", "currentmarketvalue", "presentmarketvalue", "closingvalue",
             "netvalue", "totalvalue", "currval", "cmpvalue", "holdingvaluation",
         ),
+        "latest_price": (
+            "ltp", "latestprice", "currentprice", "marketprice", "lasttradedprice",
+            "cmp", "nav", "currentnav", "latestnav",
+        ),
+        "entry_date": (
+            "entrydate", "purchasedate", "buydate", "investmentdate",
+            "acquisitiondate", "dateofpurchase", "transactiondate",
+        ),
+        "invested_value": (
+            "investedamount", "investmentamount", "investedvalue", "buyvalue",
+            "purchasevalue", "totalcost", "costvalue", "costbasis",
+        ),
         "sector": ("sector", "industry", "industryname", "sectorname"),
         "name": (
             "companyname", "company", "securityname", "instrumentname", "stockname", "name", "instrument",
@@ -5941,6 +6006,788 @@ def _portfolio_number(value: object) -> float | None:
     return result if math.isfinite(result) else None
 
 
+def _portfolio_date(value: object) -> date | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, (int, float)) and math.isfinite(float(value)):
+        serial = float(value)
+        if 1 <= serial <= 100000:
+            return (datetime(1899, 12, 30) + timedelta(days=serial)).date()
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        serial = float(text)
+    except ValueError:
+        serial = None
+    if serial is not None and math.isfinite(serial) and 1 <= serial <= 100000:
+        return (datetime(1899, 12, 30) + timedelta(days=serial)).date()
+    for format_text in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d %b %Y", "%d %B %Y"):
+        try:
+            return datetime.strptime(text, format_text).date()
+        except ValueError:
+            continue
+    return None
+
+
+def classify_portfolio_asset_class(
+    symbol: str,
+    company_name: str,
+    *,
+    has_exchange_evidence: bool = False,
+) -> str:
+    """Classify a holding conservatively from its label and market evidence."""
+    text = re.sub(r"[^a-z0-9]+", " ", f"{symbol} {company_name}".lower()).strip()
+    compact = text.replace(" ", "")
+
+    if any(term in text for term in ("gold", "silver", "commodity")):
+        return "Commodity"
+    if any(term in text for term in (
+        "multi asset", "balanced advantage", "dynamic asset allocation",
+        "aggressive hybrid", "conservative hybrid", "equity savings", "arbitrage",
+        "hybrid fund",
+    )):
+        return "Hybrid"
+    if any(term in text for term in (
+        "cash", "bank balance", "savings account", "sweep account",
+    )):
+        return "Cash"
+    if (
+        re.search(r"\bncd\b|\bbond\b|\bdebenture\b|\bdebt\b|\bgilt\b|\btreasury\b", text)
+        or any(term in text for term in (
+            "fixed deposit", "short term fund", "ultra short", "low duration",
+            "liquid fund", "overnight fund", "money market", "corporate bond",
+            "dynamic bond", "banking and psu", "banking psu", "credit risk",
+            "target maturity", "fixed income", "income fund", "floater fund",
+        ))
+    ):
+        return "Debt"
+    if (
+        has_exchange_evidence
+        or any(term in text for term in (
+            "equity", "large cap", "largecap", "mid cap", "midcap", "small cap",
+            "smallcap", "flexi cap", "flexicap", "multi cap", "multicap",
+            "bluechip", "elss", "index fund", "opportunities", "focused fund",
+            "focussed fund", "value fund", "contra fund", "dividend yield",
+        ))
+        or compact.endswith("bees")
+    ):
+        return "Equity"
+    return "Other"
+
+
+def resolve_portfolio_amfi_scheme(company_name: str) -> dict[str, object] | None:
+    """Resolve a reviewed working-portfolio label to one exact AMFI scheme."""
+    normalized = set(re.findall(r"[a-z0-9]+", str(company_name).lower()))
+    for scheme in AMFI_PORTFOLIO_SCHEMES:
+        if all(term in normalized for term in scheme["required_terms"]):
+            return {
+                key: value
+                for key, value in scheme.items()
+                if key != "required_terms"
+            }
+    return None
+
+
+def parse_amfi_nav_history_text(
+    text: str,
+    requested_scheme_codes: set[str],
+) -> dict[str, list[dict[str, object]]]:
+    """Parse AMFI's semicolon report while tolerating its current column variants."""
+    requested = {str(code).strip() for code in requested_scheme_codes if str(code).strip()}
+    rows_by_scheme: dict[str, dict[date, dict[str, object]]] = {
+        code: {} for code in requested
+    }
+    for line in text.splitlines():
+        fields = [field.strip() for field in line.split(";")]
+        if len(fields) < 4 or fields[0] not in requested:
+            continue
+        nav = _portfolio_number(fields[-2])
+        try:
+            session_date = datetime.strptime(fields[-1], "%d-%b-%Y").date()
+        except ValueError:
+            continue
+        if nav is None or nav <= 0:
+            continue
+        rows_by_scheme[fields[0]][session_date] = {
+            "date": session_date,
+            "close": nav,
+        }
+    return {
+        code: [by_date[key] for key in sorted(by_date)]
+        for code, by_date in rows_by_scheme.items()
+    }
+
+
+def fetch_amfi_portfolio_nav_histories(
+    schemes: list[dict[str, object]],
+    through_date: date,
+    *,
+    lookback_days: int = AMFI_NAV_LOOKBACK_DAYS,
+) -> tuple[dict[str, list[dict[str, object]]], dict[str, str]]:
+    """Fetch bounded official NAV history for reviewed portfolio schemes."""
+    requested = {
+        str(scheme.get("scheme_code") or ""): str(scheme.get("amc_id") or "")
+        for scheme in schemes
+        if str(scheme.get("scheme_code") or "") and str(scheme.get("amc_id") or "")
+    }
+    if not requested:
+        return {}, {}
+    start_date = through_date - timedelta(days=max(180, min(int(lookback_days), 730)))
+    cache_key = ":".join((start_date.isoformat(), through_date.isoformat(), *sorted(requested)))
+    with _SESSION_LOCK:
+        cached = _AMFI_NAV_HISTORY_CACHE.get(cache_key)
+        if cached and time.monotonic() - float(cached.get("created_at", 0)) < AMFI_NAV_CACHE_SECONDS:
+            histories = cached.get("histories")
+            failures = cached.get("failures")
+            if isinstance(histories, dict) and isinstance(failures, dict):
+                return {
+                    str(code): [dict(row) for row in rows if isinstance(row, dict)]
+                    for code, rows in histories.items() if isinstance(rows, list)
+                }, {str(code): str(reason) for code, reason in failures.items()}
+
+    codes_by_amc: dict[str, set[str]] = defaultdict(set)
+    for code, amc_id in requested.items():
+        codes_by_amc[amc_id].add(code)
+
+    def fetch_amc(amc_id: str, codes: set[str]) -> tuple[dict[str, list[dict[str, object]]], dict[str, str]]:
+        merged: dict[str, dict[date, dict[str, object]]] = {code: {} for code in codes}
+        failures: dict[str, str] = {}
+        chunk_start = start_date
+        while chunk_start <= through_date:
+            chunk_end = min(chunk_start + timedelta(days=AMFI_NAV_CHUNK_DAYS - 1), through_date)
+            query = urllib.parse.urlencode({
+                "mf": amc_id,
+                "tp": "1",
+                "frmdt": chunk_start.strftime("%d-%b-%Y"),
+                "todt": chunk_end.strftime("%d-%b-%Y"),
+            })
+            request = urllib.request.Request(
+                f"{AMFI_NAV_HISTORY_URL}?{query}",
+                headers={
+                    "Accept": "text/plain,*/*;q=0.8",
+                    "Accept-Encoding": "identity",
+                    "Referer": AMFI_NAV_SOURCE_URL,
+                    "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+                },
+                method="GET",
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=45) as response:
+                    final_url = urllib.parse.urlsplit(response.geturl())
+                    if response.status != HTTPStatus.OK or (final_url.hostname or "").lower() != "portal.amfiindia.com":
+                        raise ValueError("amfi_nav_source_unavailable")
+                    body = response.read(MAX_AMFI_NAV_RESPONSE_BYTES + 1)
+                    if len(body) > MAX_AMFI_NAV_RESPONSE_BYTES:
+                        raise ValueError("amfi_nav_response_too_large")
+                text = body.decode("utf-8-sig")
+                if "<html" in text[:500].lower():
+                    raise ValueError("invalid_amfi_nav_response")
+                parsed = parse_amfi_nav_history_text(text, codes)
+                for code, rows in parsed.items():
+                    for row in rows:
+                        merged[code][row["date"]] = row
+            except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout, TimeoutError, OSError):
+                for code in codes:
+                    failures[code] = "amfi_nav_source_unavailable"
+                break
+            except (UnicodeDecodeError, ValueError) as error:
+                reason = str(error) or "invalid_amfi_nav_response"
+                for code in codes:
+                    failures[code] = reason
+                break
+            chunk_start = chunk_end + timedelta(days=1)
+        histories = {
+            code: [by_date[key] for key in sorted(by_date)]
+            for code, by_date in merged.items()
+            if by_date
+        }
+        for code in codes:
+            if code not in histories and code not in failures:
+                failures[code] = "amfi_nav_history_unavailable"
+        return histories, failures
+
+    histories: dict[str, list[dict[str, object]]] = {}
+    failures: dict[str, str] = {}
+    with ThreadPoolExecutor(max_workers=min(4, len(codes_by_amc))) as executor:
+        futures = {
+            executor.submit(fetch_amc, amc_id, codes): amc_id
+            for amc_id, codes in codes_by_amc.items()
+        }
+        for future in as_completed(futures):
+            try:
+                fetched, failed = future.result()
+            except Exception:
+                fetched = {}
+                failed = {
+                    code: "amfi_nav_source_unavailable"
+                    for code in codes_by_amc[futures[future]]
+                }
+            histories.update(fetched)
+            failures.update(failed)
+    with _SESSION_LOCK:
+        _AMFI_NAV_HISTORY_CACHE[cache_key] = {
+            "created_at": time.monotonic(),
+            "histories": {
+                code: [dict(row) for row in rows]
+                for code, rows in histories.items()
+            },
+            "failures": dict(failures),
+        }
+    return histories, failures
+
+
+def calculate_xirr(cash_flows: list[tuple[date, float]]) -> float | None:
+    """Return an annualized money-weighted return percentage for dated cash flows."""
+    valid = [
+        (flow_date, float(amount))
+        for flow_date, amount in cash_flows
+        if isinstance(flow_date, date)
+        and isinstance(amount, (int, float))
+        and not isinstance(amount, bool)
+        and math.isfinite(float(amount))
+        and float(amount) != 0
+    ]
+    if (
+        len(valid) < 2
+        or not any(amount < 0 for _, amount in valid)
+        or not any(amount > 0 for _, amount in valid)
+    ):
+        return None
+    valid.sort(key=lambda item: item[0])
+    start = valid[0][0]
+    if valid[-1][0] <= start:
+        return None
+
+    def xnpv(rate: float) -> float:
+        base = 1 + rate
+        if base <= 0:
+            return math.inf
+        try:
+            return sum(
+                amount / (base ** ((flow_date - start).days / 365.0))
+                for flow_date, amount in valid
+            )
+        except (OverflowError, ZeroDivisionError):
+            return math.inf
+
+    low = -0.9999
+    high = 1.0
+    low_value = xnpv(low)
+    high_value = xnpv(high)
+    while math.isfinite(high_value) and low_value * high_value > 0 and high < 1_000_000:
+        high = high * 2 + 1
+        high_value = xnpv(high)
+    if not math.isfinite(low_value) or not math.isfinite(high_value) or low_value * high_value > 0:
+        return None
+    for _ in range(200):
+        midpoint = (low + high) / 2
+        midpoint_value = xnpv(midpoint)
+        if not math.isfinite(midpoint_value):
+            low = midpoint
+            continue
+        if abs(midpoint_value) < 1e-7:
+            return round(midpoint * 100, 2)
+        if low_value * midpoint_value <= 0:
+            high = midpoint
+            high_value = midpoint_value
+        else:
+            low = midpoint
+            low_value = midpoint_value
+    return round(((low + high) / 2) * 100, 2)
+
+
+def calculate_cashflow_matched_benchmark_return(
+    positions: list[dict[str, object]],
+    benchmark_history: list[dict[str, object]],
+    valuation_date: date,
+) -> dict[str, object]:
+    """Compare dated portfolio investments with matched NIFTY 50 purchases."""
+    history = sorted(
+        (
+            (row.get("date"), _portfolio_number(row.get("close")))
+            for row in benchmark_history
+        ),
+        key=lambda item: item[0] if isinstance(item[0], date) else date.min,
+    )
+    history = [
+        (session_date, close)
+        for session_date, close in history
+        if isinstance(session_date, date)
+        and session_date <= valuation_date
+        and close is not None
+        and close > 0
+    ]
+    if not history:
+        return {"return_pct": None, "covered_positions": 0, "required_positions": len(positions), "as_of_date": None}
+    latest_date, latest_close = history[-1]
+    benchmark_units = 0.0
+    invested_total = 0.0
+    covered = 0
+    for position in positions:
+        entry_date = _portfolio_date(position.get("entry_date"))
+        invested_value = _portfolio_number(position.get("invested_value"))
+        if not isinstance(entry_date, date) or invested_value is None or invested_value <= 0:
+            continue
+        entry_row = next(
+            ((session_date, close) for session_date, close in reversed(history) if session_date <= entry_date),
+            None,
+        )
+        if entry_row is None:
+            continue
+        benchmark_units += invested_value / float(entry_row[1])
+        invested_total += invested_value
+        covered += 1
+    return_pct = (
+        round(((benchmark_units * float(latest_close)) / invested_total - 1) * 100, 2)
+        if covered == len(positions) and invested_total > 0
+        else None
+    )
+    return {
+        "return_pct": return_pct,
+        "covered_positions": covered,
+        "required_positions": len(positions),
+        "as_of_date": latest_date.isoformat(),
+    }
+
+
+def calculate_portfolio_risk_metrics(
+    positions: list[dict[str, object]],
+    price_histories: dict[str, list[dict[str, object]]],
+    benchmark_history: list[dict[str, object]],
+    *,
+    risk_free_annual_pct: float = 0.0,
+    minimum_sessions: int = 126,
+    minimum_weight_coverage_pct: float = 90.0,
+) -> dict[str, object]:
+    """Calculate transparent risk metrics from a current-holdings daily backtest.
+
+    Uploaded holdings are a point-in-time snapshot, not a transaction ledger. The
+    return series therefore keeps today's portfolio weights constant and only
+    reports metrics when daily price coverage clears the explicit gate.
+    """
+    included_positions = [
+        position
+        for position in positions
+        if not bool(position.get("exclude_from_risk"))
+        and _portfolio_number(position.get("weight_pct")) is not None
+        and float(position["weight_pct"]) > 0
+    ]
+    excluded_positions = [
+        position
+        for position in positions
+        if bool(position.get("exclude_from_risk"))
+        and _portfolio_number(position.get("weight_pct")) is not None
+        and float(position["weight_pct"]) > 0
+    ]
+    included_weight = sum(float(position["weight_pct"]) for position in included_positions)
+    required_positions = [
+        {
+            **position,
+            "risk_weight_pct": float(position["weight_pct"]) / included_weight * 100,
+        }
+        for position in included_positions
+    ] if included_weight > 0 else []
+    histories_by_symbol: dict[str, dict[date, float]] = {}
+    historical_positions = 0
+    historical_weight = 0.0
+    for position in required_positions:
+        symbol = str(position.get("symbol") or "").strip().upper()
+        history_key = str(position.get("risk_history_key") or symbol)
+        observations = {
+            row["date"]: float(row["close"])
+            for row in price_histories.get(history_key, [])
+            if isinstance(row.get("date"), date)
+            and _portfolio_number(row.get("close")) is not None
+            and float(row["close"]) > 0
+        }
+        if len(observations) >= 2:
+            histories_by_symbol[history_key] = observations
+            historical_positions += 1
+            historical_weight += float(position["risk_weight_pct"])
+
+    coverage = {
+        "historical_positions": historical_positions,
+        "required_positions": len(required_positions),
+        "historical_weight_pct": round(historical_weight, 2),
+        "minimum_weight_pct": round(float(minimum_weight_coverage_pct), 2),
+        "minimum_sessions": int(minimum_sessions),
+        "excluded_positions": len(excluded_positions),
+        "excluded_weight_pct": round(
+            sum(float(position["weight_pct"]) for position in excluded_positions), 2
+        ),
+    }
+    unavailable = {
+        "status": "unavailable",
+        "method": "current_holdings_constant_weight_backtest",
+        "risk_free_annual_pct": round(float(risk_free_annual_pct), 2),
+        "coverage": coverage,
+        "sessions": 0,
+        "start_date": None,
+        "end_date": None,
+        "annualized_return_pct": None,
+        "annualized_volatility_pct": None,
+        "sharpe_ratio": None,
+        "sortino_ratio": None,
+        "beta": None,
+        "jensen_alpha_pct": None,
+        "maximum_drawdown_pct": None,
+        "calmar_ratio": None,
+        "tracking_error_pct": None,
+        "information_ratio": None,
+        "correlation": None,
+    }
+    if not required_positions or historical_weight < minimum_weight_coverage_pct:
+        return {**unavailable, "reason": "historical_weight_coverage_below_threshold"}
+
+    benchmark_by_date = {
+        row["date"]: float(row["close"])
+        for row in benchmark_history
+        if isinstance(row.get("date"), date)
+        and _portfolio_number(row.get("close")) is not None
+        and float(row["close"]) > 0
+    }
+    benchmark_dates = sorted(benchmark_by_date)
+    portfolio_returns: list[float] = []
+    benchmark_returns: list[float] = []
+    aligned_dates: list[date] = []
+    session_coverages: list[float] = []
+    for previous_date, current_date in zip(benchmark_dates, benchmark_dates[1:]):
+        weighted_return = 0.0
+        covered_weight = 0.0
+        for position in required_positions:
+            symbol = str(position.get("symbol") or "").strip().upper()
+            history_key = str(position.get("risk_history_key") or symbol)
+            history = histories_by_symbol.get(history_key)
+            if history is None or previous_date not in history or current_date not in history:
+                continue
+            weight = float(position["risk_weight_pct"])
+            weighted_return += weight * (history[current_date] / history[previous_date] - 1)
+            covered_weight += weight
+        if covered_weight + 1e-9 < minimum_weight_coverage_pct:
+            continue
+        portfolio_returns.append(weighted_return / covered_weight)
+        benchmark_returns.append(
+            benchmark_by_date[current_date] / benchmark_by_date[previous_date] - 1
+        )
+        aligned_dates.append(current_date)
+        session_coverages.append(covered_weight)
+
+    coverage["aligned_sessions"] = len(portfolio_returns)
+    coverage["minimum_daily_weight_pct"] = (
+        round(min(session_coverages), 2) if session_coverages else None
+    )
+    if len(portfolio_returns) < minimum_sessions:
+        return {
+            **unavailable,
+            "reason": "insufficient_aligned_history",
+            "coverage": coverage,
+            "sessions": len(portfolio_returns),
+            "start_date": aligned_dates[0].isoformat() if aligned_dates else None,
+            "end_date": aligned_dates[-1].isoformat() if aligned_dates else None,
+        }
+
+    count = len(portfolio_returns)
+    portfolio_mean = sum(portfolio_returns) / count
+    benchmark_mean = sum(benchmark_returns) / count
+    portfolio_variance = sum(
+        (value - portfolio_mean) ** 2 for value in portfolio_returns
+    ) / (count - 1)
+    benchmark_variance = sum(
+        (value - benchmark_mean) ** 2 for value in benchmark_returns
+    ) / (count - 1)
+    covariance = sum(
+        (portfolio_value - portfolio_mean) * (benchmark_value - benchmark_mean)
+        for portfolio_value, benchmark_value in zip(portfolio_returns, benchmark_returns)
+    ) / (count - 1)
+    portfolio_deviation = math.sqrt(portfolio_variance)
+    benchmark_deviation = math.sqrt(benchmark_variance)
+    risk_free_daily = (1 + float(risk_free_annual_pct) / 100) ** (1 / 252) - 1
+    mean_excess = portfolio_mean - risk_free_daily
+    downside_deviation = math.sqrt(
+        sum(min(value - risk_free_daily, 0.0) ** 2 for value in portfolio_returns) / count
+    )
+    beta = covariance / benchmark_variance if benchmark_variance > 0 else None
+    alpha = (
+        (mean_excess - beta * (benchmark_mean - risk_free_daily)) * 252
+        if beta is not None else None
+    )
+    growth = 1.0
+    peak = 1.0
+    maximum_drawdown = 0.0
+    for daily_return in portfolio_returns:
+        growth *= 1 + daily_return
+        peak = max(peak, growth)
+        maximum_drawdown = min(maximum_drawdown, growth / peak - 1)
+    annualized_return = growth ** (252 / count) - 1 if growth > 0 else None
+    active_returns = [
+        portfolio_value - benchmark_value
+        for portfolio_value, benchmark_value in zip(portfolio_returns, benchmark_returns)
+    ]
+    active_mean = sum(active_returns) / count
+    active_variance = sum((value - active_mean) ** 2 for value in active_returns) / (count - 1)
+    active_deviation = math.sqrt(active_variance)
+
+    return {
+        "status": "available",
+        "reason": None,
+        "method": "current_holdings_constant_weight_backtest",
+        "risk_free_annual_pct": round(float(risk_free_annual_pct), 2),
+        "coverage": coverage,
+        "sessions": count,
+        "start_date": aligned_dates[0].isoformat(),
+        "end_date": aligned_dates[-1].isoformat(),
+        "annualized_return_pct": round(annualized_return * 100, 2) if annualized_return is not None else None,
+        "annualized_volatility_pct": round(portfolio_deviation * math.sqrt(252) * 100, 2),
+        "sharpe_ratio": round(mean_excess / portfolio_deviation * math.sqrt(252), 2) if portfolio_deviation > 0 else None,
+        "sortino_ratio": round(mean_excess / downside_deviation * math.sqrt(252), 2) if downside_deviation > 0 else None,
+        "beta": round(beta, 2) if beta is not None else None,
+        "jensen_alpha_pct": round(alpha * 100, 2) if alpha is not None else None,
+        "maximum_drawdown_pct": round(maximum_drawdown * 100, 2),
+        "calmar_ratio": round(annualized_return / abs(maximum_drawdown), 2) if annualized_return is not None and maximum_drawdown < 0 else None,
+        "tracking_error_pct": round(active_deviation * math.sqrt(252) * 100, 2),
+        "information_ratio": round(active_mean / active_deviation * math.sqrt(252), 2) if active_deviation > 0 else None,
+        "correlation": round(covariance / (portfolio_deviation * benchmark_deviation), 2) if portfolio_deviation > 0 and benchmark_deviation > 0 else None,
+    }
+
+
+def parse_google_finance_quote_html(
+    html_text: str,
+    expected_symbol: str,
+) -> dict[str, object]:
+    """Extract one NSE quote from the bounded Google Finance page payload."""
+    symbol = expected_symbol.strip().upper()
+    if not symbol or not re.fullmatch(r"[A-Z0-9&-]{1,32}", symbol):
+        raise ValueError("invalid_google_finance_symbol")
+    script_match = re.search(
+        r'<script[^>]*class="ds:(?:13|2)"[^>]*>(.*?)</script>',
+        html_text,
+        re.DOTALL,
+    )
+    if script_match is None:
+        raise ValueError("invalid_google_finance_response")
+    data_match = re.search(
+        r"\bdata:(.*),\s*sideChannel:",
+        script_match.group(1),
+        re.DOTALL,
+    )
+    if data_match is None:
+        raise ValueError("invalid_google_finance_response")
+    try:
+        data = json.loads(data_match.group(1))
+        quote = data[0][0][0]
+        quote_symbol, exchange = quote[1]
+        latest_price = float(quote[5][0])
+        last_close = float(quote[7])
+        observed_timestamp = int(quote[11][0])
+    except (IndexError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise ValueError("invalid_google_finance_response") from error
+    if (
+        str(quote_symbol).upper() != symbol
+        or str(exchange).upper() != "NSE"
+        or not math.isfinite(latest_price)
+        or not math.isfinite(last_close)
+        or latest_price <= 0
+        or last_close <= 0
+        or observed_timestamp <= 0
+    ):
+        raise ValueError("invalid_google_finance_response")
+    return {
+        "symbol": symbol,
+        "exchange": "NSE",
+        "company_name": str(quote[2] or symbol),
+        "currency": str(quote[4] or "INR"),
+        "last_close": round(last_close, 2),
+        "latest_price": round(latest_price, 2),
+        "observed_at": datetime.fromtimestamp(observed_timestamp, timezone.utc).isoformat(),
+        "source": "Google Finance",
+        "source_url": GOOGLE_FINANCE_QUOTE_URL.format(
+            symbol=urllib.parse.quote(symbol, safe="&-")
+        ),
+    }
+
+
+def fetch_google_finance_quote(symbol: str) -> tuple[dict[str, object] | None, str | None]:
+    """Load a public Google Finance quote with strict host and size checks."""
+    normalized = symbol.strip().upper()
+    if not re.fullmatch(r"[A-Z0-9&-]{1,32}", normalized):
+        return None, "unsupported_google_finance_symbol"
+    now = time.monotonic()
+    with _SESSION_LOCK:
+        cached = _GOOGLE_FINANCE_QUOTE_CACHE.get(normalized)
+        if cached and now - float(cached.get("created_at", 0)) < GOOGLE_FINANCE_CACHE_SECONDS:
+            payload = cached.get("payload")
+            if isinstance(payload, dict):
+                return dict(payload), None
+    url = GOOGLE_FINANCE_QUOTE_URL.format(
+        symbol=urllib.parse.quote(normalized, safe="&-")
+    )
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "text/html,application/xhtml+xml",
+            "Accept-Encoding": "identity",
+            "Accept-Language": "en-US,en;q=0.9",
+            "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            final_url = urllib.parse.urlsplit(response.geturl())
+            if (
+                response.status != HTTPStatus.OK
+                or (final_url.hostname or "").lower() != "www.google.com"
+                or not final_url.path.startswith("/finance/quote/")
+            ):
+                return None, "google_finance_unavailable"
+            body = response.read(MAX_GOOGLE_FINANCE_RESPONSE_BYTES + 1)
+            if len(body) > MAX_GOOGLE_FINANCE_RESPONSE_BYTES:
+                return None, "google_finance_response_too_large"
+            quote = parse_google_finance_quote_html(body.decode("utf-8"), normalized)
+    except urllib.error.HTTPError:
+        return None, "google_finance_unavailable"
+    except (urllib.error.URLError, socket.timeout, TimeoutError, OSError):
+        return None, "google_finance_unavailable"
+    except (UnicodeDecodeError, ValueError) as error:
+        return None, str(error)
+    with _SESSION_LOCK:
+        _GOOGLE_FINANCE_QUOTE_CACHE[normalized] = {
+            "created_at": time.monotonic(),
+            "payload": dict(quote),
+        }
+    return quote, None
+
+
+def fetch_google_finance_quotes(
+    symbols: set[str],
+) -> tuple[dict[str, dict[str, object]], dict[str, str]]:
+    """Fetch a bounded quote set concurrently so uploads remain responsive."""
+    requested = sorted(
+        symbol.strip().upper()
+        for symbol in symbols
+        if re.fullmatch(r"[A-Z0-9&-]{1,32}", symbol.strip().upper())
+    )[:MAX_GOOGLE_FINANCE_SYMBOLS]
+    quotes: dict[str, dict[str, object]] = {}
+    failures: dict[str, str] = {}
+    if not requested:
+        return quotes, failures
+    worker_count = min(6, len(requested))
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        futures = {
+            executor.submit(fetch_google_finance_quote, symbol): symbol
+            for symbol in requested
+        }
+        for future in as_completed(futures):
+            symbol = futures[future]
+            try:
+                quote, reason = future.result()
+            except Exception:
+                quote, reason = None, "google_finance_unavailable"
+            if quote is not None:
+                quotes[symbol] = quote
+            else:
+                failures[symbol] = reason or "google_finance_unavailable"
+    return quotes, failures
+
+
+def fetch_nifty_gsec_total_return_history(
+    through_date: date,
+    *,
+    years: int = 5,
+) -> tuple[list[dict[str, object]], str | None]:
+    """Fetch fixed annual windows of the official 10-year G-Sec total-return index."""
+    if years < 1 or years > 10:
+        raise ValueError("invalid_gsec_history_window")
+    cache_key = f"{through_date.isoformat()}:{years}"
+    now = time.monotonic()
+    with _SESSION_LOCK:
+        cached = _NIFTY_GSEC_HISTORY_CACHE.get(cache_key)
+        if cached and now - float(cached.get("created_at", 0)) < NIFTY_GSEC_CACHE_SECONDS:
+            rows = cached.get("rows")
+            if isinstance(rows, list):
+                return [dict(row) for row in rows if isinstance(row, dict)], None
+
+    cookie_jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+    common_headers = {
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Accept-Language": "en-US,en;q=0.9",
+        "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+    }
+    try:
+        session_request = urllib.request.Request(
+            NIFTY_GSEC_HISTORY_PAGE_URL,
+            headers={**common_headers, "Accept": "text/html,application/xhtml+xml"},
+            method="GET",
+        )
+        with opener.open(session_request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            if response.status != HTTPStatus.OK:
+                return [], "nifty_gsec_source_unavailable"
+            response.read(1)
+        rows_by_date: dict[date, dict[str, object]] = {}
+        first_year = through_date.year - years + 1
+        for year in range(first_year, through_date.year + 1):
+            start_date = date(year, 1, 1)
+            end_date = min(date(year, 12, 31), through_date)
+            request_body = json.dumps({
+                "cinfo": json.dumps({
+                    "name": "NIFTY GS 10YR",
+                    "startDate": start_date.strftime("%m/%d/%Y"),
+                    "endDate": end_date.strftime("%m/%d/%Y"),
+                    "indexName": "NIFTY 10 YR BENCHMARK G-SEC",
+                }, separators=(",", ":")),
+            }).encode("utf-8")
+            request = urllib.request.Request(
+                NIFTY_GSEC_HISTORY_URL,
+                data=request_body,
+                headers={
+                    **common_headers,
+                    "Content-Type": "application/json; charset=utf-8",
+                    "Origin": "https://www.niftyindices.com",
+                    "Referer": NIFTY_GSEC_HISTORY_PAGE_URL,
+                },
+                method="POST",
+            )
+            with opener.open(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+                final_url = urllib.parse.urlsplit(response.geturl())
+                if response.status != HTTPStatus.OK or (final_url.hostname or "").lower() != "www.niftyindices.com":
+                    return [], "nifty_gsec_source_unavailable"
+                body = response.read(MAX_NIFTY_GSEC_RESPONSE_BYTES + 1)
+                if len(body) > MAX_NIFTY_GSEC_RESPONSE_BYTES:
+                    return [], "nifty_gsec_response_too_large"
+            payload = json.loads(body.decode("utf-8"))
+            if not isinstance(payload, list):
+                return [], "invalid_nifty_gsec_response"
+            for item in payload:
+                if not isinstance(item, dict) or str(item.get("INDEX_NAME") or "").strip().lower() != NIFTY_GSEC_INDEX_NAME.lower():
+                    continue
+                session_date = datetime.strptime(str(item.get("HistoricalDate") or ""), "%d %b %Y").date()
+                values = {
+                    key: _portfolio_number(item.get(source_key))
+                    for key, source_key in (("open", "OPEN"), ("high", "HIGH"), ("low", "LOW"), ("close", "CLOSE"))
+                }
+                if any(value is None or value <= 0 for value in values.values()):
+                    continue
+                rows_by_date[session_date] = {"date": session_date, **values}
+        rows = [rows_by_date[key] for key in sorted(rows_by_date)]
+    except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout, TimeoutError, OSError):
+        return [], "nifty_gsec_source_unavailable"
+    except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
+        return [], "invalid_nifty_gsec_response"
+    if not rows:
+        return [], "nifty_gsec_history_unavailable"
+    with _SESSION_LOCK:
+        _NIFTY_GSEC_HISTORY_CACHE.clear()
+        _NIFTY_GSEC_HISTORY_CACHE[cache_key] = {"created_at": now, "rows": [dict(row) for row in rows]}
+    return rows, None
+
+
 def build_portfolio_analysis(
     rows: list[dict[str, object]],
     mapping: dict[str, object],
@@ -5948,6 +6795,11 @@ def build_portfolio_analysis(
     *,
     constituents: list[dict[str, str]] | None = None,
     fno_symbols: set[str] | None = None,
+    market_quotes: dict[str, dict[str, object]] | None = None,
+    benchmark_history: list[dict[str, object]] | None = None,
+    gsec_benchmark_history: list[dict[str, object]] | None = None,
+    position_history_overrides: dict[int, dict[str, object]] | None = None,
+    valuation_date: date | None = None,
 ) -> dict[str, object]:
     """Validate and summarize an uploaded portfolio without persisting holdings."""
     if not rows or len(rows) > MAX_PORTFOLIO_ROWS or not isinstance(mapping, dict):
@@ -5963,7 +6815,10 @@ def build_portfolio_analysis(
         for column in (quantity_column, weight_column, mapping.get("current_value"))
     ):
         raise ValueError("portfolio_quantity_weight_or_value_required")
-    for key in ("quantity", "weight", "average_cost", "current_value", "sector", "name"):
+    for key in (
+        "quantity", "weight", "average_cost", "current_value", "latest_price",
+        "entry_date", "invested_value", "sector", "name",
+    ):
         column = mapping.get(key)
         if column not in (None, "") and (not isinstance(column, str) or column not in headers):
             raise ValueError("invalid_portfolio_mapping")
@@ -5974,6 +6829,16 @@ def build_portfolio_analysis(
         item["symbol"].upper(): item for item in (constituents or []) if item.get("symbol")
     }
     fno_symbols = {symbol.upper() for symbol in (fno_symbols or set())}
+    market_quotes = {
+        str(symbol).upper(): quote
+        for symbol, quote in (market_quotes or {}).items()
+        if isinstance(quote, dict)
+    }
+    position_history_overrides = {
+        int(row_number): override
+        for row_number, override in (position_history_overrides or {}).items()
+        if isinstance(row_number, int) and isinstance(override, dict)
+    }
     symbols: list[str] = []
     duplicate_keys: list[str] = []
     name_column = mapping.get("name")
@@ -6002,6 +6867,19 @@ def build_portfolio_analysis(
         uploaded_weight = _portfolio_number(row.get(str(weight_column))) if isinstance(weight_column, str) else None
         average_cost = _portfolio_number(row.get(str(mapping.get("average_cost")))) if mapping.get("average_cost") else None
         current_value = _portfolio_number(row.get(str(mapping.get("current_value")))) if mapping.get("current_value") else None
+        uploaded_price = _portfolio_number(row.get(str(mapping.get("latest_price")))) if mapping.get("latest_price") else None
+        raw_entry_date = row.get(str(mapping.get("entry_date"))) if mapping.get("entry_date") else None
+        entry_date = _portfolio_date(raw_entry_date)
+        explicit_invested_value = _portfolio_number(row.get(str(mapping.get("invested_value")))) if mapping.get("invested_value") else None
+        invested_value = (
+            explicit_invested_value
+            if explicit_invested_value is not None and explicit_invested_value > 0
+            else (
+                float(quantity) * float(average_cost)
+                if quantity is not None and quantity > 0 and average_cost is not None and average_cost > 0
+                else None
+            )
+        )
         if not uses_uploaded_weight and not uses_uploaded_current_value and (quantity is None or quantity <= 0):
             reasons.append("invalid_quantity")
         if uses_uploaded_weight and (uploaded_weight is None or uploaded_weight < 0):
@@ -6011,26 +6889,87 @@ def build_portfolio_analysis(
             average_cost = None
         if uses_uploaded_current_value and (current_value is None or current_value <= 0):
             reasons.append("invalid_current_value")
+        if raw_entry_date not in (None, "") and entry_date is None:
+            issues.append({"row_number": index, "symbol": symbol or "—", "reason": "invalid_entry_date"})
         history = price_histories.get(symbol, [])
-        latest = history[-1] if history else None
-        price = float(latest["close"]) if latest else None
-        price_date = latest["date"].isoformat() if latest and isinstance(latest.get("date"), date) else None
+        local_latest = history[-1] if history else None
+        local_price = float(local_latest["close"]) if local_latest else None
+        local_price_date = (
+            local_latest["date"].isoformat()
+            if local_latest and isinstance(local_latest.get("date"), date)
+            else None
+        )
+        market_quote = market_quotes.get(symbol, {})
+        google_latest = _portfolio_number(market_quote.get("latest_price"))
+        google_last_close = _portfolio_number(market_quote.get("last_close"))
+        price = google_latest if google_latest is not None and google_latest > 0 else (
+            uploaded_price if uploaded_price is not None and uploaded_price > 0 else local_price
+        )
+        last_close = (
+            google_last_close
+            if google_last_close is not None and google_last_close > 0
+            else local_price
+        )
+        observed_at = str(market_quote.get("observed_at") or "") or None
+        price_date = observed_at[:10] if observed_at else local_price_date
+        last_close_date = local_price_date
+        price_source = "google_finance" if google_latest is not None else (
+            "uploaded_price_fallback" if uploaded_price is not None and uploaded_price > 0 else (
+                "local_eod_fallback" if local_price is not None else "unavailable"
+            )
+        )
         metadata = constituent_lookup.get(symbol, {})
         uploaded_sector = str(row.get(str(mapping.get("sector")), "")).strip() if mapping.get("sector") else ""
         uploaded_name = str(row.get(str(mapping.get("name")), "")).strip() if mapping.get("name") else ""
+        company_name = uploaded_name or metadata.get("name") or symbol or "—"
+        uploaded_traded_security = bool(
+            uploaded_price is not None
+            and uploaded_price > 0
+            and symbol not in {"MF", "NCD", "FD", "CASH"}
+            and re.fullmatch(r"[A-Z0-9&-]{1,32}", symbol)
+        )
+        asset_class = classify_portfolio_asset_class(
+            symbol,
+            str(company_name),
+            has_exchange_evidence=bool(metadata or history or market_quote or uploaded_traded_security),
+        )
+        risk_label = re.sub(r"[^a-z0-9]+", " ", f"{symbol} {company_name}".lower())
+        exclude_from_risk = bool(
+            re.search(r"\bncd\b|\bdebenture\b|\bfixed deposit\b", risk_label)
+        )
+        history_override = position_history_overrides.get(index, {})
+        override_history = history_override.get("history")
+        risk_history_key = (
+            f"portfolio-row-{index}"
+            if isinstance(override_history, list) and override_history
+            else symbol
+        )
         prepared.append({
             "row_number": index,
             "symbol": symbol,
-            "company_name": uploaded_name or metadata.get("name") or symbol or "—",
+            "company_name": company_name,
+            "asset_class": asset_class,
             "sector": uploaded_sector or metadata.get("sector") or "Unclassified",
             "quantity": quantity,
             "uploaded_weight": uploaded_weight,
             "average_cost": average_cost,
             "provided_current_value": current_value,
+            "uploaded_price": uploaded_price,
+            "entry_date": entry_date.isoformat() if entry_date else None,
+            "invested_value": round(invested_value, 2) if invested_value is not None else None,
+            "last_close": last_close,
+            "last_close_date": last_close_date,
             "latest_price": price,
             "price_date": price_date,
+            "price_observed_at": observed_at,
+            "price_source": price_source,
+            "price_source_url": market_quote.get("source_url"),
             "in_nifty500": symbol in constituent_lookup,
             "in_local_fno_universe": symbol in fno_symbols,
+            "risk_history_key": risk_history_key,
+            "risk_history_source": history_override.get("source"),
+            "risk_history_scheme_code": history_override.get("scheme_code"),
+            "exclude_from_risk": exclude_from_risk,
             "reasons": reasons,
         })
         for reason in reasons:
@@ -6087,15 +7026,56 @@ def build_portfolio_analysis(
         positions.append({
             **{key: item[key] for key in (
                 "row_number", "symbol", "company_name", "sector", "quantity", "average_cost",
-                "latest_price", "price_date", "in_nifty500", "in_local_fno_universe"
+                "last_close", "last_close_date", "latest_price", "price_date", "price_observed_at", "price_source",
+                "price_source_url", "entry_date", "invested_value", "asset_class", "in_nifty500",
+                "in_local_fno_universe", "risk_history_key", "risk_history_source",
+                "risk_history_scheme_code", "exclude_from_risk"
             )},
-            "current_value": round(float(basis_value), 2) if basis_value is not None and basis != "uploaded_weight" else None,
+            "current_value": (
+                round(float(basis_value), 2)
+                if basis_value is not None and basis != "uploaded_weight"
+                else (
+                    round(float(item["provided_current_value"]), 2)
+                    if item.get("provided_current_value") is not None
+                    else None
+                )
+            ),
             "weight_pct": weight,
             "return_since_average_cost_pct": return_pct,
             "status": status,
         })
     positions.sort(key=lambda item: (item["weight_pct"] is None, -float(item["weight_pct"] or 0), str(item["symbol"])))
     eligible = [item for item in positions if item["weight_pct"] is not None]
+    asset_class_order = ("Equity", "Debt", "Commodity", "Hybrid", "Cash", "Other")
+    asset_totals: dict[str, dict[str, float | int]] = {
+        asset_class: {"weight_pct": 0.0, "current_value": 0.0, "positions": 0, "valued_positions": 0}
+        for asset_class in asset_class_order
+    }
+    for item in eligible:
+        asset_class = str(item.get("asset_class") or "Other")
+        if asset_class not in asset_totals:
+            asset_class = "Other"
+        total = asset_totals[asset_class]
+        total["weight_pct"] = float(total["weight_pct"]) + float(item["weight_pct"] or 0)
+        total["positions"] = int(total["positions"]) + 1
+        current_value = _portfolio_number(item.get("current_value"))
+        if current_value is not None:
+            total["current_value"] = float(total["current_value"]) + current_value
+            total["valued_positions"] = int(total["valued_positions"]) + 1
+    asset_allocation = [
+        {
+            "asset_class": asset_class,
+            "weight_pct": round(float(asset_totals[asset_class]["weight_pct"]), 2),
+            "current_value": (
+                round(float(asset_totals[asset_class]["current_value"]), 2)
+                if int(asset_totals[asset_class]["valued_positions"]) == int(asset_totals[asset_class]["positions"])
+                else None
+            ),
+            "position_count": int(asset_totals[asset_class]["positions"]),
+        }
+        for asset_class in asset_class_order
+        if int(asset_totals[asset_class]["positions"]) > 0
+    ]
     sector_weights: dict[str, float] = defaultdict(float)
     for item in eligible:
         sector_weights[str(item["sector"])] += float(item["weight_pct"])
@@ -6117,6 +7097,78 @@ def build_portfolio_analysis(
     else:
         concentration = "broadly_distributed"
     price_dates = [str(item["price_date"]) for item in eligible if item.get("price_date")]
+    resolved_valuation_date = valuation_date
+    if resolved_valuation_date is None:
+        parsed_price_dates = [_portfolio_date(value) for value in price_dates]
+        resolved_valuation_date = max(
+            (value for value in parsed_price_dates if value is not None),
+            default=datetime.now(INDIA_TIMEZONE).date(),
+        )
+    metric_ready = [
+        item for item in eligible
+        if _portfolio_number(item.get("invested_value")) is not None
+        and float(item["invested_value"]) > 0
+        and _portfolio_number(item.get("current_value")) is not None
+        and float(item["current_value"]) >= 0
+    ]
+    total_invested = (
+        round(sum(float(item["invested_value"]) for item in metric_ready), 2)
+        if metric_ready and len(metric_ready) == len(eligible)
+        else None
+    )
+    total_current_value = (
+        round(sum(float(item["current_value"]) for item in metric_ready), 2)
+        if total_invested is not None
+        else None
+    )
+    current_return = (
+        round(float(total_current_value) - float(total_invested), 2)
+        if total_invested is not None and total_current_value is not None
+        else None
+    )
+    net_return_pct = (
+        round(float(current_return) / float(total_invested) * 100, 2)
+        if current_return is not None and total_invested and total_invested > 0
+        else None
+    )
+    dated_ready = [
+        item for item in metric_ready
+        if _portfolio_date(item.get("entry_date")) is not None
+        and _portfolio_date(item.get("entry_date")) < resolved_valuation_date
+    ]
+    xirr_flows = [
+        (_portfolio_date(item["entry_date"]), -float(item["invested_value"]))
+        for item in dated_ready
+    ]
+    if dated_ready and len(dated_ready) == len(eligible) and total_current_value is not None:
+        xirr_flows.append((resolved_valuation_date, float(total_current_value)))
+        portfolio_xirr_pct = calculate_xirr(xirr_flows)
+    else:
+        portfolio_xirr_pct = None
+    benchmark = calculate_cashflow_matched_benchmark_return(
+        dated_ready,
+        benchmark_history or [],
+        resolved_valuation_date,
+    )
+    if len(dated_ready) != len(eligible):
+        benchmark["return_pct"] = None
+    gsec_benchmark = calculate_cashflow_matched_benchmark_return(
+        dated_ready,
+        gsec_benchmark_history or [],
+        resolved_valuation_date,
+    )
+    if len(dated_ready) != len(eligible):
+        gsec_benchmark["return_pct"] = None
+    risk_price_histories = dict(price_histories)
+    for row_number, override in position_history_overrides.items():
+        override_history = override.get("history")
+        if isinstance(override_history, list) and override_history:
+            risk_price_histories[f"portfolio-row-{row_number}"] = override_history
+    risk_metrics = calculate_portfolio_risk_metrics(
+        eligible,
+        risk_price_histories,
+        benchmark_history or [],
+    )
     return {
         "ok": True,
         "status": "portfolio_ready" if eligible else "portfolio_not_ready",
@@ -6130,9 +7182,14 @@ def build_portfolio_analysis(
             "eligible_positions": len(eligible),
             "excluded_rows": len(positions) - len(eligible),
             "priced_positions": sum(item["latest_price"] is not None for item in positions),
+            "google_finance_priced": sum(item["price_source"] == "google_finance" for item in positions),
+            "uploaded_price_fallback": sum(item["price_source"] == "uploaded_price_fallback" for item in positions),
+            "local_eod_fallback": sum(item["price_source"] == "local_eod_fallback" for item in positions),
             "sector_classified": sum(item["sector"] != "Unclassified" for item in eligible),
             "nifty500_overlap": sum(bool(item["in_nifty500"]) for item in eligible),
             "local_fno_overlap": sum(bool(item["in_local_fno_universe"]) for item in eligible),
+            "amfi_history_positions": sum(item.get("risk_history_source") == "AMFI" for item in eligible),
+            "risk_excluded_positions": sum(bool(item.get("exclude_from_risk")) for item in eligible),
         },
         "concentration": {
             "state": concentration,
@@ -6140,14 +7197,42 @@ def build_portfolio_analysis(
             "top_five_pct": top_five,
             "hhi": hhi,
         },
+        "portfolio_summary": {
+            "total_invested": total_invested,
+            "current_value": total_current_value,
+            "current_return": current_return,
+            "net_return_pct": net_return_pct,
+            "portfolio_xirr_pct": portfolio_xirr_pct,
+            "valuation_date": resolved_valuation_date.isoformat(),
+            "valued_positions": len(metric_ready),
+            "dated_positions": len(dated_ready),
+            "required_positions": len(eligible),
+        },
+        "benchmark": {
+            "name": "NIFTY 50",
+            **benchmark,
+        },
+        "gsec_benchmark": {
+            "name": NIFTY_GSEC_INDEX_NAME,
+            "source_url": NIFTY_GSEC_SOURCE_URL,
+            **gsec_benchmark,
+        },
+        "risk_metrics": risk_metrics,
+        "asset_allocation": asset_allocation,
         "positions": positions,
         "sectors": sectors,
         "issues": issues,
         "limitations": [
             "The uploaded file and mapped holdings are processed by the local server for this request and are not written to the database.",
             "Weights are normalized across eligible rows; cash and assets without a mapped row are not inferred.",
-            "Latest prices use the most recent completed local EOD close and may be stale or unavailable.",
-            "Concentration is descriptive. Beta, volatility contribution, scenario analysis, sentiment alignment, and recommendations are not included in this first slice.",
+            "Last close uses Google Finance when available and is dated from the corresponding local completed EOD session; it can be delayed or unavailable.",
+            "Current-value and return calculations can use the newest Google Finance quote, with uploaded LTP/NAV and then local completed EOD data as fallbacks.",
+            "Asset classes are inferred from instrument names and exchange-price evidence; uncertain holdings remain in Other and are not silently guessed.",
+            "Risk ratios use a current-holdings, constant-weight historical backtest rather than the investor's actual transaction history; they require at least 126 aligned sessions and 90% daily portfolio-weight coverage.",
+            "Reviewed Direct-Growth mutual-fund mappings use official AMFI NAV history; unmatched funds remain unavailable rather than being assigned a similar scheme.",
+            "NCDs, debentures, and fixed deposits without a daily mark-to-market history are excluded from the risk-ratio universe and their uploaded weight is disclosed.",
+            "Sharpe, Sortino, and Jensen alpha currently use an explicit 0% annual risk-free assumption; no short-term risk-free rate is silently inferred.",
+            "Volatility contribution, scenario analysis, sentiment alignment, and recommendations are not included in this slice.",
         ],
     }
 
@@ -8902,6 +9987,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
     def _send_portfolio_analysis(self, payload: dict[str, object]) -> None:
         rows = payload.get("rows")
         mapping = payload.get("mapping")
+        use_google_finance = payload.get("use_google_finance") is True
         if (
             not isinstance(rows, list)
             or not all(isinstance(row, dict) for row in rows)
@@ -8920,24 +10006,35 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             for symbol in normalized_symbols
             if symbol in stock_inventory
         }
-        constituents: list[dict[str, str]] = []
-        constituent_status = "unavailable"
-        request = urllib.request.Request(
-            NIFTY500_CONSTITUENTS_URL,
-            headers={
-                "Accept": "text/csv,text/plain;q=0.9,*/*;q=0.8",
-                "Accept-Encoding": "identity",
-                "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
-            },
-            method="GET",
+        benchmark_history = store.load_candles(kind="index", display_name="Nifty 50")
+        valuation_date = datetime.now(INDIA_TIMEZONE).date()
+        gsec_history, gsec_reason = fetch_nifty_gsec_total_return_history(valuation_date)
+        name_column = mapping.get("name")
+        resolved_amfi_by_row: dict[int, dict[str, object]] = {}
+        if isinstance(name_column, str):
+            for row_number, row in enumerate(rows, start=2):
+                scheme = resolve_portfolio_amfi_scheme(str(row.get(name_column) or ""))
+                if scheme is not None:
+                    resolved_amfi_by_row[row_number] = scheme
+        amfi_histories, amfi_failures = fetch_amfi_portfolio_nav_histories(
+            list(resolved_amfi_by_row.values()),
+            valuation_date,
         )
-        constituent_csv, reason = self._request_provider_text(request, MAX_CONSTITUENT_BYTES)
-        if reason is None:
-            try:
-                constituents = parse_nifty500_constituents(constituent_csv or "")
-                constituent_status = "official_current_snapshot"
-            except ValueError:
-                constituent_status = "invalid_provider_response"
+        position_history_overrides = {
+            row_number: {
+                "history": amfi_histories.get(str(scheme["scheme_code"]), []),
+                "scheme_code": scheme["scheme_code"],
+                "scheme_name": scheme["name"],
+                "source": "AMFI",
+                "source_url": AMFI_NAV_SOURCE_URL,
+            }
+            for row_number, scheme in resolved_amfi_by_row.items()
+            if amfi_histories.get(str(scheme["scheme_code"]))
+        }
+        if use_google_finance:
+            google_quotes, quote_failures = fetch_google_finance_quotes(normalized_symbols)
+        else:
+            google_quotes, quote_failures = {}, {}
         fno_symbols = {
             str(item.get("underlying") or "").upper()
             for item in store.load_futures_eod_snapshots()
@@ -8948,8 +10045,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 rows,
                 mapping,
                 histories,
-                constituents=constituents,
                 fno_symbols=fno_symbols,
+                market_quotes=google_quotes,
+                benchmark_history=benchmark_history,
+                gsec_benchmark_history=gsec_history,
+                position_history_overrides=position_history_overrides,
+                valuation_date=valuation_date,
             )
         except ValueError as error:
             self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": str(error)})
@@ -8958,8 +10059,24 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             HTTPStatus.OK,
             {
                 **result,
-                "constituent_source_status": constituent_status,
-                "constituent_source_url": NIFTY500_CONSTITUENTS_URL,
+                "google_finance_source_status": (
+                    "available" if google_quotes else (
+                        "unavailable" if use_google_finance else "disabled"
+                    )
+                ),
+                "google_finance_source_url": "https://www.google.com/finance/",
+                "google_finance_failures": quote_failures,
+                "gsec_benchmark_source_status": "available" if gsec_history else "unavailable",
+                "gsec_benchmark_source_reason": gsec_reason,
+                "amfi_nav_source_status": (
+                    "available" if position_history_overrides else (
+                        "unavailable" if resolved_amfi_by_row else "not_applicable"
+                    )
+                ),
+                "amfi_nav_source_url": AMFI_NAV_SOURCE_URL,
+                "amfi_nav_resolved_positions": len(position_history_overrides),
+                "amfi_nav_requested_positions": len(resolved_amfi_by_row),
+                "amfi_nav_failures": amfi_failures,
             },
         )
 

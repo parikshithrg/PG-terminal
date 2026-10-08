@@ -237,12 +237,44 @@ orders or position sizing.
   are recognized automatically; the file is previewed and analyzed immediately,
   with no manual mapping selectors. Uploads are parsed in local server memory
   and returned to browser memory; holdings are never written to
-  SQLite. The page validates duplicate/invalid rows, builds normalized position
-  and sector allocations from mapped weights, current values, or quantity times
-  the latest stored close, and shows concentration plus current NIFTY 500/local
-  F&O overlap. Four new tables include interpretation guidance. Automated tests
-  cover CSV, dependency-free XLSX parsing, duplicates, weight-based portfolios,
-  and concentration.
+  SQLite. The page validates duplicate/invalid rows and builds normalized
+  position allocations from mapped weights, current values, or quantity times
+  the latest available price. An explicit privacy toggle sends only NSE symbols
+  to Google Finance for valuation data; uploaded LTP/NAV and local completed-EOD
+  prices remain fallbacks. The table shows the last completed close with its
+  date; live-price, local F&O, sector, and NIFTY 500 columns are omitted. The
+  largest-sector card and the
+  sector-concentration section were removed for the mutual-fund-heavy working
+  portfolio. A top-level allocation panel now groups portfolio weight and current
+  value into Equity, Debt, Commodity, Hybrid, Cash, and Other; uncertain labels
+  remain visible as Other. The performance summary reports total invested
+  amount, current and net returns, a cash-flow-matched NIFTY 50 return, and
+  portfolio XIRR. It also reports a cash-flow-matched NIFTY
+  10-year Benchmark G-Sec total return loaded from the official NIFTY Indices
+  history interface in fixed calendar-year windows; unavailable coverage is not
+  estimated. Benchmark and XIRR are shown only when every
+  eligible position has a usable purchase date plus invested/current value.
+  Automated tests cover CSV, dependency-free XLSX parsing, duplicates,
+  price-source precedence, dated benchmark matching, XIRR, weight-based
+  portfolios, and concentration.
+- Added a risk-adjusted performance block to Portfolio Analysis. It calculates
+  annualized return/volatility, Sharpe, Sortino, NIFTY 50 beta, Jensen alpha,
+  maximum drawdown, Calmar, tracking error, and information ratio from a
+  current-holdings constant-weight daily backtest, with NIFTY 50 correlation
+  shown alongside them. The engine requires 126
+  aligned sessions and at least 90% daily portfolio-weight coverage and never
+  fills missing histories with synthetic returns. Sharpe, Sortino, and alpha
+  explicitly use a 0% annual risk-free assumption for now.
+- Added official AMFI NAV history for the five reviewed Direct-Growth schemes in
+  the working portfolio. Downloads use 300 days split into bounded 90-day fund-
+  house requests, are cached for six hours, and never send quantities or values.
+  The NCD is explicitly excluded and its 11.20% uploaded weight remains disclosed.
+  Live end-to-end validation on 08-Oct-26 resolved all five schemes without
+  failures and produced 177 aligned sessions at 90.75% risk-weight coverage:
+  annualized return 2.92%, volatility 5.61%, Sharpe 0.54, Sortino 0.78, beta 0.37,
+  Jensen alpha 8.21%, maximum drawdown -3.69%, Calmar 0.79, tracking error 9.16%,
+  information ratio 1.87, and NIFTY 50 correlation 0.93. This is a current-
+  holdings constant-weight backtest, not reconstructed transaction performance.
 - Extended Portfolio Analysis with a separate `home-loan-tracker-v1` tab. An
   uploaded XLSX loan sheet is parsed in memory to show fiscal-year principal,
   interest, total payments, outstanding principal/rate, and rental totals. The
@@ -284,16 +316,27 @@ orders or position sizing.
   from the domestic evidence count, data freshness, F&O coverage, and available
   clusters. It explicitly states that the composite score is not active and the
   reading is context rather than a buy/sell instruction.
+- Added a browser-memory-only Portfolio story card to the Dashboard. After a
+  holdings upload it shows current value, net return, XIRR, cash-flow-matched
+  NIFTY 50 and 10Y G-Sec comparisons, observed excess return, valuation date,
+  and available risk context. It deliberately does not label outperformance as
+  validated alpha.
 
 ## Next work
 
 1. Live-check the first full NIFTY 500 five-year retrieval after reconnecting
    Kite, including year switching, coverage counts, and reverse ranking order.
-2. Extend Portfolio Analysis with aligned trailing volatility, beta, drawdown,
-   and position-level volatility contribution. Keep holdings local/read-only and
-   keep the whole-market Dashboard headline deferred until its inputs,
-   methodology, confidence rules, and wording are explicitly designed and
-   reviewed.
+2. Begin the queued Portfolio performance and Alpha Opportunities roadmap:
+   transaction-based performance; approved RBI 91-day T-bill history; complete
+   permitted ETF/equity histories; and position-level return, volatility, and
+   drawdown attribution. Keep the NCD excluded until a genuine mark-to-market or
+   cash-flow history is available. Only after those foundations are auditable,
+   combine validated valuation, momentum, earnings, seasonality, and market-
+   regime evidence into candidate research that shows the estimated impact on
+   portfolio concentration, beta, and drawdown risk.
+   Keep holdings local/read-only and keep the whole-market Dashboard headline
+   deferred until its inputs, methodology, confidence rules, and wording are
+   explicitly designed and reviewed.
 3. Continue daily collection for institutional flows, macro context, global risk,
    and futures/OI; freeze their directional thresholds only after adequate
    coverage, then test them out of sample.

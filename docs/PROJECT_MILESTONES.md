@@ -298,15 +298,51 @@ point-in-time-universe validation are next.
    immediately using automatic recognition of common broker-export columns; no
    manual mapping controls are shown. Holdings remain in request/browser memory
    rather than being written to SQLite. The first slice validates symbols,
-   duplicates, quantities, weights, costs, values, and missing local prices;
-   then shows normalized position and sector weights, largest/top-five
-   concentration, cost-relative return when available, and current NIFTY 500
-   and locally observed F&O overlap. Invalid rows remain visible and excluded.
-30. **Next executable step:** extend Portfolio Analysis with trailing portfolio
-   volatility, beta, drawdown exposure, and position-level volatility
-   contribution using aligned local EOD returns. Keep the whole-market Dashboard
-   headline deferred until its evidence inputs, methodology, confidence rules,
-   and wording are designed and reviewed with the owner.
+   duplicates, quantities, weights, costs, values, and missing prices; then
+   shows normalized position weights, largest/top-five concentration,
+   cost-relative return when available, and locally observed F&O overlap.
+   An explicit privacy toggle enables Google Finance pricing by sending only NSE
+   symbols; uploaded LTP/NAV and the most recent completed local EOD close remain
+   local fallbacks. The position table shows the dated last completed close and
+   omits the live-price, local F&O, sector, and NIFTY 500 columns. The sector-
+   allocation section was removed because the working portfolio is primarily
+   mutual funds. Six top-level metrics summarize total invested amount,
+   current return, net return percentage, a cash-flow-matched NIFTY 50 return,
+   and portfolio XIRR. A top-level asset-allocation section groups normalized
+   weights and current values into Equity, Debt, Commodity, Hybrid, Cash, and
+   Other using transparent name and exchange-evidence rules; uncertain holdings
+   remain in Other. A second cash-flow-matched benchmark uses the official NIFTY
+   10-year Benchmark G-Sec total-return index in fixed annual request windows;
+   it is withheld when official history does not cover every purchase date.
+   Benchmark and XIRR values require usable purchase dates and complete
+   invested/current values for every eligible position. Invalid
+   rows remain visible and excluded.
+30. **Portfolio risk-ratio foundation — complete.** The performance section now
+   calculates annualized return and volatility, Sharpe, Sortino, beta versus
+   NIFTY 50, Jensen alpha, maximum drawdown, Calmar, tracking error, and
+   information ratio plus NIFTY 50 correlation from aligned daily returns. The calculation is explicitly a
+   current-holdings, constant-weight backtest, not a reconstruction of the
+   investor's transaction history. Results require at least 126 aligned sessions
+   and 90% portfolio-weight history coverage; otherwise every ratio is withheld
+   and the coverage shortfall is shown. Sharpe, Sortino, and alpha disclose a 0%
+   annual risk-free assumption until an approved short-term rate history is
+   integrated.
+31. **AMFI mutual-fund history integration — complete for the working portfolio.**
+   The five reviewed Direct-Growth fund labels resolve to exact AMFI scheme codes
+   and retrieve 300 days of official NAV history in bounded 90-day windows. The
+   NCD is explicitly excluded and the remaining portfolio is renormalized for
+   risk calculations. Live validation on 08-Oct-26 returned 195–202 NAV rows per
+   fund, no source failures, and 177 aligned portfolio/NIFTY sessions with 90.75%
+   risk-weight history coverage. The resulting current-holdings backtest produced
+   2.92% annualized return, 5.61% volatility, 0.54 Sharpe, 0.78 Sortino, 0.37 beta,
+   8.21% Jensen alpha, -3.69% maximum drawdown, 0.79 Calmar, 9.16% tracking error,
+   1.87 information ratio, and 0.93 NIFTY 50 correlation. These values are a
+   dated validation snapshot, not the investor's transaction-history performance.
+32. **Next executable step:** add the approved RBI 91-day T-bill history for the
+   risk-free rate, extend price coverage to the remaining ETFs/equity, and add
+   position-level volatility contribution. Keep the whole-market Dashboard headline deferred
+   until its evidence inputs, methodology, confidence rules, and wording are
+   designed and reviewed with the owner.
 
 ## Approved product-integration milestones
 
@@ -435,6 +471,39 @@ with the market environment. It remains an analytical review, not execution.
    complete; automated NSE collection remains disabled under the published terms.
 8. **Evidence-grounded analyst** — answer questions only from approved local
    calculations and documents, with source, timestamp, and calculation citations.
+
+### Dashboard portfolio story foundation — complete
+
+- The Dashboard now carries the current uploaded portfolio into the front-page
+  story: current value, net return, portfolio XIRR, and observed excess return
+  versus a cash-flow-matched NIFTY 50 comparison.
+- Supporting context includes the matched 10Y G-Sec return, valuation date, risk-
+  history coverage, beta, Sharpe ratio, and maximum drawdown when available.
+- Holdings and results remain browser-memory-only. The copy explicitly treats
+  benchmark outperformance as observed excess return, not validated persistent
+  alpha, and discloses the current-holdings backtest limitations.
+
+### Portfolio performance and Alpha Opportunities — queued
+
+Build this in dependency order so the opportunity layer rests on auditable
+portfolio performance rather than a current-holdings approximation:
+
+1. Add transaction-based performance using dated purchases, sales, dividends,
+   fees, taxes, deposits, and withdrawals when those records are available.
+2. Replace the temporary 0% risk-free assumption with an approved RBI 91-day
+   T-bill history aligned to each performance period.
+3. Complete permitted historical-price coverage for the portfolio's ETFs and
+   equities, while continuing to exclude instruments such as the NCD until a
+   genuine mark-to-market or cash-flow history exists.
+4. Add position-level return and risk attribution, including volatility and
+   drawdown contribution, with reconciliation to portfolio totals.
+5. Build an **Alpha Opportunities** layer combining independently validated
+   valuation, momentum, earnings, seasonality, and market-regime evidence. For
+   every candidate, show the evidence, uncertainty, and estimated effect on
+   portfolio concentration, beta, and drawdown risk before any user decision.
+
+This remains a read-only research workflow. Candidate ranking must not be
+presented as guaranteed alpha, a recommendation, or an automated trade.
 
 ## Validation work for observed seasonality
 

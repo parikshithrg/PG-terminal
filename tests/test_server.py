@@ -2,6 +2,7 @@ import unittest
 import socket
 import urllib.error
 import io
+import json
 import zipfile
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -40,6 +41,11 @@ from server import (
     calculate_macro_context_summary,
     calculate_futures_oi_summary,
     calculate_global_risk_summary,
+    calculate_xirr,
+    calculate_cashflow_matched_benchmark_return,
+    calculate_portfolio_risk_metrics,
+    parse_amfi_nav_history_text,
+    resolve_portfolio_amfi_scheme,
     discover_sectoral_indices,
     extract_request_token,
     historical_date_ranges,
@@ -64,6 +70,7 @@ from server import (
     parse_earnings_csv,
     parse_portfolio_file,
     parse_home_loan_tracker_xlsx,
+    parse_google_finance_quote_html,
     infer_portfolio_mapping,
     build_portfolio_analysis,
     parse_seasonality_index_tokens,
@@ -1806,6 +1813,9 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
                 "weight": None,
                 "average_cost": "Average Cost",
                 "current_value": None,
+                "latest_price": None,
+                "entry_date": None,
+                "invested_value": None,
                 "sector": None,
                 "name": None,
             },
@@ -1814,16 +1824,19 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
 
     def test_portfolio_mapping_recognizes_common_broker_export_columns(self):
         mapping = infer_portfolio_mapping(
-            ["Instrument", "Qty.", "Avg. cost", "LTP", "Cur. value", "P&L"],
+            ["Instrument", "Entry Date", "Qty.", "Avg. cost", "Buy Value", "LTP", "Cur. value", "P&L"],
             [
-                {"Instrument": "INFY", "Qty.": 10, "Avg. cost": 1400, "LTP": 1500, "Cur. value": 15000, "P&L": 1000},
-                {"Instrument": "TCS", "Qty.": 5, "Avg. cost": 3200, "LTP": 3000, "Cur. value": 15000, "P&L": -1000},
+                {"Instrument": "INFY", "Entry Date": "2025-01-01", "Qty.": 10, "Avg. cost": 1400, "Buy Value": 14000, "LTP": 1500, "Cur. value": 15000, "P&L": 1000},
+                {"Instrument": "TCS", "Entry Date": "2025-02-01", "Qty.": 5, "Avg. cost": 3200, "Buy Value": 16000, "LTP": 3000, "Cur. value": 15000, "P&L": -1000},
             ],
         )
         self.assertEqual(mapping["symbol"], "Instrument")
         self.assertEqual(mapping["quantity"], "Qty.")
         self.assertEqual(mapping["average_cost"], "Avg. cost")
         self.assertEqual(mapping["current_value"], "Cur. value")
+        self.assertEqual(mapping["latest_price"], "LTP")
+        self.assertEqual(mapping["entry_date"], "Entry Date")
+        self.assertEqual(mapping["invested_value"], "Buy Value")
 
     def test_portfolio_mapping_prefers_explicit_symbol_over_instrument_name(self):
         mapping = infer_portfolio_mapping(
@@ -1950,6 +1963,258 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(result["sectors"][0]["sector"], "IT")
         self.assertTrue(any(issue["reason"] == "duplicate_symbol" for issue in result["issues"]))
 
+    def test_google_finance_quote_parser_reads_last_close_and_latest_price(self):
+        record = [
+            "/g/example",
+            ["BEL", "NSE"],
+            "Bharat Electronics Ltd",
+            0,
+            "INR",
+            [378.3, -9.1, -2.35, 2, 2, 2],
+            None,
+            387.4,
+            "#008bc2",
+            "IN",
+            "/m/example",
+            [1791368995],
+        ]
+        html = (
+            '<script class="ds:13">AF_initDataCallback({key: "ds:13", data:'
+            f'{json.dumps([[[record]]])}, sideChannel: {{}}}});</script>'
+        )
+        quote = parse_google_finance_quote_html(html, "BEL")
+        self.assertEqual(quote["last_close"], 387.4)
+        self.assertEqual(quote["latest_price"], 378.3)
+        self.assertEqual(quote["source"], "Google Finance")
+
+    def test_xirr_annualizes_dated_cash_flows(self):
+        result = calculate_xirr(
+            [
+                (date(2025, 1, 1), -100000.0),
+                (date(2026, 1, 1), 110000.0),
+            ]
+        )
+        self.assertAlmostEqual(result, 10.0, places=2)
+
+    def test_cashflow_matched_benchmark_uses_each_entry_date(self):
+        result = calculate_cashflow_matched_benchmark_return(
+            [
+                {"entry_date": "2025-01-01", "invested_value": 1000.0},
+                {"entry_date": "2025-06-01", "invested_value": 1000.0},
+            ],
+            [
+                {"date": date(2025, 1, 1), "close": 100.0},
+                {"date": date(2025, 6, 1), "close": 110.0},
+                {"date": date(2026, 1, 1), "close": 121.0},
+            ],
+            date(2026, 1, 1),
+        )
+        self.assertEqual(result["covered_positions"], 2)
+        self.assertEqual(result["return_pct"], 15.5)
+
+    def test_portfolio_risk_metrics_calculates_aligned_daily_ratios(self):
+        sessions = [date(2025, 1, 1) + timedelta(days=index) for index in range(130)]
+        closes = [100.0]
+        for index in range(1, len(sessions)):
+            closes.append(closes[-1] * (1.01 if index % 2 else 0.995))
+        history = [
+            {"date": session_date, "close": close}
+            for session_date, close in zip(sessions, closes)
+        ]
+        result = calculate_portfolio_risk_metrics(
+            [
+                {"symbol": "ALPHA", "weight_pct": 60.0},
+                {"symbol": "BETA", "weight_pct": 40.0},
+            ],
+            {"ALPHA": history, "BETA": history},
+            history,
+        )
+        self.assertEqual(result["status"], "available")
+        self.assertEqual(result["sessions"], 129)
+        self.assertEqual(result["beta"], 1.0)
+        self.assertEqual(result["jensen_alpha_pct"], 0.0)
+        self.assertEqual(result["tracking_error_pct"], 0.0)
+        self.assertEqual(result["correlation"], 1.0)
+        self.assertIsNotNone(result["sharpe_ratio"])
+        self.assertIsNotNone(result["sortino_ratio"])
+        self.assertLess(result["maximum_drawdown_pct"], 0)
+
+    def test_portfolio_risk_metrics_withholds_partial_portfolio_history(self):
+        history = [
+            {"date": date(2025, 1, 1) + timedelta(days=index), "close": 100 + index}
+            for index in range(130)
+        ]
+        result = calculate_portfolio_risk_metrics(
+            [
+                {"symbol": "AVAILABLE", "weight_pct": 80.0},
+                {"symbol": "MISSING", "weight_pct": 20.0},
+            ],
+            {"AVAILABLE": history},
+            history,
+        )
+        self.assertEqual(result["status"], "unavailable")
+        self.assertEqual(result["reason"], "historical_weight_coverage_below_threshold")
+        self.assertEqual(result["coverage"]["historical_positions"], 1)
+        self.assertEqual(result["coverage"]["historical_weight_pct"], 80.0)
+        self.assertIsNone(result["sharpe_ratio"])
+
+    def test_portfolio_amfi_resolution_and_history_parser_use_exact_scheme(self):
+        self.assertEqual(
+            resolve_portfolio_amfi_scheme("ICICI Pru short term fund")["scheme_code"],
+            "120754",
+        )
+        self.assertEqual(
+            resolve_portfolio_amfi_scheme("Franklin Templeton US opportunities FOF - direct growth")["scheme_code"],
+            "118551",
+        )
+        parsed = parse_amfi_nav_history_text(
+            "\n".join((
+                "Scheme Code;Scheme Name;Plan;Option;ISIN;;NAV;Date",
+                "120754;ICICI Prudential Short Term Fund;Direct Plan;Growth;INF109K013N3;;70.8038;07-Oct-2026",
+                "999999;Unrelated Fund;Direct Plan;Growth;INF000000000;;10.0;07-Oct-2026",
+                "120754;ICICI Prudential Short Term Fund;Direct Plan;Growth;INF109K013N3;;70.7000;06-Oct-2026",
+            )),
+            {"120754"},
+        )
+        self.assertEqual(len(parsed["120754"]), 2)
+        self.assertEqual(parsed["120754"][0]["date"], date(2026, 10, 6))
+        self.assertEqual(parsed["120754"][-1]["close"], 70.8038)
+
+    def test_portfolio_risk_metrics_excludes_ncd_and_uses_amfi_override(self):
+        sessions = [date(2025, 1, 1) + timedelta(days=index) for index in range(130)]
+        closes = [100.0]
+        for index in range(1, len(sessions)):
+            closes.append(closes[-1] * (1.008 if index % 3 else 0.996))
+        history = [
+            {"date": session_date, "close": close}
+            for session_date, close in zip(sessions, closes)
+        ]
+        result = build_portfolio_analysis(
+            [
+                {"Instrument": "ICICI Pru short term fund", "Symbol": "MF", "Current": 60},
+                {"Instrument": "BEL", "Symbol": "BEL", "Current": 30},
+                {"Instrument": "NCD", "Symbol": "SHRIRAM FIN", "Current": 10},
+            ],
+            {
+                "symbol": "Symbol",
+                "quantity": None,
+                "weight": None,
+                "current_value": "Current",
+                "name": "Instrument",
+            },
+            {"BEL": history},
+            benchmark_history=history,
+            position_history_overrides={
+                2: {
+                    "history": history,
+                    "scheme_code": "120754",
+                    "source": "AMFI",
+                }
+            },
+            valuation_date=date(2026, 1, 1),
+        )
+        metrics = result["risk_metrics"]
+        self.assertEqual(metrics["status"], "available")
+        self.assertEqual(metrics["coverage"]["required_positions"], 2)
+        self.assertEqual(metrics["coverage"]["excluded_positions"], 1)
+        self.assertEqual(metrics["coverage"]["excluded_weight_pct"], 10.0)
+        self.assertEqual(result["coverage"]["amfi_history_positions"], 1)
+
+    def test_portfolio_analysis_prefers_google_finance_quote_over_local_eod(self):
+        result = build_portfolio_analysis(
+            [{"Symbol": "BEL", "Qty": "10", "Avg": "350"}],
+            {"symbol": "Symbol", "quantity": "Qty", "average_cost": "Avg"},
+            {"BEL": [{"date": date(2026, 10, 6), "close": 386.75}]},
+            market_quotes={
+                "BEL": {
+                    "last_close": 387.4,
+                    "latest_price": 378.3,
+                    "observed_at": "2026-10-07T10:29:55+00:00",
+                    "source_url": "https://www.google.com/finance/quote/BEL:NSE?hl=en",
+                }
+            },
+        )
+        position = result["positions"][0]
+        self.assertEqual(position["last_close"], 387.4)
+        self.assertEqual(position["last_close_date"], "2026-10-06")
+        self.assertEqual(position["latest_price"], 378.3)
+        self.assertEqual(position["price_source"], "google_finance")
+        self.assertEqual(result["coverage"]["google_finance_priced"], 1)
+
+    def test_portfolio_summary_calculates_returns_benchmark_and_xirr(self):
+        result = build_portfolio_analysis(
+            [
+                {
+                    "Symbol": "BEL",
+                    "Entry Date": "2025-01-01",
+                    "Qty": "10",
+                    "Avg": "100",
+                    "Current": "1200",
+                }
+            ],
+            {
+                "symbol": "Symbol",
+                "quantity": "Qty",
+                "weight": None,
+                "average_cost": "Avg",
+                "current_value": "Current",
+                "latest_price": None,
+                "entry_date": "Entry Date",
+                "invested_value": None,
+                "sector": None,
+                "name": None,
+            },
+            {},
+            benchmark_history=[
+                {"date": date(2025, 1, 1), "close": 100.0},
+                {"date": date(2026, 1, 1), "close": 110.0},
+            ],
+            gsec_benchmark_history=[
+                {"date": date(2025, 1, 1), "close": 200.0},
+                {"date": date(2026, 1, 1), "close": 212.0},
+            ],
+            valuation_date=date(2026, 1, 1),
+        )
+        summary = result["portfolio_summary"]
+        self.assertEqual(summary["total_invested"], 1000.0)
+        self.assertEqual(summary["current_return"], 200.0)
+        self.assertEqual(summary["net_return_pct"], 20.0)
+        self.assertEqual(summary["portfolio_xirr_pct"], 20.0)
+        self.assertEqual(result["benchmark"]["return_pct"], 10.0)
+        self.assertEqual(result["gsec_benchmark"]["return_pct"], 6.0)
+        self.assertEqual(result["gsec_benchmark"]["name"], "Nifty 10 yr Benchmark G-Sec")
+
+    def test_portfolio_asset_allocation_classifies_and_aggregates_holdings(self):
+        result = build_portfolio_analysis(
+            [
+                {"Instrument": "Large Cap Equity Fund", "Symbol": "EQ FUND", "Current": 400},
+                {"Instrument": "Short Term Fund", "Symbol": "DEBT FUND", "Current": 250},
+                {"Instrument": "Gold ETF", "Symbol": "GOLDBEES", "Current": 150},
+                {"Instrument": "Multi Asset Fund", "Symbol": "HYBRID FUND", "Current": 100},
+                {"Instrument": "Bank Balance", "Symbol": "CASH", "Current": 50},
+                {"Instrument": "Unmapped Certificate", "Symbol": "MYSTERY", "Current": 50},
+            ],
+            {
+                "symbol": "Symbol",
+                "quantity": None,
+                "weight": None,
+                "average_cost": None,
+                "current_value": "Current",
+                "latest_price": None,
+                "entry_date": None,
+                "invested_value": None,
+                "sector": None,
+                "name": "Instrument",
+            },
+            {},
+        )
+        allocation = {row["asset_class"]: row for row in result["asset_allocation"]}
+        self.assertEqual(list(allocation), ["Equity", "Debt", "Commodity", "Hybrid", "Cash", "Other"])
+        self.assertEqual(allocation["Equity"]["weight_pct"], 40.0)
+        self.assertEqual(allocation["Debt"]["current_value"], 250.0)
+        self.assertEqual(allocation["Commodity"]["position_count"], 1)
+        self.assertEqual(allocation["Other"]["weight_pct"], 5.0)
+
     def test_portfolio_analysis_accepts_uploaded_weights_without_prices(self):
         result = build_portfolio_analysis(
             [{"Ticker": "AAA", "Weight": "60%"}, {"Ticker": "BBB", "Weight": "40%"}],
@@ -1970,6 +2235,39 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(result["coverage"]["eligible_positions"], 2)
         self.assertEqual(result["weight_basis"], "uploaded_current_value")
         self.assertEqual(result["concentration"]["largest_position_pct"], 75.0)
+
+    def test_portfolio_analysis_uses_uploaded_ltp_when_live_quote_is_off(self):
+        result = build_portfolio_analysis(
+            [{"Symbol": "MF", "Qty": "10", "Avg": "100", "LTP": "108", "Current": "1080"}],
+            {
+                "symbol": "Symbol",
+                "quantity": "Qty",
+                "weight": None,
+                "average_cost": "Avg",
+                "current_value": "Current",
+                "latest_price": "LTP",
+                "sector": None,
+                "name": None,
+            },
+            {},
+        )
+        position = result["positions"][0]
+        self.assertEqual(position["latest_price"], 108.0)
+        self.assertIsNone(position["last_close"])
+        self.assertEqual(position["price_source"], "uploaded_price_fallback")
+
+    def test_portfolio_asset_class_treats_uploaded_traded_stock_as_equity(self):
+        result = build_portfolio_analysis(
+            [{"Instrument": "Eris Life Sciences", "Symbol": "ERIS", "Qty": 4, "LTP": 1144.2, "Current": 4576.8}],
+            {
+                "symbol": "Symbol", "quantity": "Qty", "weight": None,
+                "average_cost": None, "current_value": "Current", "latest_price": "LTP",
+                "entry_date": None, "invested_value": None, "sector": None, "name": "Instrument",
+            },
+            {},
+        )
+        self.assertEqual(result["positions"][0]["asset_class"], "Equity")
+        self.assertEqual(result["asset_allocation"][0]["asset_class"], "Equity")
 
     def test_portfolio_analysis_allows_shared_symbol_when_instrument_names_differ(self):
         result = build_portfolio_analysis(
