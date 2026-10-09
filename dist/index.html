@@ -1082,6 +1082,138 @@
     html[data-theme="dark"] .positive { color: #55c982; }
     html[data-theme="dark"] .negative { color: #f07171; }
 
+    .historical-architecture-grid,
+    .historical-fingerprint-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .historical-architecture-card,
+    .historical-fingerprint-card {
+      min-width: 0;
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-soft);
+    }
+
+    .historical-step {
+      color: var(--brand-deep);
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .historical-architecture-card h3,
+    .historical-fingerprint-card h3 { margin: 6px 0; font-size: 15px; }
+    .historical-architecture-card p,
+    .historical-fingerprint-card p { margin: 0; color: var(--small-text); font-size: 12px; }
+    .historical-state-ready { color: var(--success); font-weight: 700; }
+    .historical-state-pending { color: var(--warning); font-weight: 700; }
+
+    .historical-taxonomy-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .historical-taxonomy-card {
+      padding: 17px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--panel);
+    }
+
+    .historical-taxonomy-card h3 { margin: 0 0 7px; font-size: 16px; }
+    .historical-taxonomy-card p { margin: 0; color: var(--small-text); font-size: 13px; }
+    .historical-taxonomy-card.bullish { border-top: 3px solid var(--success); }
+    .historical-taxonomy-card.bearish { border-top: 3px solid var(--danger); }
+    .historical-taxonomy-card.correction { border-top: 3px solid var(--warning); }
+    .historical-story-method-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .historical-story-method {
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-soft);
+    }
+    .historical-story-method strong { display: block; color: var(--heading); font-size: 14px; }
+    .historical-story-method span { display: block; margin-top: 6px; color: var(--small-text); font-size: 12px; line-height: 1.55; }
+    .historical-frequency-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .historical-frequency-card {
+      min-width: 0;
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--panel);
+    }
+    .historical-frequency-card .period { color: var(--brand-deep); font-size: 12px; font-weight: 750; }
+    .historical-frequency-card strong { display: block; margin-top: 7px; color: var(--heading); font-size: 16px; }
+    .historical-frequency-card p { margin: 7px 0 0; color: var(--small-text); font-size: 12px; line-height: 1.5; }
+    .historical-evidence-badge {
+      display: inline-flex;
+      margin-top: 9px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      color: var(--text-soft);
+      background: var(--surface-soft);
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .historical-era-list { display: grid; gap: 14px; margin-top: 14px; }
+    .historical-era {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    .historical-era-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 17px 18px;
+      background: var(--surface-soft);
+    }
+    .historical-era-period { color: var(--brand-deep); font-size: 12px; font-weight: 750; letter-spacing: .04em; }
+    .historical-era h3 { margin: 5px 0 0; color: var(--heading); font-size: 18px; }
+    .historical-era-meta { max-width: 260px; color: var(--muted); font-size: 11px; text-align: right; }
+    .historical-era-story {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .historical-era-chapter { min-width: 0; padding: 16px 18px; border-right: 1px solid var(--line); }
+    .historical-era-chapter:last-child { border-right: 0; }
+    .historical-era-chapter strong { display: block; color: var(--heading); font-size: 12px; }
+    .historical-era-chapter p { margin: 7px 0 0; color: var(--small-text); font-size: 12px; line-height: 1.55; }
+    .historical-era-state { padding: 10px 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+    .historical-source-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+    .historical-source {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-soft);
+    }
+    .historical-source a { color: var(--brand-deep); font-weight: 700; text-decoration: none; }
+    .historical-source a:hover { text-decoration: underline; }
+    .historical-source span { display: block; margin-top: 5px; color: var(--small-text); font-size: 12px; }
+    #historicalRegimesView .table-wrap table { min-width: 1120px; }
+    #historicalRegimesView .table-wrap th,
+    #historicalRegimesView .table-wrap td { white-space: nowrap; }
+
     @media (max-width: 900px) {
       .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .workspace-summary-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1095,6 +1227,14 @@
       .market-story-panel:nth-child(odd) { border-right: 0; }
       .story-strength-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .evidence-grid, .source-state-grid { grid-template-columns: 1fr; }
+      .historical-architecture-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .historical-fingerprint-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .historical-taxonomy-grid { grid-template-columns: 1fr; }
+      .historical-story-method-grid,
+      .historical-frequency-grid,
+      .historical-era-story { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .historical-era-chapter:nth-child(2) { border-right: 0; }
+      .historical-era-chapter:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
       .brand-note { display: none; }
       main { padding-inline: 22px; }
     }
@@ -1124,6 +1264,16 @@
       .workspace-summary-actions { align-items: flex-start; flex-direction: column; }
       .workspace-compact-section .workspace-summary-actions { align-items: stretch; }
       .market-story-footer { align-items: flex-start; flex-direction: column; }
+      .historical-architecture-grid,
+      .historical-fingerprint-grid { grid-template-columns: 1fr; }
+      .historical-story-method-grid,
+      .historical-frequency-grid,
+      .historical-era-story,
+      .historical-source-list { grid-template-columns: 1fr; }
+      .historical-era-head { display: block; }
+      .historical-era-meta { max-width: none; margin-top: 8px; text-align: left; }
+      .historical-era-chapter { border-right: 0; border-bottom: 1px solid var(--line); }
+      .historical-era-chapter:last-child { border-bottom: 0; }
     }
 
     @media (max-width: 430px) {
@@ -1219,6 +1369,7 @@
           <li><button class="nav-button" data-page="Portfolio Analysis" style="--item-color:#8f3bd1"><span class="nav-icon"></span><span>Portfolio Analysis</span></button></li>
           <li><button class="nav-button" data-page="Events Calendar" style="--item-color:#e6980b"><span class="nav-icon"></span><span>Events Calendar</span></button></li>
           <li><button class="nav-button" data-page="Stock Data YTD" style="--item-color:#0c94b7"><span class="nav-icon"></span><span>Stock Data YTD</span></button></li>
+          <li><button class="nav-button" data-page="Historical Regimes" style="--item-color:#8b6f47"><span class="nav-icon"></span><span>Historical regimes</span></button></li>
         </ul>
       </nav>
       <details class="sidebar-footer">
@@ -1622,7 +1773,7 @@
               <summary>Workspace status</summary>
               <div class="panel-list">
                 <div class="panel-row"><span>Interface</span><span>Frame ready</span></div>
-                <div class="panel-row"><span>Navigation</span><span>9 sections</span></div>
+                <div class="panel-row"><span>Navigation</span><span>10 sections</span></div>
                 <div class="panel-row"><span>External actions</span><span>Disabled</span></div>
               </div>
             </details>
@@ -2689,6 +2840,166 @@
           </section>
         </section>
 
+        <section id="historicalRegimesView" hidden aria-labelledby="historicalRegimesTitle">
+          <div class="page-tabs" aria-label="Historical regime views">
+            <div class="page-tab active">Long-history story atlas</div>
+          </div>
+
+          <div class="analysis-intro">
+            <div>
+              <h1 id="historicalRegimesTitle">Historical regimes</h1>
+              <p class="analysis-caption">What happened, how it happened, what came out of it, and how Indian markets recovered or adapted—from exchange foundations to the present</p>
+            </div>
+            <div class="analysis-status" id="historicalRegimesStatus">Historical cycle atlas not loaded</div>
+          </div>
+
+          <div class="universe-controls" aria-label="Historical regime controls">
+            <div class="selector-field">
+              <label for="historicalRegimesIndexSelect">Index history</label>
+              <select id="historicalRegimesIndexSelect">
+                <option>Nifty 50</option><option>Nifty Auto</option><option>Nifty Bank</option>
+                <option>Nifty Chemicals</option><option>Nifty Consumer Durables</option><option>Nifty Energy</option>
+                <option>Nifty Financial Services</option><option>Nifty FMCG</option><option>Nifty Healthcare</option>
+                <option>Nifty IT</option><option>Nifty Media</option><option>Nifty Metal</option>
+                <option>Nifty Oil and Gas</option><option>Nifty Pharma</option><option>Nifty Private Bank</option>
+                <option>Nifty PSU Bank</option><option>Nifty Realty</option>
+                <option>Nifty MidSmall Financial Services</option><option>Nifty MidSmall IT &amp; Telecom</option>
+              </select>
+            </div>
+            <div class="universe-action-row">
+              <button class="panel-button primary" id="loadHistoricalRegimesButton" type="button">Build historical atlas</button>
+              <button class="panel-button" id="refreshHistoricalOfficialHistoryButton" type="button">Update official RBI history</button>
+              <span class="universe-action-status" id="historicalRegimesCoverage">Uses the most detailed defensible frequency for every period.</span>
+            </div>
+            <p class="universe-source">The story is primary; data disciplines the story. Daily gaps are never fabricated—older periods step down to weekly, monthly, quarterly, annual or documentary evidence.</p>
+          </div>
+
+          <section class="summary-grid" aria-label="Historical cycle summary">
+            <article class="summary-card"><div class="summary-value" id="historicalHistoryValue">—</div><div class="summary-meta">Completed daily observations in local atlas</div></article>
+            <article class="summary-card"><div class="summary-value positive" id="historicalBullValue">—</div><div class="summary-meta">20% bullish phases</div></article>
+            <article class="summary-card"><div class="summary-value negative" id="historicalBearValue">—</div><div class="summary-meta">20% bearish phases</div></article>
+            <article class="summary-card"><div class="summary-value" id="historicalCorrectionValue">—</div><div class="summary-meta">10–20% corrections</div></article>
+          </section>
+
+          <section class="analysis-section">
+            <h2>The story contract</h2>
+            <p class="section-note">Every era and episode must answer the same four questions. A table or chart supports these chapters; it does not replace them.</p>
+            <div class="historical-story-method-grid" id="historicalStoryMethodGrid">
+              <article class="historical-story-method"><strong>What happened?</strong><span>Establish the observable sequence without hindsight labels.</span></article>
+              <article class="historical-story-method"><strong>How did it happen?</strong><span>Trace catalysts, transmission channels, positioning, policy and behaviour.</span></article>
+              <article class="historical-story-method"><strong>What came out of it?</strong><span>Record the economic, regulatory, market and portfolio consequences.</span></article>
+              <article class="historical-story-method"><strong>How did markets come out?</strong><span>Follow stress relief, participation, leadership, earnings, liquidity and recovery.</span></article>
+            </div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Historical evidence frequency</h2>
+            <p class="section-note">Resolution is period-specific. The engine takes the last available observation in each period and never interpolates missing prices.</p>
+            <div class="historical-frequency-grid" id="historicalFrequencyGrid">
+              <article class="historical-frequency-card"><div class="period">1875–1978</div><strong>Event / annual</strong><p>Documentary and structural history.</p></article>
+              <article class="historical-frequency-card"><div class="period">1978/79–1990</div><strong>Monthly / quarterly</strong><p>Early benchmark plus macro history.</p></article>
+              <article class="historical-frequency-card"><div class="period">1990–1995</div><strong>Weekly / monthly</strong><p>Reform and market-structure transition.</p></article>
+              <article class="historical-frequency-card"><div class="period">1995–present</div><strong>Daily + context</strong><p>Modern price cycles and richer fingerprints.</p></article>
+            </div>
+            <div class="analysis-note" id="historicalResolutionNote">The local series will also report its daily, weekly, monthly, quarterly and annual roll-up counts.</div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Official evidence spine</h2>
+            <p class="section-note" id="historicalOfficialHistoryNote">Annual RBI Handbook observations have not been imported yet. These are long-horizon anchors, not substitutes for daily turning points.</p>
+            <div class="summary-grid" id="historicalOfficialSeriesGrid">
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">BSE Sensex annual average</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">India WPI annual average</div></article>
+            </div>
+            <div class="table-guide"><strong>How to read:</strong> Each row joins one Indian financial year. Sensex is the annual average, not the year-end close. WPI year-on-year change is deliberately blank across an official index-base break.</div>
+            <div class="table-wrap"><table><thead><tr><th>Financial year</th><th>Sensex average</th><th>Sensex change</th><th>WPI average</th><th>WPI change</th><th>WPI base</th></tr></thead><tbody id="historicalOfficialTimelineBody"><tr><td colspan="6">Official annual history has not been imported.</td></tr></tbody></table></div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Indian market story map</h2>
+            <p class="section-note">These are research containers, not final verdicts. Each chapter becomes more quantitative as authoritative price and macro histories are connected.</p>
+            <div class="historical-era-list" id="historicalEraList">
+              <article class="historical-era"><div class="historical-era-head"><div><div class="historical-era-period">1875–present</div><h3>Load the atlas to build the long-history story map</h3></div></div></article>
+            </div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Identifier architecture</h2>
+            <p class="section-note">The system separates what was observable at the time from what happened afterwards. This prevents future outcomes from leaking into the historical label.</p>
+            <div class="historical-architecture-grid" id="historicalArchitectureGrid">
+              <article class="historical-architecture-card"><div class="historical-step">Layer 1</div><h3>Point-in-time evidence</h3><p>Store the prices, membership, macro releases and revisions actually known at each EOD.</p></article>
+              <article class="historical-architecture-card"><div class="historical-step">Layer 2</div><h3>Cycle identifier</h3><p>Detect bull, bear, correction, speed, duration, trough and recovery without interpreting causes.</p></article>
+              <article class="historical-architecture-card"><div class="historical-step">Layer 3</div><h3>Regime fingerprint</h3><p>Attach breadth, leadership, volatility, flows, rates, derivatives, earnings and macro states.</p></article>
+              <article class="historical-architecture-card"><div class="historical-step">Layer 4</div><h3>Behaviour hypotheses</h3><p>Test observable proxies for optimism, crowding, fear, capitulation and recovery.</p></article>
+              <article class="historical-architecture-card"><div class="historical-step">Layer 5</div><h3>Outcome engine</h3><p>Measure forward returns, drawdown, recovery, sector rotation and portfolio sensitivity on held-out periods.</p></article>
+            </div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Market-cycle taxonomy</h2>
+            <div class="table-guide"><strong>How to read:</strong> A bullish or bearish phase needs a 20% reversal from a confirmed extreme. A correction is a completed 10–20% drawdown. A rapid bear is a research flag when the 20% decline is confirmed within 45 sessions; it is not an official “crash” declaration.</div>
+            <div class="historical-taxonomy-grid">
+              <article class="historical-taxonomy-card bullish"><h3>Bullish phases</h3><p>Persistent advance from a trough, confirmed only after a 20% rise. We retain the earlier trough as the episode start without pretending it was identifiable in real time.</p></article>
+              <article class="historical-taxonomy-card bearish"><h3>Bearish phases</h3><p>Persistent decline from a peak, confirmed only after a 20% fall. Recovery is measured separately from the eventual trough.</p></article>
+              <article class="historical-taxonomy-card correction"><h3>Corrections</h3><p>Drawdowns of at least 10% but less than 20%, measured from the prior running peak through trough and recovery.</p></article>
+            </div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Bullish regimes</h2>
+            <p class="section-note" id="historicalBullNote">No bullish phases evaluated yet.</p>
+            <div class="table-wrap"><table><thead><tr><th>Start trough</th><th>Confirmed</th><th>Peak / latest</th><th>Maximum advance</th><th>Duration</th><th>In-phase max drawdown</th><th>20 sessions after peak</th><th>60 sessions after peak</th><th>252 sessions after peak</th><th>Status</th></tr></thead><tbody id="historicalBullBody"><tr><td colspan="10">Historical atlas has not been loaded.</td></tr></tbody></table></div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Bearish regimes and rapid-decline candidates</h2>
+            <p class="section-note" id="historicalBearNote">No bearish phases evaluated yet.</p>
+            <div class="table-guide"><strong>How to read:</strong> “Rapid bear” means the index reached the 20% threshold within 45 completed sessions. Recovery is the first later close at or above the prior peak, not merely a 20% bounce from the trough.</div>
+            <div class="table-wrap"><table><thead><tr><th>Start peak</th><th>Confirmed</th><th>Trough / latest</th><th>Maximum decline</th><th>Duration</th><th>Speed</th><th>Prior peak recovered</th><th>20 sessions after trough</th><th>60 sessions after trough</th><th>Status</th></tr></thead><tbody id="historicalBearBody"><tr><td colspan="10">Historical atlas has not been loaded.</td></tr></tbody></table></div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Corrections</h2>
+            <p class="section-note" id="historicalCorrectionNote">No corrections evaluated yet.</p>
+            <div class="table-wrap"><table><thead><tr><th>Prior peak</th><th>Trough</th><th>Recovery</th><th>Drawdown</th><th>Decline sessions</th><th>Recovery sessions</th><th>Total duration</th><th>20 sessions after trough</th><th>60 sessions after trough</th><th>Status</th></tr></thead><tbody id="historicalCorrectionBody"><tr><td colspan="10">Historical atlas has not been loaded.</td></tr></tbody></table></div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Economic contractions: recessions and depressions</h2>
+            <p class="section-note">Equity-market cycles and economic cycles overlap imperfectly. The system will not call a recession or depression from price action alone.</p>
+            <div class="split-panels">
+              <article class="evidence-card">
+                <h3>Recessions</h3>
+                <p class="historical-state-pending">Macro history required</p>
+                <p>Planned evidence includes point-in-time real activity, employment, income, industrial production, credit conditions, inflation and policy. Release dates and later revisions must be preserved.</p>
+              </article>
+              <article class="evidence-card">
+                <h3>Depressions</h3>
+                <p class="historical-state-pending">Definition and macro history required</p>
+                <p>There is no universal mechanical depression threshold. We will freeze a severity-and-duration contract before publishing any episode, and will keep it separate from a bear-market label.</p>
+              </article>
+            </div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Behavioural fingerprints to test</h2>
+            <p class="section-note">Human emotion cannot be observed directly. These are measurable hypotheses we can compare across episodes before allowing them to influence the current classifier.</p>
+            <div class="historical-fingerprint-grid">
+              <article class="historical-fingerprint-card"><h3>Optimism</h3><p>Broad participation, persistent momentum, improving earnings and contained volatility.</p></article>
+              <article class="historical-fingerprint-card"><h3>Crowding</h3><p>Narrow leadership, valuation dispersion, concentrated flows and one-sided derivatives positioning.</p></article>
+              <article class="historical-fingerprint-card"><h3>Fear</h3><p>Breadth collapse, volatility acceleration, currency stress and defensive sector leadership.</p></article>
+              <article class="historical-fingerprint-card"><h3>Capitulation</h3><p>Extreme downside breadth, forced-looking volume/OI changes, volatility spikes and rapid correlation convergence.</p></article>
+              <article class="historical-fingerprint-card"><h3>Recovery</h3><p>Stress easing first, then breadth repair, improving leadership and confirmation from flows and earnings.</p></article>
+            </div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Contract and limitations</h2>
+            <div class="analysis-note" id="historicalRegimesContractNote">historical-regimes-v2 · Daily price cycles and the lower-frequency long-history story layer remain explicit about their different evidence standards.</div>
+            <div class="historical-source-list" id="historicalSourceList"></div>
+          </section>
+        </section>
+
         <section id="emptyView" hidden aria-live="polite">
           <h1 id="emptyPageTitle"></h1>
         </section>
@@ -2771,6 +3082,15 @@
     const stockYtdSearchInput = document.getElementById('stockYtdSearchInput');
     const loadStockYtdButton = document.getElementById('loadStockYtdButton');
     const stockYtdBody = document.getElementById('stockYtdBody');
+    const historicalRegimesView = document.getElementById('historicalRegimesView');
+    const historicalRegimesStatus = document.getElementById('historicalRegimesStatus');
+    const historicalRegimesIndexSelect = document.getElementById('historicalRegimesIndexSelect');
+    const loadHistoricalRegimesButton = document.getElementById('loadHistoricalRegimesButton');
+    const refreshHistoricalOfficialHistoryButton = document.getElementById('refreshHistoricalOfficialHistoryButton');
+    const historicalOfficialTimelineBody = document.getElementById('historicalOfficialTimelineBody');
+    const historicalBullBody = document.getElementById('historicalBullBody');
+    const historicalBearBody = document.getElementById('historicalBearBody');
+    const historicalCorrectionBody = document.getElementById('historicalCorrectionBody');
     const seasonalityIndexSelect = document.getElementById('seasonalityIndexSelect');
     const seasonalityStockSelect = document.getElementById('seasonalityStockSelect');
     const seasonalityInstrumentLabel = document.getElementById('seasonalityInstrumentLabel');
@@ -2846,6 +3166,7 @@
     let dashboardSeasonalityUniverse = {};
     let stockYtdRows = [];
     let stockYtdPayload = null;
+    let historicalRegimesPayload = null;
     let earningsRows = [];
     let earningsPayload = null;
     let portfolioPreview = null;
@@ -6017,6 +6338,230 @@
       }
     }
 
+    function historicalForward(values, horizon) {
+      return signedPercentage(values && values[String(horizon)]);
+    }
+
+    function historicalDuration(sessions, calendarDays) {
+      if (!Number.isFinite(Number(sessions))) return '—';
+      const sessionText = `${Number(sessions).toLocaleString('en-IN')} sessions`;
+      return Number.isFinite(Number(calendarDays))
+        ? `${sessionText} · ${Number(calendarDays).toLocaleString('en-IN')} days`
+        : sessionText;
+    }
+
+    function renderHistoricalRegimes(result) {
+      historicalRegimesPayload = result;
+      const history = result.history || {};
+      const summary = result.summary || {};
+      const bulls = Array.isArray(result.bull_markets) ? result.bull_markets : [];
+      const bears = Array.isArray(result.bear_markets) ? result.bear_markets : [];
+      const corrections = Array.isArray(result.corrections) ? result.corrections : [];
+      const storyMethod = Array.isArray(result.story_method) ? result.story_method : [];
+      const coverageLadder = Array.isArray(result.coverage_ladder) ? result.coverage_ladder : [];
+      const storyEras = Array.isArray(result.story_eras) ? result.story_eras : [];
+      const sourceRegistry = Array.isArray(result.source_registry) ? result.source_registry : [];
+      const resolutionViews = result.resolution_views || {};
+      const officialHistory = result.official_history || {};
+      const officialSeries = Array.isArray(officialHistory.series) ? officialHistory.series : [];
+      const officialTimeline = Array.isArray(officialHistory.timeline) ? officialHistory.timeline : [];
+
+      document.getElementById('historicalStoryMethodGrid').innerHTML = storyMethod.length
+        ? storyMethod.map((row) => `<article class="historical-story-method">
+            <strong>${escapeHtml(row.question)}</strong>
+            <span>${escapeHtml(row.answer)}</span>
+          </article>`).join('')
+        : '<article class="historical-story-method"><strong>Story method unavailable</strong><span>The four-chapter contract was not returned.</span></article>';
+
+      document.getElementById('historicalFrequencyGrid').innerHTML = coverageLadder.length
+        ? coverageLadder.map((row) => `<article class="historical-frequency-card">
+            <div class="period">${escapeHtml(row.period)}</div>
+            <strong>${escapeHtml(row.preferred_frequency)}</strong>
+            <p>${escapeHtml(row.purpose)}</p>
+            <p>${escapeHtml(row.rule)}</p>
+            <span class="historical-evidence-badge">Evidence ${escapeHtml(row.evidence_grade)} · ${escapeHtml(row.status)}</span>
+          </article>`).join('')
+        : '<article class="historical-frequency-card"><strong>Coverage ladder unavailable</strong></article>';
+
+      const resolutionOrder = ['daily', 'weekly', 'monthly', 'quarterly', 'annual'];
+      const resolutionParts = resolutionOrder
+        .filter((frequency) => resolutionViews[frequency])
+        .map((frequency) => `${frequency} ${Number(resolutionViews[frequency].observations || 0).toLocaleString('en-IN')}`);
+      document.getElementById('historicalResolutionNote').textContent = resolutionParts.length
+        ? `${result.instrument} stored-history roll-ups: ${resolutionParts.join(' · ')}. Period-end closes only; no missing observations were interpolated.`
+        : 'No local resolution audit was returned.';
+
+      document.getElementById('historicalOfficialSeriesGrid').innerHTML = officialSeries.length
+        ? officialSeries.map((series) => {
+            const ready = series.status === 'ready';
+            const latest = ready ? Number(series.latest_value).toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—';
+            const change = ready && series.latest_change_pct != null ? ` · ${signedPercentage(series.latest_change_pct)} vs prior FY` : '';
+            const coverage = ready
+              ? `${formatDisplayDate(series.from_date)} to ${formatDisplayDate(series.to_date)} · ${Number(series.observations || 0).toLocaleString('en-IN')} annual observations`
+              : 'Run the official RBI history update';
+            return `<article class="summary-card">
+              <div class="summary-value">${escapeHtml(latest)}</div>
+              <div class="summary-meta">${escapeHtml(series.label)}${escapeHtml(change)}</div>
+              <div class="status">${escapeHtml(coverage)}</div>
+            </article>`;
+          }).join('')
+        : '<article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Official history not imported</div></article>';
+      document.getElementById('historicalOfficialHistoryNote').textContent = officialHistory.status === 'ready'
+        ? `${officialHistory.joined_annual_observations} joined financial years are ready. ${officialHistory.method}`
+        : 'Annual RBI Handbook observations have not been fully imported yet. These are long-horizon anchors, not substitutes for daily turning points.';
+      historicalOfficialTimelineBody.innerHTML = officialTimeline.length
+        ? [...officialTimeline].reverse().map((row) => `<tr>
+            <td>${escapeHtml(row.period)}</td>
+            <td>${Number(row.sensex_average).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+            <td class="${Number(row.sensex_change_pct) >= 0 ? 'positive' : 'negative'}">${signedPercentage(row.sensex_change_pct)}</td>
+            <td>${row.wpi_average == null ? '—' : Number(row.wpi_average).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+            <td class="${Number(row.wpi_change_pct) >= 0 ? 'positive' : 'negative'}">${signedPercentage(row.wpi_change_pct)}</td>
+            <td>${escapeHtml(row.wpi_base_period || '—')}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="6">Official annual history has not been imported.</td></tr>';
+
+      document.getElementById('historicalEraList').innerHTML = storyEras.length
+        ? storyEras.map((era) => `<article class="historical-era">
+            <div class="historical-era-head">
+              <div><div class="historical-era-period">${escapeHtml(era.period)} · ${escapeHtml(era.family)}</div><h3>${escapeHtml(era.title)}</h3></div>
+              <div class="historical-era-meta">${escapeHtml(era.frequency)} · evidence ${escapeHtml(era.evidence_grade)}</div>
+            </div>
+            <div class="historical-era-story">
+              <div class="historical-era-chapter"><strong>What happened?</strong><p>${escapeHtml(era.what_happened)}</p></div>
+              <div class="historical-era-chapter"><strong>How did it happen?</strong><p>${escapeHtml(era.how_it_happened)}</p></div>
+              <div class="historical-era-chapter"><strong>What came out of it?</strong><p>${escapeHtml(era.what_came_out)}</p></div>
+              <div class="historical-era-chapter"><strong>How did markets come out?</strong><p>${escapeHtml(era.how_markets_came_out)}</p></div>
+            </div>
+            <div class="historical-era-state">Research state: ${escapeHtml(era.research_state)}</div>
+          </article>`).join('')
+        : '<article class="historical-era"><div class="historical-era-head"><h3>Long-history story map unavailable</h3></div></article>';
+
+      document.getElementById('historicalSourceList').innerHTML = sourceRegistry.length
+        ? sourceRegistry.map((source) => {
+            const url = String(source.url || '');
+            const safeUrl = url.startsWith('https://') ? escapeHtml(url) : '#';
+            return `<article class="historical-source">
+              <a href="${safeUrl}" target="_blank" rel="noreferrer">${escapeHtml(source.name)}</a>
+              <span>${escapeHtml(source.authority)} · ${escapeHtml(source.use)}</span>
+            </article>`;
+          }).join('')
+        : '<article class="historical-source"><span>Official-source registry unavailable.</span></article>';
+      document.getElementById('historicalHistoryValue').textContent = Number(history.sessions || 0).toLocaleString('en-IN');
+      document.getElementById('historicalBullValue').textContent = Number((summary.bull_markets || {}).count || 0).toLocaleString('en-IN');
+      document.getElementById('historicalBearValue').textContent = Number((summary.bear_markets || {}).count || 0).toLocaleString('en-IN');
+      document.getElementById('historicalCorrectionValue').textContent = Number((summary.corrections || {}).count || 0).toLocaleString('en-IN');
+      document.getElementById('historicalRegimesCoverage').textContent =
+        `Indian market story map 1875–present · ${result.instrument} daily atlas ${formatDisplayDate(history.from_date)} to ${formatDisplayDate(history.to_date)} · ${Number(history.sessions || 0).toLocaleString('en-IN')} observations`;
+      historicalRegimesStatus.textContent = 'Long-history story atlas ready';
+
+      historicalBullBody.innerHTML = bulls.length ? bulls.map((row) => `<tr>
+        <td>${formatDisplayDate(row.start_date)}</td>
+        <td>${formatDisplayDate(row.confirmation_date)}<br><span class="status">${Number(row.sessions_to_confirmation).toLocaleString('en-IN')} sessions</span></td>
+        <td>${formatDisplayDate(row.extreme_date)}</td>
+        <td class="positive">${signedPercentage(row.move_pct)}</td>
+        <td>${historicalDuration(row.duration_sessions, row.duration_calendar_days)}</td>
+        <td class="negative">${signedPercentage(row.max_drawdown_within_phase_pct)}</td>
+        <td>${historicalForward(row.forward_from_extreme_pct, 20)}</td>
+        <td>${historicalForward(row.forward_from_extreme_pct, 60)}</td>
+        <td>${historicalForward(row.forward_from_extreme_pct, 252)}</td>
+        <td>${escapeHtml(row.status)}</td>
+      </tr>`).join('') : '<tr><td colspan="10">No 20% bullish phase was identified in the stored window.</td></tr>';
+
+      historicalBearBody.innerHTML = bears.length ? bears.map((row) => `<tr>
+        <td>${formatDisplayDate(row.start_date)}</td>
+        <td>${formatDisplayDate(row.confirmation_date)}<br><span class="status">${Number(row.sessions_to_confirmation).toLocaleString('en-IN')} sessions</span></td>
+        <td>${formatDisplayDate(row.extreme_date)}</td>
+        <td class="negative">${signedPercentage(row.move_pct)}</td>
+        <td>${historicalDuration(row.duration_sessions, row.duration_calendar_days)}</td>
+        <td>${row.rapid_decline ? 'Rapid bear candidate' : 'Bear phase'}</td>
+        <td>${row.recovered_previous_peak ? `${formatDisplayDate(row.recovery_date)} · ${Number(row.recovery_sessions_from_trough).toLocaleString('en-IN')} sessions` : 'Not within stored history'}</td>
+        <td>${historicalForward(row.forward_from_extreme_pct, 20)}</td>
+        <td>${historicalForward(row.forward_from_extreme_pct, 60)}</td>
+        <td>${escapeHtml(row.status)}</td>
+      </tr>`).join('') : '<tr><td colspan="10">No 20% bearish phase was identified in the stored window.</td></tr>';
+
+      historicalCorrectionBody.innerHTML = corrections.length ? corrections.map((row) => `<tr>
+        <td>${formatDisplayDate(row.peak_date)}</td>
+        <td>${formatDisplayDate(row.trough_date)}</td>
+        <td>${row.recovery_date ? formatDisplayDate(row.recovery_date) : 'Not recovered'}</td>
+        <td class="negative">${signedPercentage(row.drawdown_pct)}</td>
+        <td>${Number(row.decline_sessions).toLocaleString('en-IN')}</td>
+        <td>${row.recovery_sessions == null ? '—' : Number(row.recovery_sessions).toLocaleString('en-IN')}</td>
+        <td>${historicalDuration(row.total_sessions, row.calendar_days)}</td>
+        <td>${historicalForward(row.forward_from_trough_pct, 20)}</td>
+        <td>${historicalForward(row.forward_from_trough_pct, 60)}</td>
+        <td>${escapeHtml(row.status)}</td>
+      </tr>`).join('') : '<tr><td colspan="10">No isolated 10–20% correction was identified in the stored window.</td></tr>';
+
+      const bullSummary = summary.bull_markets || {};
+      const bearSummary = summary.bear_markets || {};
+      const correctionSummary = summary.corrections || {};
+      document.getElementById('historicalBullNote').textContent =
+        `${bulls.length} identified phases · median maximum advance ${signedPercentage(bullSummary.median_move_pct)} · median duration ${bullSummary.median_duration_sessions == null ? '—' : `${Number(bullSummary.median_duration_sessions).toLocaleString('en-IN')} sessions`}.`;
+      document.getElementById('historicalBearNote').textContent =
+        `${bears.length} identified phases · ${Number(summary.rapid_bear_candidates || 0).toLocaleString('en-IN')} rapid-decline candidates · median decline ${signedPercentage(bearSummary.median_move_pct)}.`;
+      document.getElementById('historicalCorrectionNote').textContent =
+        `${corrections.length} identified corrections · median drawdown ${signedPercentage(correctionSummary.median_move_pct)} · median peak-to-recovery window ${correctionSummary.median_duration_sessions == null ? '—' : `${Number(correctionSummary.median_duration_sessions).toLocaleString('en-IN')} sessions`}.`;
+      document.getElementById('historicalRegimesContractNote').textContent =
+        `${result.contract_version}. ${Array.isArray(result.limitations) ? result.limitations.join(' ') : ''}`;
+    }
+
+    async function loadHistoricalRegimes(showSuccess = false) {
+      loadHistoricalRegimesButton.disabled = true;
+      loadHistoricalRegimesButton.textContent = 'Building atlas…';
+      historicalRegimesStatus.textContent = 'Reading point-in-time index history…';
+      try {
+        const endpoint = `/api/historical-regimes?index=${encodeURIComponent(historicalRegimesIndexSelect.value)}`;
+        const response = await fetch(endpoint, { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          historicalRegimesStatus.textContent = 'Historical cycle atlas unavailable';
+          showNotice(kiteFailureMessage(result.reason));
+          return false;
+        }
+        renderHistoricalRegimes(result);
+        if (showSuccess) showNotice(`Indian market story map and ${result.instrument} cycle atlas loaded.`);
+        return true;
+      } catch (_error) {
+        historicalRegimesStatus.textContent = 'The local historical-regime service is unavailable';
+        return false;
+      } finally {
+        loadHistoricalRegimesButton.disabled = false;
+        loadHistoricalRegimesButton.textContent = 'Build historical atlas';
+      }
+    }
+
+    async function refreshHistoricalOfficialHistory(showSuccess = false) {
+      refreshHistoricalOfficialHistoryButton.disabled = true;
+      refreshHistoricalOfficialHistoryButton.textContent = 'Updating RBI history…';
+      historicalRegimesStatus.textContent = 'Reading official RBI Handbook vintages…';
+      try {
+        const response = await fetch('/api/historical-regimes/official-history/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          historicalRegimesStatus.textContent = 'Official RBI history update unavailable';
+          if (showSuccess) showNotice(kiteFailureMessage(result.reason));
+          return false;
+        }
+        const loaded = await loadHistoricalRegimes(false);
+        if (showSuccess && loaded) {
+          const written = result.write_result || {};
+          showNotice(`Official RBI history updated · ${Number(written.inserted || 0).toLocaleString('en-IN')} new · ${Number(written.duplicates || 0).toLocaleString('en-IN')} already stored.`);
+        }
+        return loaded;
+      } catch (_error) {
+        historicalRegimesStatus.textContent = 'The official RBI history service is unavailable';
+        return false;
+      } finally {
+        refreshHistoricalOfficialHistoryButton.disabled = false;
+        refreshHistoricalOfficialHistoryButton.textContent = 'Update official RBI history';
+      }
+    }
+
     async function refreshAllWorkspaceViewsAfterEod() {
       const workspaceTasks = [
         loadDashboardMarketStory(false),
@@ -6029,6 +6574,7 @@
         loadLocalSeasonality(false),
         loadMacroEventsCalendar(false),
         loadEarnings(false),
+        loadHistoricalRegimes(false),
       ];
       workspaceTasks.push((async () => {
         const universeUpdated = await loadRegimeValidationUniverse();
@@ -6050,7 +6596,7 @@
         return;
       }
       eodUpdateButton.disabled = true;
-      const totalStages = 14;
+      const totalStages = 15;
       let completedStages = 0;
       const failedStages = [];
       const updateProgress = (stage) => {
@@ -6095,13 +6641,14 @@
         // Historical leaders also performs the incremental local candle sync used
         // by market sentiment. Do not skip it when an unrelated EOD source fails.
         const historicalLeadersUpdated = await runStage('Synchronising ten-year local history', loadHistoricalMonthLeaders);
+        const officialHistoryUpdated = await runStage('Updating official RBI long-run history', () => refreshHistoricalOfficialHistory(false));
         const sentimentUpdated = await runStage('Calculating market sentiment', () => loadDomesticSentiment(false));
         const factorSnapshotSaved = await runStage(
           'Saving the sentiment evidence snapshot',
           () => sentimentUpdated ? saveSentimentFactorSnapshot() : Promise.resolve(false),
         );
         const workspacesRefreshed = await runStage('Refreshing every workspace and portfolio story', refreshAllWorkspaceViewsAfterEod);
-        if (indexUpdated && eodIndicesUpdated && institutionalFlowsUpdated && confirmedFpiUpdated && macroContextUpdated && globalRiskUpdated && futuresOiUpdated && breadthUpdated && stockHistoryUpdated && monthlyLeadersUpdated && historicalLeadersUpdated && sentimentUpdated && factorSnapshotSaved && workspacesRefreshed) {
+        if (indexUpdated && eodIndicesUpdated && institutionalFlowsUpdated && confirmedFpiUpdated && macroContextUpdated && globalRiskUpdated && futuresOiUpdated && breadthUpdated && stockHistoryUpdated && monthlyLeadersUpdated && historicalLeadersUpdated && officialHistoryUpdated && sentimentUpdated && factorSnapshotSaved && workspacesRefreshed) {
           showNotice('EOD update completed. All market data, workspaces, and the in-memory portfolio story are refreshed.');
         } else {
           const failedSummary = failedStages.slice(0, 3).join(' · ');
@@ -6404,6 +6951,7 @@
     eventRegionSelect.addEventListener('change', renderMacroEventRows);
     eventCategorySelect.addEventListener('change', renderMacroEventRows);
     refreshEarningsButton.addEventListener('click', () => loadEarnings(true));
+    refreshHistoricalOfficialHistoryButton.addEventListener('click', () => refreshHistoricalOfficialHistory(true));
     importEarningsButton.addEventListener('click', importEarningsCsv);
     earningsBasisSelect.addEventListener('change', renderEarningsTable);
     earningsSectorSelect.addEventListener('change', renderEarningsTable);
@@ -6421,6 +6969,8 @@
     stockYtdSortSelect.addEventListener('change', renderStockYtdTable);
     stockYtdSectorSelect.addEventListener('change', renderStockYtdTable);
     stockYtdSearchInput.addEventListener('input', renderStockYtdTable);
+    loadHistoricalRegimesButton.addEventListener('click', () => loadHistoricalRegimes(true));
+    historicalRegimesIndexSelect.addEventListener('change', () => loadHistoricalRegimes(false));
     regimeValidationIndexSelect.addEventListener('change', () => updateRegimeValidationSelection(true));
     regimeValidationBenchmarkSelect.addEventListener('change', () => {
       const benchmark = regimeValidationBenchmarkSelect.value === 'none' ? 'No relative benchmark' : 'Nifty 50 benchmark';
@@ -6478,6 +7028,7 @@
         const isSeasonality = button.dataset.page === 'Seasonality Analysis';
         const isNewsEvents = button.dataset.page === 'Events Calendar';
         const isStockYtd = button.dataset.page === 'Stock Data YTD';
+        const isHistoricalRegimes = button.dataset.page === 'Historical Regimes';
         const isEarnings = button.dataset.page === 'Earnings Analysis';
         const isPortfolio = button.dataset.page === 'Portfolio Analysis';
         dashboardView.hidden = !isDashboard;
@@ -6487,10 +7038,11 @@
         seasonalityView.hidden = !isSeasonality;
         newsEventsView.hidden = !isNewsEvents;
         stockYtdView.hidden = !isStockYtd;
+        historicalRegimesView.hidden = !isHistoricalRegimes;
         earningsView.hidden = !isEarnings;
         portfolioView.hidden = !isPortfolio;
-        emptyView.hidden = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isEarnings || isPortfolio;
-        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isEarnings || isPortfolio ? '' : button.dataset.page;
+        emptyView.hidden = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isEarnings || isPortfolio;
+        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isEarnings || isPortfolio ? '' : button.dataset.page;
         if (isDashboard) {
           renderDashboardPortfolioSummary(portfolioAnalysis);
           renderDashboardStoryPortfolio(portfolioAnalysis, dashboardMarketStory);
@@ -6519,6 +7071,8 @@
           loadMacroEventsCalendar(false);
         } else if (isStockYtd && !stockYtdRows.length && kiteLoginButton.classList.contains('kite-authenticated')) {
           loadStockYtd(false);
+        } else if (isHistoricalRegimes && !historicalRegimesPayload) {
+          loadHistoricalRegimes(false);
         } else if (isEarnings && !earningsPayload) {
           loadEarnings(false);
         }

@@ -35,6 +35,9 @@ from server import (
     build_earnings_analysis,
     build_index_futures_confirmation,
     build_regime_external_cluster_readiness,
+    build_historical_regime_workspace,
+    build_historical_series_summary,
+    aggregate_historical_closes,
     apply_recovering_market_state,
     build_regime_validation_universe,
     load_index_constituent_snapshot,
@@ -67,6 +70,7 @@ from server import (
     parse_fred_global_csv,
     parse_fred_global_zip,
     parse_rbi_macro_snapshot,
+    parse_rbi_annual_series_table,
     parse_near_month_stock_futures,
     parse_nse_announcement_csv,
     parse_earnings_csv,
@@ -114,6 +118,138 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
             result["contract"]["missing_evidence_policy"],
             "exclude_and_reduce_confidence",
         )
+
+    def test_historical_regime_workspace_separates_price_and_economic_cycles(self):
+        closes = []
+
+        def extend(start, end, sessions):
+            closes.extend(
+                start + (end - start) * position / sessions
+                for position in range(1, sessions + 1)
+            )
+
+        closes.append(100.0)
+        extend(100.0, 135.0, 100)
+        extend(135.0, 90.0, 55)
+        extend(90.0, 140.0, 90)
+        extend(140.0, 122.0, 35)
+        extend(122.0, 142.0, 35)
+        extend(142.0, 175.0, 190)
+        candles = [
+            {
+                "date": date(2020, 1, 1) + timedelta(days=position),
+                "close": close,
+            }
+            for position, close in enumerate(closes)
+        ]
+
+        result = build_historical_regime_workspace(candles)
+
+        self.assertEqual(result["contract_version"], "historical-regimes-v3")
+        self.assertGreaterEqual(result["summary"]["bull_markets"]["count"], 2)
+        self.assertGreaterEqual(result["summary"]["bear_markets"]["count"], 1)
+        self.assertGreaterEqual(result["summary"]["corrections"]["count"], 1)
+        self.assertEqual(
+            result["economic_cycles"]["recessions"]["status"],
+            "macro_history_required",
+        )
+        self.assertEqual(result["economic_cycles"]["recessions"]["episodes"], [])
+        self.assertEqual(result["history"]["analysis_frequency"], "daily")
+        self.assertEqual(result["coverage_ladder"][0]["period"], "1875–1978")
+        self.assertEqual(result["story_eras"][0]["period"], "1875–1947")
+        self.assertEqual(len(result["story_method"]), 4)
+        self.assertGreater(
+            result["resolution_views"]["daily"]["observations"],
+            result["resolution_views"]["monthly"]["observations"],
+        )
+
+    def test_rbi_annual_history_parser_preserves_base_breaks_and_excludes_partial_year(self):
+        html = """
+        <table>
+          <tr><th>Year</th><th>BSE Sensex</th></tr>
+          <tr><td>(Base : 1978-79 = 100)</td><td></td></tr>
+          <tr><td>1979-80</td><td>122.32</td></tr>
+          <tr><td>1980-81</td><td>138.87</td></tr>
+          <tr><td>2006-07*</td><td>10994.75</td></tr>
+        </table>
+        """
+        rows = parse_rbi_annual_series_table(
+            html,
+            series_key="bse_sensex_annual_average",
+            source_url="https://rbi.org.in/scripts/PublicationsView.aspx?id=8656",
+            source_title="RBI Handbook 2006 Table 106",
+            vintage_date=date(2006, 9, 18),
+            value_column=1,
+            unit="Index average",
+        )
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["date"], date(1980, 3, 31))
+        self.assertEqual(rows[0]["base_period"], "1978-79 = 100")
+        self.assertEqual(rows[-1]["period_label"], "1980-81")
+
+    def test_historical_series_summary_withholds_wpi_change_across_base_break(self):
+        common = {
+            "frequency": "annual",
+            "unit": "Index average",
+            "source_title": "RBI Handbook",
+            "source_url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=1",
+            "source_authority": "Reserve Bank of India",
+            "vintage_date": date(2026, 7, 31),
+            "retrieved_at": "2026-10-09T00:00:00+00:00",
+            "metadata": {},
+        }
+        rows = [
+            dict(common, series_key="bse_sensex_annual_average", date=date(2024, 3, 31), period_label="2023-24", value=100.0, base_period="1978-79 = 100"),
+            dict(common, series_key="bse_sensex_annual_average", date=date(2025, 3, 31), period_label="2024-25", value=110.0, base_period="1978-79 = 100"),
+            dict(common, series_key="india_wpi_all_commodities_annual_average", date=date(2024, 3, 31), period_label="2023-24", value=151.4, base_period="2011-12 = 100"),
+            dict(common, series_key="india_wpi_all_commodities_annual_average", date=date(2025, 3, 31), period_label="2024-25", value=101.0, base_period="2022-23 = 100"),
+        ]
+        summary = build_historical_series_summary(rows)
+        self.assertEqual(summary["status"], "ready")
+        self.assertEqual(summary["joined_annual_observations"], 2)
+        self.assertEqual(summary["timeline"][-1]["sensex_change_pct"], 10.0)
+        self.assertIsNone(summary["timeline"][-1]["wpi_change_pct"])
+
+    def test_historical_close_aggregation_uses_period_end_without_interpolation(self):
+        observations = [
+            {"date": date(2024, 1, 2), "close": 100.0},
+            {"date": date(2024, 1, 31), "close": 110.0},
+            {"date": date(2024, 2, 5), "close": 108.0},
+            {"date": date(2024, 3, 28), "close": 120.0},
+            {"date": date(2024, 4, 1), "close": 121.0},
+        ]
+
+        monthly = aggregate_historical_closes(observations, frequency="monthly")
+        quarterly = aggregate_historical_closes(observations, frequency="quarterly")
+
+        self.assertEqual(
+            monthly,
+            [
+                {"date": date(2024, 1, 31), "close": 110.0},
+                {"date": date(2024, 2, 5), "close": 108.0},
+                {"date": date(2024, 3, 28), "close": 120.0},
+                {"date": date(2024, 4, 1), "close": 121.0},
+            ],
+        )
+        self.assertEqual(
+            quarterly,
+            [
+                {"date": date(2024, 3, 28), "close": 120.0},
+                {"date": date(2024, 4, 1), "close": 121.0},
+            ],
+        )
+        with self.assertRaisesRegex(ValueError, "invalid_historical_frequency"):
+            aggregate_historical_closes(observations, frequency="hourly")
+
+    def test_historical_regime_workspace_requires_one_year_of_history(self):
+        candles = [
+            {"date": date(2025, 1, 1) + timedelta(days=position), "close": 100 + position}
+            for position in range(251)
+        ]
+        with self.assertRaisesRegex(
+            ValueError, "historical_regime_history_unavailable"
+        ):
+            build_historical_regime_workspace(candles)
 
     def test_candidate_regime_excludes_missing_clusters_and_lowers_confidence(self):
         result = calculate_candidate_regime(

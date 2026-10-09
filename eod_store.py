@@ -32,6 +32,10 @@ class MacroSnapshotConflictError(ValueError):
     """Raised when an official macro observation changes after storage."""
 
 
+class HistoricalSeriesConflictError(ValueError):
+    """Raised when one source vintage changes an already stored observation."""
+
+
 class FuturesSnapshotConflictError(ValueError):
     """Raised when a stored contract/session snapshot changes."""
 
@@ -138,6 +142,34 @@ class EODStore:
 
                     CREATE INDEX IF NOT EXISTS macro_snapshots_date_idx
                     ON macro_snapshots(observation_date);
+
+                    CREATE TABLE IF NOT EXISTS historical_series_observations (
+                        series_key TEXT NOT NULL,
+                        observation_date TEXT NOT NULL,
+                        period_label TEXT NOT NULL,
+                        frequency TEXT NOT NULL CHECK (frequency IN (
+                            'daily', 'weekly', 'monthly', 'quarterly', 'annual', 'event'
+                        )),
+                        value REAL NOT NULL,
+                        unit TEXT NOT NULL,
+                        base_period TEXT NOT NULL,
+                        source_title TEXT NOT NULL,
+                        source_url TEXT NOT NULL,
+                        source_authority TEXT NOT NULL,
+                        vintage_date TEXT NOT NULL,
+                        retrieved_at TEXT NOT NULL,
+                        validation_status TEXT NOT NULL CHECK (validation_status = 'validated'),
+                        metadata_json TEXT NOT NULL,
+                        schema_version INTEGER NOT NULL,
+                        PRIMARY KEY (
+                            series_key, observation_date, frequency, vintage_date
+                        )
+                    );
+
+                    CREATE INDEX IF NOT EXISTS historical_series_latest_idx
+                    ON historical_series_observations(
+                        series_key, observation_date, frequency, vintage_date
+                    );
 
                     CREATE TABLE IF NOT EXISTS futures_contracts (
                         contract_key TEXT PRIMARY KEY,
@@ -1281,6 +1313,198 @@ class EODStore:
                 "instrument_label": row["instrument_label"],
                 "source": row["source"],
                 "retrieved_at": row["retrieved_at"],
+            }
+            for row in rows
+        ]
+
+    def append_historical_series_observations(
+        self,
+        rows: list[dict[str, object]],
+        *,
+        retrieved_at: str | None = None,
+    ) -> dict[str, int]:
+        """Append validated observations while retaining every official vintage."""
+        timestamp = retrieved_at or datetime.now(timezone.utc).isoformat()
+        frequencies = {"daily", "weekly", "monthly", "quarterly", "annual", "event"}
+        prepared: list[tuple[object, ...]] = []
+        identities: set[tuple[str, str, str, str]] = set()
+        for row in rows:
+            observation_date = row.get("date")
+            series_key = row.get("series_key")
+            period_label = row.get("period_label")
+            frequency = row.get("frequency")
+            value = row.get("value")
+            unit = row.get("unit")
+            base_period = row.get("base_period")
+            source_title = row.get("source_title")
+            source_url = row.get("source_url")
+            source_authority = row.get("source_authority")
+            vintage_date = row.get("vintage_date")
+            metadata = row.get("metadata", {})
+            if (
+                not isinstance(observation_date, date)
+                or not isinstance(series_key, str)
+                or not re.fullmatch(r"[a-z0-9][a-z0-9_]{2,63}", series_key)
+                or not isinstance(period_label, str)
+                or not period_label.strip()
+                or frequency not in frequencies
+                or not isinstance(value, (int, float))
+                or isinstance(value, bool)
+                or not math.isfinite(float(value))
+                or float(value) <= 0
+                or not isinstance(unit, str)
+                or not unit.strip()
+                or not isinstance(base_period, str)
+                or not base_period.strip()
+                or not isinstance(source_title, str)
+                or not source_title.strip()
+                or not isinstance(source_url, str)
+                or not source_url.startswith("https://")
+                or not isinstance(source_authority, str)
+                or not source_authority.strip()
+                or not isinstance(vintage_date, date)
+                or not isinstance(metadata, dict)
+            ):
+                raise ValueError("invalid_historical_series_observation")
+            identity = (
+                series_key,
+                observation_date.isoformat(),
+                str(frequency),
+                vintage_date.isoformat(),
+            )
+            if identity in identities:
+                raise ValueError("invalid_historical_series_observation")
+            identities.add(identity)
+            prepared.append(
+                (
+                    identity[0],
+                    identity[1],
+                    period_label.strip(),
+                    identity[2],
+                    float(value),
+                    unit.strip(),
+                    base_period.strip(),
+                    source_title.strip(),
+                    source_url,
+                    source_authority.strip(),
+                    identity[3],
+                    timestamp,
+                    "validated",
+                    json.dumps(metadata, sort_keys=True, separators=(",", ":")),
+                    SCHEMA_VERSION,
+                )
+            )
+
+        inserted = 0
+        duplicates = 0
+        with closing(self._connect()) as connection:
+            with connection:
+                for record in prepared:
+                    existing = connection.execute(
+                        """
+                        SELECT period_label, value, unit, base_period, source_title,
+                               source_url, source_authority, metadata_json
+                        FROM historical_series_observations
+                        WHERE series_key = ? AND observation_date = ?
+                          AND frequency = ? AND vintage_date = ?
+                        """,
+                        (record[0], record[1], record[3], record[10]),
+                    ).fetchone()
+                    stored_values = (
+                        record[2], record[4], record[5], record[6], record[7],
+                        record[8], record[9], record[13],
+                    )
+                    if existing is not None:
+                        existing_values = (
+                            existing["period_label"], float(existing["value"]),
+                            existing["unit"], existing["base_period"],
+                            existing["source_title"], existing["source_url"],
+                            existing["source_authority"], existing["metadata_json"],
+                        )
+                        if existing_values != stored_values:
+                            raise HistoricalSeriesConflictError(
+                                f"stored_historical_series_conflict:{record[0]}:{record[1]}:{record[10]}"
+                            )
+                        duplicates += 1
+                        continue
+                    connection.execute(
+                        """
+                        INSERT INTO historical_series_observations (
+                            series_key, observation_date, period_label, frequency,
+                            value, unit, base_period, source_title, source_url,
+                            source_authority, vintage_date, retrieved_at,
+                            validation_status, metadata_json, schema_version
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        record,
+                    )
+                    inserted += 1
+        return {"inserted": inserted, "duplicates": duplicates}
+
+    def load_historical_series_observations(
+        self,
+        *,
+        series_key: str | None = None,
+        latest_only: bool = True,
+    ) -> list[dict[str, object]]:
+        parameters: list[object] = []
+        filters = ""
+        if series_key is not None:
+            if not re.fullmatch(r"[a-z0-9][a-z0-9_]{2,63}", series_key):
+                raise ValueError("invalid_historical_series_key")
+            filters = "WHERE series_key = ?"
+            parameters.append(series_key)
+        with closing(self._connect()) as connection:
+            if latest_only:
+                rows = connection.execute(
+                    f"""
+                    SELECT h.series_key, h.observation_date, h.period_label,
+                           h.frequency, h.value, h.unit, h.base_period,
+                           h.source_title, h.source_url, h.source_authority,
+                           h.vintage_date, h.retrieved_at, h.metadata_json
+                    FROM historical_series_observations h
+                    JOIN (
+                        SELECT series_key, observation_date, frequency,
+                               MAX(vintage_date) AS vintage_date
+                        FROM historical_series_observations
+                        {filters}
+                        GROUP BY series_key, observation_date, frequency
+                    ) latest
+                      ON latest.series_key = h.series_key
+                     AND latest.observation_date = h.observation_date
+                     AND latest.frequency = h.frequency
+                     AND latest.vintage_date = h.vintage_date
+                    ORDER BY h.series_key, h.observation_date
+                    """,
+                    parameters,
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    f"""
+                    SELECT series_key, observation_date, period_label, frequency,
+                           value, unit, base_period, source_title, source_url,
+                           source_authority, vintage_date, retrieved_at, metadata_json
+                    FROM historical_series_observations
+                    {filters}
+                    ORDER BY series_key, observation_date, vintage_date
+                    """,
+                    parameters,
+                ).fetchall()
+        return [
+            {
+                "series_key": row["series_key"],
+                "date": date.fromisoformat(row["observation_date"]),
+                "period_label": row["period_label"],
+                "frequency": row["frequency"],
+                "value": float(row["value"]),
+                "unit": row["unit"],
+                "base_period": row["base_period"],
+                "source_title": row["source_title"],
+                "source_url": row["source_url"],
+                "source_authority": row["source_authority"],
+                "vintage_date": date.fromisoformat(row["vintage_date"]),
+                "retrieved_at": row["retrieved_at"],
+                "metadata": json.loads(row["metadata_json"]),
             }
             for row in rows
         ]

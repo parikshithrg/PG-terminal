@@ -345,12 +345,38 @@ orders or position sizing.
   sector participation. Rankings average the shares above 20-, 50-, and 200-day
   moving averages and require at least five evaluated stocks plus 60% sector
   coverage, preventing one-stock classifications from dominating the summary.
+- Added `historical-regimes-v3` as a dedicated sidebar workspace. It reads the
+  selected index from the validated local EOD store and publishes 20% bull/bear
+  phases, 10–20% corrections, rapid-decline candidates, confirmation lag,
+  recovery to the prior peak, duration, and forward paths. The page also freezes
+  a five-layer architecture for later regime fingerprints and keeps recession/
+  depression labels withheld until authoritative point-in-time macro histories
+  and definitions are connected.
+- Extended Historical Regimes into a story-first 1875-present research map.
+  Every era answers what happened, how it happened, what came out of it, and how
+  markets recovered or adapted. Older periods explicitly step down to event,
+  annual, quarterly, monthly, or weekly evidence; missing daily values are never
+  fabricated. The server now provides deterministic period-end aggregation,
+  period-specific evidence grades, era research states, and an official-source
+  registry for SEBI, BSE, NSE Indices, and RBI.
+- Connected the first official long-history evidence spine from RBI Handbook
+  publication pages: 47 financial-year BSE Sensex annual averages from 1979-80
+  through 2025-26 and 46 WPI all-commodities annual averages from 1980-81
+  through 2025-26. Observations retain source vintage and index base; overlapping
+  vintages are preserved and WPI changes are withheld across rebasing breaks.
+  The import is repeat-safe, appears as a dedicated Historical Regimes section,
+  and now runs as one fault-isolated EOD Update stage.
 
 ## Next work
 
-1. Live-check the first full NIFTY 500 five-year retrieval after reconnecting
+1. Extend the audited RBI history spine with real growth, rates, currency,
+   credit and fiscal-stress series while preserving releases, revisions, base
+   changes and honest frequency. Then convert the era scaffolds into cited
+   episode stories, beginning with 1978/79-1995, rather than filling missing
+   periods with synthetic daily values.
+2. Live-check the first full NIFTY 500 five-year retrieval after reconnecting
    Kite, including year switching, coverage counts, and reverse ranking order.
-2. Begin the queued Portfolio performance and Alpha Opportunities roadmap:
+3. Begin the queued Portfolio performance and Alpha Opportunities roadmap:
    transaction-based performance; approved RBI 91-day T-bill history; complete
    permitted ETF/equity histories; and position-level return, volatility, and
    drawdown attribution. Keep the NCD excluded until a genuine mark-to-market or
@@ -361,12 +387,12 @@ orders or position sizing.
    Keep holdings local/read-only and keep the whole-market Dashboard headline
    deferred until its inputs, methodology, confidence rules, and wording are
    explicitly designed and reviewed.
-3. Continue daily collection for institutional flows, macro context, global risk,
+4. Continue daily collection for institutional flows, macro context, global risk,
    and futures/OI; freeze their directional thresholds only after adequate
    coverage, then test them out of sample.
-4. Source and audit authoritative dated index membership before populating the
+5. Source and audit authoritative dated index membership before populating the
    new point-in-time schema; never infer historical membership from today's list.
-5. Display any decision layer only after its evidence and limitations are
+6. Display any decision layer only after its evidence and limitations are
    reviewable in the interface.
 
 ## Approved longer-range product milestones

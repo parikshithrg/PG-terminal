@@ -24,6 +24,7 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http import HTTPStatus
+from html.parser import HTMLParser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from datetime import date, datetime, time as datetime_time, timedelta, timezone
@@ -36,6 +37,7 @@ from eod_store import (
     EODStore,
     FuturesSnapshotConflictError,
     GlobalRiskConflictError,
+    HistoricalSeriesConflictError,
     InstitutionalFlowConflictError,
     MacroSnapshotConflictError,
 )
@@ -102,6 +104,10 @@ FRED_GLOBAL_SERIES = {
 }
 SENTIMENT_EVIDENCE_MODEL_VERSION = "market-sentiment-evidence-v1"
 REGIME_RULE_VERSION = "market-regime-candidate-v1"
+HISTORICAL_REGIME_CONTRACT_VERSION = "historical-regimes-v3"
+HISTORICAL_BULL_BEAR_THRESHOLD_PCT = 20.0
+HISTORICAL_CORRECTION_THRESHOLD_PCT = 10.0
+HISTORICAL_RAPID_BEAR_SESSIONS = 45
 REGIME_BAND_VALUES = {"constructive": 1.0, "mixed": 0.0, "defensive": -1.0}
 REGIME_CLUSTER_WEIGHTS = {
     "domestic_trend": 0.25,
@@ -398,6 +404,33 @@ REGIME_LABEL_THRESHOLDS = {
 }
 RBI_HOME_URL = "https://www.rbi.org.in/"
 RBI_MACRO_SOURCE = "Reserve Bank of India current rates; FX source FBIL"
+RBI_HISTORICAL_SERIES_SOURCES = (
+    {
+        "series_key": "bse_sensex_annual_average",
+        "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=8656",
+        "title": "RBI Handbook 2006 Table 106: Annual averages of share price indices and market capitalisation",
+        "vintage_date": date(2006, 9, 18),
+        "value_column": 1,
+        "unit": "Index average",
+    },
+    {
+        "series_key": "bse_sensex_annual_average",
+        "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=23910",
+        "title": "RBI Handbook 2026 Table 85: Annual Averages of Share Price Indices and Market Capitalisation",
+        "vintage_date": date(2026, 7, 31),
+        "value_column": 1,
+        "unit": "Index average",
+    },
+    {
+        "series_key": "india_wpi_all_commodities_annual_average",
+        "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=23858",
+        "title": "RBI Handbook 2026 Table 33: Wholesale Price Index - Annual Average",
+        "vintage_date": date(2026, 7, 31),
+        "value_column": 1,
+        "unit": "Index average",
+    },
+)
+RBI_HISTORICAL_SERIES_SOURCE = "Reserve Bank of India Handbook of Statistics on Indian Economy"
 KITE_FUTURES_SOURCE = "Kite Connect NFO completed daily price and open interest"
 NIFTY_INDICES_PUBLIC_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -2509,6 +2542,222 @@ def parse_rbi_macro_snapshot(html_payload: str) -> list[dict[str, object]]:
     return rows
 
 
+class _RbiTableHtmlParser(HTMLParser):
+    """Collect text cells from RBI publication tables without browser markup assumptions."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.rows: list[list[str]] = []
+        self._row: list[str] | None = None
+        self._cell_parts: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() == "tr":
+            self._row = []
+        elif tag.lower() in {"td", "th"} and self._row is not None:
+            self._cell_parts = []
+
+    def handle_data(self, data: str) -> None:
+        if self._cell_parts is not None:
+            self._cell_parts.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        lowered = tag.lower()
+        if lowered in {"td", "th"} and self._cell_parts is not None:
+            value = re.sub(r"\s+", " ", " ".join(self._cell_parts).replace("\xa0", " ")).strip()
+            if self._row is not None:
+                self._row.append(value)
+            self._cell_parts = None
+        elif lowered == "tr" and self._row is not None:
+            if self._row:
+                self.rows.append(self._row)
+            self._row = None
+            self._cell_parts = None
+
+
+def parse_rbi_annual_series_table(
+    html_payload: str,
+    *,
+    series_key: str,
+    source_url: str,
+    source_title: str,
+    vintage_date: date,
+    value_column: int,
+    unit: str,
+) -> list[dict[str, object]]:
+    """Parse one fiscal-year RBI Handbook series and retain its stated base."""
+    if (
+        not isinstance(html_payload, str)
+        or not html_payload.strip()
+        or not source_url.startswith("https://rbi.org.in/")
+        or not isinstance(vintage_date, date)
+        or not isinstance(value_column, int)
+        or value_column < 1
+    ):
+        raise ValueError("invalid_rbi_historical_series_response")
+    parser = _RbiTableHtmlParser()
+    try:
+        parser.feed(html_payload)
+    except (ValueError, TypeError) as error:
+        raise ValueError("invalid_rbi_historical_series_response") from error
+
+    base_period = "Base not stated"
+    observations: list[dict[str, object]] = []
+    fiscal_year_pattern = re.compile(r"^(\d{4})\s*[-–]\s*(\d{2,4})(\*)?$")
+    base_pattern = re.compile(r"Base\s*:?\s*([^\)]+)", flags=re.IGNORECASE)
+    for cells in parser.rows:
+        joined = " ".join(cells)
+        base_match = base_pattern.search(joined)
+        if base_match is not None and not fiscal_year_pattern.match(cells[0].strip() if cells else ""):
+            base_period = re.sub(r"\s+", " ", base_match.group(1)).strip(" )")
+            continue
+        if len(cells) <= value_column:
+            continue
+        period_label = cells[0].strip()
+        period_match = fiscal_year_pattern.match(period_label)
+        if period_match is None or period_match.group(3):
+            continue
+        start_year = int(period_match.group(1))
+        end_text = period_match.group(2)
+        end_year = int(end_text) if len(end_text) == 4 else (start_year // 100) * 100 + int(end_text)
+        if end_year < start_year:
+            end_year += 100
+        try:
+            value = float(cells[value_column].replace(",", ""))
+            observation_date = date(end_year, 3, 31)
+        except (ValueError, OverflowError):
+            continue
+        if not math.isfinite(value) or value <= 0:
+            continue
+        observations.append(
+            {
+                "series_key": series_key,
+                "date": observation_date,
+                "period_label": period_label,
+                "frequency": "annual",
+                "value": value,
+                "unit": unit,
+                "base_period": base_period,
+                "source_title": source_title,
+                "source_url": source_url,
+                "source_authority": "Reserve Bank of India",
+                "vintage_date": vintage_date,
+                "metadata": {
+                    "period_basis": "Indian financial year",
+                    "aggregation": "annual average",
+                    "partial_period_excluded": True,
+                },
+            }
+        )
+    deduplicated = {
+        row["date"]: row
+        for row in observations
+    }
+    observations = [deduplicated[item] for item in sorted(deduplicated)]
+    if len(observations) < 2:
+        raise ValueError("invalid_rbi_historical_series_response")
+    return observations
+
+
+def build_historical_series_summary(
+    rows: list[dict[str, object]],
+) -> dict[str, object]:
+    labels = {
+        "bse_sensex_annual_average": "BSE Sensex annual average",
+        "india_wpi_all_commodities_annual_average": "India WPI all commodities annual average",
+    }
+    grouped: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for row in rows:
+        if row.get("series_key") in labels and isinstance(row.get("date"), date):
+            grouped[str(row["series_key"])].append(row)
+
+    series: list[dict[str, object]] = []
+    for key, label in labels.items():
+        values = sorted(grouped.get(key, []), key=lambda item: item["date"])
+        if not values:
+            series.append(
+                {
+                    "series_key": key,
+                    "label": label,
+                    "status": "not_imported",
+                    "frequency": "annual",
+                    "observations": 0,
+                }
+            )
+            continue
+        bases = list(dict.fromkeys(str(item.get("base_period") or "") for item in values))
+        vintages = sorted({item["vintage_date"] for item in values if isinstance(item.get("vintage_date"), date)})
+        latest_change = None
+        if len(values) >= 2 and values[-1].get("base_period") == values[-2].get("base_period"):
+            latest_change = round((float(values[-1]["value"]) / float(values[-2]["value"]) - 1) * 100, 2)
+        series.append(
+            {
+                "series_key": key,
+                "label": label,
+                "status": "ready",
+                "frequency": str(values[-1].get("frequency") or "annual"),
+                "observations": len(values),
+                "from_date": values[0]["date"].isoformat(),
+                "to_date": values[-1]["date"].isoformat(),
+                "latest_period": values[-1].get("period_label"),
+                "latest_value": round(float(values[-1]["value"]), 2),
+                "latest_change_pct": latest_change,
+                "unit": values[-1].get("unit"),
+                "base_periods": bases,
+                "latest_vintage": vintages[-1].isoformat() if vintages else None,
+                "source_title": values[-1].get("source_title"),
+                "source_url": values[-1].get("source_url"),
+            }
+        )
+
+    sensex_by_period = {
+        str(row.get("period_label")): row
+        for row in sorted(grouped.get("bse_sensex_annual_average", []), key=lambda item: item["date"])
+    }
+    wpi_by_period = {
+        str(row.get("period_label")): row
+        for row in sorted(grouped.get("india_wpi_all_commodities_annual_average", []), key=lambda item: item["date"])
+    }
+    joined_rows: list[dict[str, object]] = []
+    previous_sensex: dict[str, object] | None = None
+    previous_wpi: dict[str, object] | None = None
+    for period, sensex in sensex_by_period.items():
+        wpi = wpi_by_period.get(period)
+        sensex_change = (
+            round((float(sensex["value"]) / float(previous_sensex["value"]) - 1) * 100, 2)
+            if previous_sensex is not None else None
+        )
+        wpi_change = (
+            round((float(wpi["value"]) / float(previous_wpi["value"]) - 1) * 100, 2)
+            if wpi is not None
+            and previous_wpi is not None
+            and wpi.get("base_period") == previous_wpi.get("base_period")
+            else None
+        )
+        joined_rows.append(
+            {
+                "period": period,
+                "date": sensex["date"].isoformat(),
+                "sensex_average": round(float(sensex["value"]), 2),
+                "sensex_change_pct": sensex_change,
+                "wpi_average": round(float(wpi["value"]), 2) if wpi is not None else None,
+                "wpi_change_pct": wpi_change,
+                "wpi_base_period": wpi.get("base_period") if wpi is not None else None,
+            }
+        )
+        previous_sensex = sensex
+        if wpi is not None:
+            previous_wpi = wpi
+    ready_count = sum(item["status"] == "ready" for item in series)
+    return {
+        "status": "ready" if ready_count == len(series) else "partial" if ready_count else "not_imported",
+        "series": series,
+        "joined_annual_observations": len(joined_rows),
+        "timeline": joined_rows,
+        "method": "Latest RBI publication vintage per financial-year observation; no interpolation. WPI changes are withheld across index-base breaks.",
+    }
+
+
 def calculate_macro_context_summary(rows: list[dict[str, object]]) -> dict[str, object]:
     metric_labels = {
         "usd_inr": "USD/INR",
@@ -2863,6 +3112,601 @@ def calculate_candidate_regime(evidence: dict[str, object]) -> dict[str, object]
             "recovering_label_requires_transition_history": True,
             "missing_evidence_policy": "exclude_and_reduce_confidence",
         },
+    }
+
+
+def aggregate_historical_closes(
+    observations: list[dict[str, object]],
+    *,
+    frequency: str,
+) -> list[dict[str, object]]:
+    """Roll observations to the last available close in each requested period.
+
+    The historical atlas uses this adapter when the source record is not
+    consistently daily. It never interpolates a missing price or promotes a
+    lower-frequency observation to daily precision.
+    """
+    supported = {"daily", "weekly", "monthly", "quarterly", "annual"}
+    if frequency not in supported:
+        raise ValueError("invalid_historical_frequency")
+
+    cleaned: dict[date, float] = {}
+    for row in observations:
+        observation_date = row.get("date")
+        raw_close = row.get("close")
+        if (
+            isinstance(observation_date, date)
+            and isinstance(raw_close, (int, float))
+            and not isinstance(raw_close, bool)
+            and math.isfinite(float(raw_close))
+            and float(raw_close) > 0
+        ):
+            cleaned[observation_date] = float(raw_close)
+
+    def bucket_key(observation_date: date) -> tuple[int, ...]:
+        if frequency == "daily":
+            return (observation_date.year, observation_date.month, observation_date.day)
+        if frequency == "weekly":
+            iso_year, iso_week, _ = observation_date.isocalendar()
+            return (iso_year, iso_week)
+        if frequency == "monthly":
+            return (observation_date.year, observation_date.month)
+        if frequency == "quarterly":
+            return (observation_date.year, (observation_date.month - 1) // 3 + 1)
+        return (observation_date.year,)
+
+    buckets: dict[tuple[int, ...], tuple[date, float]] = {}
+    for observation_date, close in sorted(cleaned.items()):
+        buckets[bucket_key(observation_date)] = (observation_date, close)
+    return [
+        {"date": observation_date, "close": close}
+        for observation_date, close in buckets.values()
+    ]
+
+
+def build_historical_regime_workspace(
+    index_candles: list[dict[str, object]],
+    *,
+    instrument: str = "Nifty 50",
+    official_history_rows: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    """Identify transparent price-cycle episodes from completed index closes.
+
+    Price cycles and economic cycles deliberately remain separate. Bull, bear,
+    correction, and rapid-bear candidates are observable from the index path;
+    recession and depression labels require a separately versioned macro data
+    contract and are therefore never inferred from price alone.
+    """
+    by_date: dict[date, float] = {}
+    for row in index_candles:
+        session_date = row.get("date")
+        raw_close = row.get("close")
+        if (
+            isinstance(session_date, date)
+            and isinstance(raw_close, (int, float))
+            and not isinstance(raw_close, bool)
+            and math.isfinite(float(raw_close))
+            and float(raw_close) > 0
+        ):
+            by_date[session_date] = float(raw_close)
+    ordered = sorted(by_date.items())
+    if len(ordered) < 252:
+        raise ValueError("historical_regime_history_unavailable")
+
+    dates = [item[0] for item in ordered]
+    closes = [item[1] for item in ordered]
+    last_index = len(ordered) - 1
+
+    def pct_change(start_value: float, end_value: float) -> float:
+        return (end_value / start_value - 1) * 100
+
+    def forward_returns(anchor: int) -> dict[str, float | None]:
+        results: dict[str, float | None] = {}
+        for horizon in (20, 60, 120, 252):
+            results[str(horizon)] = (
+                round(pct_change(closes[anchor], closes[anchor + horizon]), 2)
+                if anchor + horizon <= last_index else None
+            )
+        return results
+
+    def maximum_drawdown(start: int, end: int) -> float:
+        peak = closes[start]
+        worst = 0.0
+        for value in closes[start : end + 1]:
+            peak = max(peak, value)
+            worst = min(worst, pct_change(peak, value))
+        return round(worst, 2)
+
+    def first_recovery(peak_index: int, trough_index: int) -> int | None:
+        peak_value = closes[peak_index]
+        return next(
+            (
+                position
+                for position in range(trough_index + 1, len(closes))
+                if closes[position] >= peak_value
+            ),
+            None,
+        )
+
+    def phase_record(
+        *,
+        category: str,
+        start: int,
+        extreme: int,
+        confirmation: int,
+        status: str,
+    ) -> dict[str, object]:
+        observation_end = extreme if status == "completed" else last_index
+        move = pct_change(closes[start], closes[extreme])
+        record: dict[str, object] = {
+            "category": category,
+            "status": status,
+            "start_date": dates[start].isoformat(),
+            "confirmation_date": dates[confirmation].isoformat(),
+            "extreme_date": dates[extreme].isoformat(),
+            "end_date": dates[observation_end].isoformat(),
+            "start_close": round(closes[start], 2),
+            "extreme_close": round(closes[extreme], 2),
+            "end_close": round(closes[observation_end], 2),
+            "move_pct": round(move, 2),
+            "current_move_pct": round(pct_change(closes[start], closes[observation_end]), 2),
+            "sessions_to_confirmation": confirmation - start,
+            "duration_sessions": observation_end - start,
+            "duration_calendar_days": (dates[observation_end] - dates[start]).days,
+            "forward_from_extreme_pct": forward_returns(extreme),
+        }
+        if category == "bull_market":
+            record["max_drawdown_within_phase_pct"] = maximum_drawdown(start, observation_end)
+        else:
+            recovery = first_recovery(start, extreme)
+            record.update(
+                {
+                    "rapid_decline": confirmation - start <= HISTORICAL_RAPID_BEAR_SESSIONS,
+                    "recovered_previous_peak": recovery is not None,
+                    "recovery_date": dates[recovery].isoformat() if recovery is not None else None,
+                    "recovery_sessions_from_trough": recovery - extreme if recovery is not None else None,
+                    "recovery_calendar_days_from_trough": (
+                        (dates[recovery] - dates[extreme]).days if recovery is not None else None
+                    ),
+                }
+            )
+        return record
+
+    bull_markets: list[dict[str, object]] = []
+    bear_markets: list[dict[str, object]] = []
+    direction: str | None = None
+    candidate_low = 0
+    candidate_high = 0
+    phase_start = 0
+    phase_extreme = 0
+    phase_confirmation = 0
+    threshold = HISTORICAL_BULL_BEAR_THRESHOLD_PCT / 100
+
+    for position in range(1, len(closes)):
+        value = closes[position]
+        if direction is None:
+            if value < closes[candidate_low]:
+                candidate_low = position
+            if value > closes[candidate_high]:
+                candidate_high = position
+            if value >= closes[candidate_low] * (1 + threshold):
+                direction = "bull_market"
+                phase_start = candidate_low
+                phase_extreme = position
+                phase_confirmation = position
+            elif value <= closes[candidate_high] * (1 - threshold):
+                direction = "bear_market"
+                phase_start = candidate_high
+                phase_extreme = position
+                phase_confirmation = position
+            continue
+
+        if direction == "bull_market":
+            if value > closes[phase_extreme]:
+                phase_extreme = position
+            if value <= closes[phase_extreme] * (1 - threshold):
+                bull_markets.append(
+                    phase_record(
+                        category="bull_market",
+                        start=phase_start,
+                        extreme=phase_extreme,
+                        confirmation=phase_confirmation,
+                        status="completed",
+                    )
+                )
+                direction = "bear_market"
+                phase_start = phase_extreme
+                phase_extreme = position
+                phase_confirmation = position
+        else:
+            if value < closes[phase_extreme]:
+                phase_extreme = position
+            if value >= closes[phase_extreme] * (1 + threshold):
+                bear_markets.append(
+                    phase_record(
+                        category="bear_market",
+                        start=phase_start,
+                        extreme=phase_extreme,
+                        confirmation=phase_confirmation,
+                        status="completed",
+                    )
+                )
+                direction = "bull_market"
+                phase_start = phase_extreme
+                phase_extreme = position
+                phase_confirmation = position
+
+    if direction is not None:
+        target = bull_markets if direction == "bull_market" else bear_markets
+        target.append(
+            phase_record(
+                category=direction,
+                start=phase_start,
+                extreme=phase_extreme,
+                confirmation=phase_confirmation,
+                status="ongoing",
+            )
+        )
+
+    corrections: list[dict[str, object]] = []
+    peak_index = 0
+    active_peak: int | None = None
+    trough_index: int | None = None
+    correction_threshold = HISTORICAL_CORRECTION_THRESHOLD_PCT / 100
+    for position in range(1, len(closes)):
+        value = closes[position]
+        if active_peak is None:
+            if value >= closes[peak_index]:
+                peak_index = position
+                continue
+            if value <= closes[peak_index] * (1 - correction_threshold):
+                active_peak = peak_index
+                trough_index = position
+            continue
+        if trough_index is not None and value < closes[trough_index]:
+            trough_index = position
+        if value >= closes[active_peak]:
+            drawdown = pct_change(closes[active_peak], closes[trough_index])
+            if drawdown > -HISTORICAL_BULL_BEAR_THRESHOLD_PCT:
+                corrections.append(
+                    {
+                        "status": "recovered",
+                        "peak_date": dates[active_peak].isoformat(),
+                        "trough_date": dates[trough_index].isoformat(),
+                        "recovery_date": dates[position].isoformat(),
+                        "drawdown_pct": round(drawdown, 2),
+                        "decline_sessions": trough_index - active_peak,
+                        "recovery_sessions": position - trough_index,
+                        "total_sessions": position - active_peak,
+                        "calendar_days": (dates[position] - dates[active_peak]).days,
+                        "forward_from_trough_pct": forward_returns(trough_index),
+                    }
+                )
+            peak_index = position
+            active_peak = None
+            trough_index = None
+    if active_peak is not None and trough_index is not None:
+        drawdown = pct_change(closes[active_peak], closes[trough_index])
+        if drawdown > -HISTORICAL_BULL_BEAR_THRESHOLD_PCT:
+            corrections.append(
+                {
+                    "status": "ongoing",
+                    "peak_date": dates[active_peak].isoformat(),
+                    "trough_date": dates[trough_index].isoformat(),
+                    "recovery_date": None,
+                    "drawdown_pct": round(drawdown, 2),
+                    "decline_sessions": trough_index - active_peak,
+                    "recovery_sessions": None,
+                    "total_sessions": last_index - active_peak,
+                    "calendar_days": (dates[-1] - dates[active_peak]).days,
+                    "forward_from_trough_pct": forward_returns(trough_index),
+                }
+            )
+
+    rapid_bears = [item for item in bear_markets if item.get("rapid_decline")]
+
+    def category_summary(rows: list[dict[str, object]], move_key: str) -> dict[str, object]:
+        moves = [float(item[move_key]) for item in rows]
+        durations = [int(item["duration_sessions"]) for item in rows if "duration_sessions" in item]
+        return {
+            "count": len(rows),
+            "ongoing": sum(item.get("status") == "ongoing" for item in rows),
+            "median_move_pct": round(median(moves), 2) if moves else None,
+            "median_duration_sessions": round(median(durations)) if durations else None,
+        }
+
+    correction_drawdowns = [float(item["drawdown_pct"]) for item in corrections]
+    correction_durations = [int(item["total_sessions"]) for item in corrections]
+    resolution_views = {
+        frequency: {
+            "observations": len(
+                aggregate_historical_closes(index_candles, frequency=frequency)
+            ),
+            "method": "last available close in period; no interpolation",
+        }
+        for frequency in ("daily", "weekly", "monthly", "quarterly", "annual")
+    }
+    official_history = build_historical_series_summary(official_history_rows or [])
+    official_ready = official_history["status"] == "ready"
+    coverage_ladder = [
+        {
+            "period": "1875–1978",
+            "preferred_frequency": "Event / annual",
+            "evidence_grade": "C",
+            "purpose": "Institutional history, structural change and major shock narratives",
+            "rule": "Do not infer daily drawdowns, breadth or exact turning points from fragmentary records.",
+            "status": "Source registry ready; quantitative series to be connected",
+        },
+        {
+            "period": "1978/79–1990",
+            "preferred_frequency": "Monthly / quarterly",
+            "evidence_grade": "B",
+            "purpose": "Early benchmark cycles joined to RBI macroeconomic history",
+            "rule": "Use the coarsest complete series when daily observations are not consistent.",
+            "status": (
+                "Annual Sensex and WPI evidence connected"
+                if official_ready else "Sensex and RBI ingestion queued"
+            ),
+        },
+        {
+            "period": "1990–1995",
+            "preferred_frequency": "Weekly / monthly",
+            "evidence_grade": "B",
+            "purpose": "Liberalisation, crisis and market-structure transition stories",
+            "rule": "Prefer weekly closes until daily coverage and definitions are auditable.",
+            "status": (
+                "Annual official anchors connected; weekly detail queued"
+                if official_ready else "Official index-history ingestion queued"
+            ),
+        },
+        {
+            "period": "1995–present",
+            "preferred_frequency": "Daily, with weekly and monthly context",
+            "evidence_grade": "A when source-complete",
+            "purpose": "Price cycles, stress, recovery and increasingly rich regime fingerprints",
+            "rule": "Daily analysis is allowed only where completed observations are consistent.",
+            "status": "Local daily engine active for the reported stored window",
+        },
+    ]
+    story_eras = [
+        {
+            "period": "1875–1947",
+            "title": "Exchange foundations and globally transmitted shocks",
+            "family": "Institutional formation",
+            "frequency": "Event / annual",
+            "evidence_grade": "C",
+            "what_happened": "Organised securities trading took institutional form in Bombay while Indian assets also lived through the First World War, the Great Depression and the Second World War.",
+            "how_it_happened": "Trade, commodities, imperial policy, wartime finance and global liquidity transmitted shocks into a still-developing domestic market.",
+            "what_came_out": "Exchange institutions and market practice deepened, but surviving price records are too fragmented for a continuous daily regime series.",
+            "how_markets_came_out": "Treat each shock as a documented historical episode. Recovery paths will be reconstructed from annual prices, activity records and contemporaneous accounts rather than invented daily curves.",
+            "research_state": "Narrative scaffold ready; episode-level verification queued",
+        },
+        {
+            "period": "1947–1978",
+            "title": "Nation-building and a controlled capital era",
+            "family": "Policy-led structural regime",
+            "frequency": "Annual / quarterly",
+            "evidence_grade": "C",
+            "what_happened": "Independence changed the economic, institutional and ownership setting in which the securities market operated.",
+            "how_it_happened": "Industrial policy, capital controls, administered finance and later banking changes shaped capital allocation more than a modern market-price signal alone could explain.",
+            "what_came_out": "This period provides structural context for later liberalisation and for why older market behaviour is not directly comparable with the electronic era.",
+            "how_markets_came_out": "The story will be measured through long-horizon valuation, issuance, activity and macro series, using quarterly or annual observations where that is the honest resolution.",
+            "research_state": "Source discovery and annual-series ingestion queued",
+        },
+        {
+            "period": "1978/79–1991",
+            "title": "The benchmark era emerges",
+            "family": "Market measurement transition",
+            "frequency": "Monthly / quarterly",
+            "evidence_grade": "B",
+            "what_happened": "The Sensex base period begins in 1978–79 and the index was launched in 1986, creating a durable benchmark for Indian equity-market history.",
+            "how_it_happened": "A formal benchmark made broad market advances, declines and recoveries more consistently measurable than the earlier record.",
+            "what_came_out": "Market stories can begin to combine a continuous price path with RBI growth, inflation, rates, currency and credit evidence.",
+            "how_markets_came_out": "Monthly and quarterly observations will define cycles first; weekly or daily precision will be used only after source coverage is verified.",
+            "research_state": "Official Sensex and RBI time-series ingestion queued",
+        },
+        {
+            "period": "1991–1995",
+            "title": "Liberalisation and the market-structure reset",
+            "family": "Crisis, reform and transition",
+            "frequency": "Weekly / monthly",
+            "evidence_grade": "B",
+            "what_happened": "The balance-of-payments crisis and economic reforms coincided with a profound redesign of securities-market institutions and trading.",
+            "how_it_happened": "Macroeconomic pressure, liberalisation, the 1992 securities-market crisis, stronger regulation and the emergence of electronic exchange infrastructure interacted.",
+            "what_came_out": "Price discovery, regulation, settlement and participation moved toward the modern market architecture.",
+            "how_markets_came_out": "The recovery story must separate economic stabilisation, reform-driven rerating and institutional repair; weekly data is sufficient for the regime path when daily series disagree.",
+            "research_state": "Narrative anchors ready; price and macro joins queued",
+        },
+        {
+            "period": "1995–2003",
+            "title": "Electronic markets meet global contagion",
+            "family": "Modernisation and external shocks",
+            "frequency": "Daily / weekly",
+            "evidence_grade": "A/B",
+            "what_happened": "Electronic trading expanded while the Asian financial crisis and the global technology boom-and-bust tested the new market structure.",
+            "how_it_happened": "Cross-border risk appetite, currency stress, technology enthusiasm and changing domestic participation produced alternating advances and drawdowns.",
+            "what_came_out": "A more observable market generated richer price, volume and cross-index evidence for comparing fear, crowding and recovery.",
+            "how_markets_came_out": "Quantify each shock separately and test whether recovery began through volatility relief, breadth repair, leadership change or macro stabilisation.",
+            "research_state": "Daily price-history extension queued",
+        },
+        {
+            "period": "2003–2009",
+            "title": "Credit boom to global financial crisis",
+            "family": "Bull market, crash and recovery",
+            "frequency": "Daily",
+            "evidence_grade": "A/B",
+            "what_happened": "A powerful expansion in growth, liquidity and participation culminated in the 2008 global financial crisis and a deep equity drawdown.",
+            "how_it_happened": "Global credit, capital flows, earnings expectations and risk appetite reinforced the advance, then reversed as the global financial system came under stress.",
+            "what_came_out": "The episode offers a high-value test of euphoria, concentration, liquidity withdrawal, capitulation and policy response.",
+            "how_markets_came_out": "Measure the sequence from volatility and liquidity relief to breadth, earnings and credit repair instead of treating the rebound as one date.",
+            "research_state": "Price, flow, macro and recovery fingerprint queued",
+        },
+        {
+            "period": "2009–2020",
+            "title": "Post-crisis liquidity and domestic resets",
+            "family": "Expansion with repeated corrections",
+            "frequency": "Daily",
+            "evidence_grade": "A/B",
+            "what_happened": "The post-crisis advance contained multiple global and domestic interruptions rather than one uninterrupted bull market.",
+            "how_it_happened": "Global liquidity, domestic growth and policy changes interacted with taper stress, commodity moves, currency pressure and periodic earnings resets.",
+            "what_came_out": "This era can reveal which corrections were temporary risk-off events and which carried longer changes in leadership or earnings.",
+            "how_markets_came_out": "Compare recovery breadth, sector rotation, foreign and domestic flows, volatility and earnings after each interruption.",
+            "research_state": "Episode segmentation and fingerprinting queued",
+        },
+        {
+            "period": "2020–present",
+            "title": "Pandemic shock, rapid recovery and inflation reset",
+            "family": "Exogenous shock and policy transition",
+            "frequency": "Daily",
+            "evidence_grade": "A when source-complete",
+            "what_happened": "The pandemic produced an unusually fast global shock, followed by a powerful recovery and a later inflation-and-rates transition.",
+            "how_it_happened": "Activity shutdowns, extraordinary policy support, reopening, supply disruption, retail participation and later monetary tightening changed the market backdrop in quick succession.",
+            "what_came_out": "The period provides detailed evidence for crash speed, policy response, participation, sector rotation and the difference between economic and market recovery.",
+            "how_markets_came_out": "Track the hand-off from relief rally to breadth and earnings confirmation, then test which traits survived the inflation and rate reset.",
+            "research_state": "Local daily atlas active; external fingerprints to be joined",
+        },
+    ]
+    if official_ready:
+        for era in story_eras:
+            if era["period"] == "1978/79–1991":
+                era["research_state"] = "Official annual Sensex and WPI evidence connected; episode interpretation next"
+            elif era["period"] in {"1991–1995", "1995–2003", "2003–2009", "2009–2020"}:
+                era["research_state"] = "Official annual market and inflation anchors connected; higher-frequency episode joins queued"
+    source_registry = [
+        {
+            "name": "SEBI historical perspective",
+            "authority": "SEBI",
+            "use": "Exchange formation, regulation and structural milestones",
+            "url": "https://www.sebi.gov.in/media/speeches/mar-2004/a-historical-perspective-of-the-securities-market-reforms_2882.html",
+        },
+        {
+            "name": "BSE milestones",
+            "authority": "BSE",
+            "use": "Sensex base period, launch and electronic-market milestones",
+            "url": "https://www.bseindia.com/downloads1/BSE_Update_Jan_2016.pdf",
+        },
+        {
+            "name": "NIFTY 50 official index page",
+            "authority": "NSE Indices",
+            "use": "Modern benchmark definitions and methodology",
+            "url": "https://www.niftyindices.com/indices/equity/broad-based-indices/NIFTY-50",
+        },
+        {
+            "name": "RBI Handbook and DBIE coverage",
+            "authority": "Reserve Bank of India",
+            "use": "Growth, inflation, rates, currency, money, credit and financial history",
+            "url": "https://www.rbi.org.in/scripts/BS_ViewBulletin.aspx?Id=879",
+        },
+    ]
+    return {
+        "ok": True,
+        "contract_version": HISTORICAL_REGIME_CONTRACT_VERSION,
+        "instrument": instrument,
+        "history": {
+            "from_date": dates[0].isoformat(),
+            "to_date": dates[-1].isoformat(),
+            "sessions": len(ordered),
+            "source": "Validated local completed EOD candles",
+            "analysis_frequency": "daily",
+        },
+        "resolution_views": resolution_views,
+        "official_history": official_history,
+        "coverage_ladder": coverage_ladder,
+        "story_eras": story_eras,
+        "story_method": [
+            {
+                "question": "What happened?",
+                "answer": "Establish the observable market, economic and institutional sequence without hindsight labels.",
+            },
+            {
+                "question": "How did it happen?",
+                "answer": "Connect catalysts, transmission channels, positioning, policy and human-behaviour proxies.",
+            },
+            {
+                "question": "What came out of it?",
+                "answer": "Record the economic, regulatory, market-structure and portfolio consequences.",
+            },
+            {
+                "question": "How did markets come out?",
+                "answer": "Measure the path from stress relief through breadth, leadership, earnings, liquidity and prior-peak recovery.",
+            },
+        ],
+        "source_registry": source_registry,
+        "thresholds": {
+            "bull_bear_reversal_pct": HISTORICAL_BULL_BEAR_THRESHOLD_PCT,
+            "correction_drawdown_pct": HISTORICAL_CORRECTION_THRESHOLD_PCT,
+            "rapid_bear_confirmation_sessions": HISTORICAL_RAPID_BEAR_SESSIONS,
+        },
+        "summary": {
+            "bull_markets": category_summary(bull_markets, "move_pct"),
+            "bear_markets": category_summary(bear_markets, "move_pct"),
+            "corrections": {
+                "count": len(corrections),
+                "ongoing": sum(item.get("status") == "ongoing" for item in corrections),
+                "median_move_pct": round(median(correction_drawdowns), 2) if correction_drawdowns else None,
+                "median_duration_sessions": round(median(correction_durations)) if correction_durations else None,
+            },
+            "rapid_bear_candidates": len(rapid_bears),
+        },
+        "bull_markets": bull_markets,
+        "bear_markets": bear_markets,
+        "corrections": corrections,
+        "rapid_bear_candidates": rapid_bears,
+        "economic_cycles": {
+            "recessions": {
+                "status": "macro_history_required",
+                "episodes": [],
+                "definition": "Requires a versioned point-in-time macro rule using real activity, employment, income, credit, and policy evidence; never inferred from an equity drawdown alone.",
+            },
+            "depressions": {
+                "status": "definition_and_macro_history_required",
+                "episodes": [],
+                "definition": "No universal mechanical depression definition is assumed. A documented severity-and-duration contract and authoritative macro history are required before any label is published.",
+            },
+        },
+        "architecture": {
+            "layers": [
+                {
+                    "name": "Point-in-time evidence store",
+                    "purpose": "Preserve the data and constituent membership known at each historical observation without look-ahead, at its honest daily, weekly, monthly, quarterly, annual or event resolution.",
+                },
+                {
+                    "name": "Market-cycle identifier",
+                    "purpose": "Detect transparent 20% bull/bear reversals, 10–20% corrections, speed, duration, recovery, and forward paths.",
+                },
+                {
+                    "name": "Multi-factor regime fingerprint",
+                    "purpose": "Attach trend, breadth, leadership, volatility, flows, rates/currency, global risk, derivatives, earnings, and macro states to each episode.",
+                },
+                {
+                    "name": "Behavioural hypothesis layer",
+                    "purpose": "Test observable proxies for optimism, crowding, fear, capitulation, and recovery; emotion is a hypothesis, not a directly observed variable.",
+                },
+                {
+                    "name": "Outcome and analogue engine",
+                    "purpose": "Compare forward returns, drawdowns, recovery time, sector leadership, transition paths, and portfolio sensitivity using held-out periods.",
+                },
+            ],
+            "fingerprint_categories": [
+                "Trend and momentum",
+                "Breadth and participation",
+                "Leadership and concentration",
+                "Volatility and stress",
+                "Institutional flows and liquidity",
+                "Rates, currency, and credit",
+                "Global risk backdrop",
+                "Derivatives positioning",
+                "Earnings and valuation",
+                "Macro growth and inflation",
+            ],
+        },
+        "limitations": [
+            "The daily episode map is price-path research; the long-history story layer also accepts lower-frequency and documentary evidence without pretending it is daily data.",
+            "The available local history begins at the reported start date; an episode already in progress then may be left-censored.",
+            "A 20% or 10% threshold is a transparent convention, not a law of markets.",
+            "Forward windows overlap and are descriptive rather than independent observations.",
+            "Recession and depression labels are withheld until authoritative point-in-time macro histories and definitions are connected.",
+        ],
     }
 
 
@@ -8001,6 +8845,9 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         if path == "/api/market-sentiment/cross-index-validation":
             self._send_cross_index_validation()
             return
+        if path == "/api/historical-regimes":
+            self._send_historical_regimes(urllib.parse.urlsplit(self.path).query)
+            return
         super().do_GET()
 
     def _send_domestic_sentiment_core(self) -> None:
@@ -8337,6 +9184,103 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             self._send_json(HTTPStatus.OK, payload)
         except ValueError as error:
             self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"ok": False, "reason": str(error)})
+
+    def _send_historical_regimes(self, query: str) -> None:
+        try:
+            parameters = urllib.parse.parse_qs(query, keep_blank_values=True)
+            instrument = parameters.get("index", ["Nifty 50"])[0]
+            if instrument not in SEASONALITY_INDICES:
+                self._send_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"ok": False, "reason": "invalid_historical_regime_selection"},
+                )
+                return
+            store = _get_eod_store()
+            candles = store.load_candles(
+                kind="index",
+                display_name=instrument,
+            )
+            self._send_json(
+                HTTPStatus.OK,
+                build_historical_regime_workspace(
+                    candles,
+                    instrument=instrument,
+                    official_history_rows=store.load_historical_series_observations(),
+                ),
+            )
+        except ValueError as error:
+            self._send_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"ok": False, "reason": str(error)},
+            )
+
+    def _send_historical_series_refresh(self) -> None:
+        observations: list[dict[str, object]] = []
+        for source in RBI_HISTORICAL_SERIES_SOURCES:
+            request = urllib.request.Request(
+                str(source["url"]),
+                headers={
+                    "Accept": "text/html,application/xhtml+xml",
+                    "Referer": "https://rbi.org.in/scripts/AnnualPublications.aspx?head=Handbook%20of%20Statistics%20on%20Indian%20Economy",
+                    "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+                },
+                method="GET",
+            )
+            text_payload, reason = self._request_provider_text(request, RBI_MAX_RESPONSE_BYTES)
+            if reason is not None:
+                self._send_json(
+                    HTTPStatus.BAD_GATEWAY,
+                    {"ok": False, "reason": "rbi_historical_series_source_unavailable"},
+                )
+                return
+            try:
+                observations.extend(
+                    parse_rbi_annual_series_table(
+                        text_payload or "",
+                        series_key=str(source["series_key"]),
+                        source_url=str(source["url"]),
+                        source_title=str(source["title"]),
+                        vintage_date=source["vintage_date"],
+                        value_column=int(source["value_column"]),
+                        unit=str(source["unit"]),
+                    )
+                )
+            except ValueError:
+                self._send_json(
+                    HTTPStatus.BAD_GATEWAY,
+                    {"ok": False, "reason": "invalid_rbi_historical_series_response"},
+                )
+                return
+        try:
+            store = _get_eod_store()
+            write_result = store.append_historical_series_observations(
+                observations,
+                retrieved_at=datetime.now(timezone.utc).isoformat(),
+            )
+            summary = build_historical_series_summary(
+                store.load_historical_series_observations()
+            )
+        except HistoricalSeriesConflictError:
+            self._send_json(
+                HTTPStatus.CONFLICT,
+                {"ok": False, "reason": "stored_historical_series_conflict"},
+            )
+            return
+        except ValueError:
+            self._send_json(
+                HTTPStatus.BAD_GATEWAY,
+                {"ok": False, "reason": "invalid_rbi_historical_series_response"},
+            )
+            return
+        self._send_json(
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                "source": RBI_HISTORICAL_SERIES_SOURCE,
+                "write_result": write_result,
+                "official_history": summary,
+            },
+        )
 
     @staticmethod
     def _calculate_cross_index_validation_payload() -> dict[str, object]:
@@ -10234,6 +11178,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             payload = self._read_json_payload()
             if payload is not None:
                 self._send_confirmed_fpi_refresh()
+            return
+
+        if self.path == "/api/historical-regimes/official-history/refresh":
+            payload = self._read_json_payload()
+            if payload is not None:
+                self._send_historical_series_refresh()
             return
 
         if self.path == "/api/kite/historical-month-leaders":

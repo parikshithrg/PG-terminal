@@ -510,7 +510,8 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
 - A single EOD update now refreshes current and completed index data,
   institutional flows, RBI/currency context, permitted global-risk series,
   futures/OI, NIFTY 500 breadth and five-year ranking history, monthly leaders,
-  ten-year local history, sentiment, and its saved evidence snapshot.
+  ten-year local history, official RBI long-run Sensex/WPI history, sentiment,
+  and its saved evidence snapshot.
 - After acquisition, every derived workspace is reloaded: Dashboard summaries,
   Screener, Seasonality, Events, Earnings, regime-validation readiness, and the
   current in-memory Portfolio story.
@@ -542,6 +543,62 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
 - The final panel names the evidence that could change the view—participation,
   derivatives-history readiness, and the next verified macro catalyst—so the
   narrative remains falsifiable rather than becoming a static opinion.
+
+### Historical Regimes story foundation and first official evidence spine — complete
+
+- Added a dedicated **Historical regimes** workspace and local API using the
+  completed daily history already stored for every supported index.
+- `historical-regimes-v3` keeps the transparent daily 20% bull/bear reversal,
+  isolated 10–20% corrections, rapid-bear candidates, duration, confirmation
+  delay, recovery to the prior peak, and 20/60/120/252-session paths from each
+  episode extreme.
+- Added a 1875-present Indian market story map. Every era must answer four
+  questions: what happened, how it happened, what came out of it, and how the
+  market recovered or adapted. Quantitative tables support that account rather
+  than becoming the product's main output.
+- Frozen a frequency ladder: event/annual evidence for 1875–1978,
+  monthly/quarterly for 1978/79–1990, weekly/monthly for 1990–1995, and daily
+  with weekly/monthly context from 1995 onward. The backend can roll validated
+  closes to period-end weekly, monthly, quarterly, and annual observations and
+  never interpolates missing prices.
+- The initial era scaffolds cover exchange formation, the controlled-capital
+  period, benchmark formation, liberalisation and market-structure reform,
+  electronic-market/global-shock history, the pre-GFC boom and crisis,
+  post-crisis resets, and the pandemic/inflation transition. Each scaffold
+  carries an evidence grade, analysis frequency, and visible research state so
+  an unfinished narrative cannot look fully validated.
+- Registered official SEBI, BSE, NSE Indices, and RBI source families in the
+  interface. The first numerical spine now imports the RBI Handbook's annual
+  BSE Sensex averages from 1979-80 through 2025-26 and all-commodities WPI
+  averages from 1980-81 through 2025-26.
+- Official observations are stored separately from daily candles with their
+  financial-year label, honest annual frequency, publication URL, publication
+  vintage, authority, unit, and stated index base. Overlapping RBI publication
+  vintages are retained; the latest vintage resolves the displayed series.
+- The WPI importer retains all six published base periods and uses the latest
+  base block when the current Handbook publishes overlapping observations.
+  Year-on-year WPI change is withheld across a base break instead of turning a
+  rebasing discontinuity into false inflation.
+- Historical Regimes now shows the imported coverage, latest values and a
+  financial-year Sensex/WPI evidence table. The official-history update is
+  idempotent and is included as a fault-isolated EOD Update stage.
+- Market cycles and economic cycles are deliberately separate. Recession and
+  depression sections remain visibly unclassified until a versioned definition
+  and authoritative point-in-time macro history are available; an equity
+  drawdown never silently becomes an economic label.
+- The page records the intended research architecture: point-in-time evidence,
+  cycle identification, multi-factor fingerprints, behavioural hypotheses, and
+  held-out outcome/analogue testing. Human emotion is represented only through
+  measurable hypotheses such as participation, crowding, volatility, flows,
+  leadership and recovery—not asserted as directly observed fact.
+- Next, add the remaining authoritative growth, rates, currency, credit and
+  fiscal histories at their honest available frequencies, split the evidence
+  into source-complete episodes, and attach
+  the existing trailing-only trend, breadth, leadership,
+  volatility, flow, rate/currency, global-risk, derivatives, earnings and macro
+  states to every episode. Compare common traits only after data coverage,
+  revisions and constituent membership are auditable, then test any proposed
+  trait on later held-out regimes before allowing it into the current classifier.
 
 ## Validation work for observed seasonality
 

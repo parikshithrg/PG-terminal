@@ -10,6 +10,7 @@ from eod_store import (
     EODStore,
     FuturesSnapshotConflictError,
     GlobalRiskConflictError,
+    HistoricalSeriesConflictError,
     InstitutionalFlowConflictError,
     MacroSnapshotConflictError,
 )
@@ -314,6 +315,46 @@ class EODStoreTest(unittest.TestCase):
         changed[0]["value"] = 96.0
         with self.assertRaises(MacroSnapshotConflictError):
             self.store.append_macro_snapshots(changed, source="RBI current rates")
+
+    def test_historical_series_preserve_vintages_and_resolve_latest(self):
+        base = {
+            "series_key": "bse_sensex_annual_average",
+            "date": date(2005, 3, 31),
+            "period_label": "2004-05",
+            "frequency": "annual",
+            "value": 5740.52,
+            "unit": "Index average",
+            "base_period": "1978-79 = 100",
+            "source_title": "RBI Handbook 2006 Table 106",
+            "source_url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=8656",
+            "source_authority": "Reserve Bank of India",
+            "vintage_date": date(2006, 9, 18),
+            "metadata": {"aggregation": "annual average"},
+        }
+        latest = dict(
+            base,
+            value=5740.99,
+            source_title="RBI Handbook 2026 Table 85",
+            source_url="https://rbi.org.in/scripts/PublicationsView.aspx?id=23910",
+            vintage_date=date(2026, 7, 31),
+        )
+        self.assertEqual(
+            self.store.append_historical_series_observations([base, latest]),
+            {"inserted": 2, "duplicates": 0},
+        )
+        self.assertEqual(
+            self.store.append_historical_series_observations([base, latest]),
+            {"inserted": 0, "duplicates": 2},
+        )
+        self.assertEqual(len(self.store.load_historical_series_observations(latest_only=False)), 2)
+        resolved = self.store.load_historical_series_observations()
+        self.assertEqual(len(resolved), 1)
+        self.assertEqual(resolved[0]["value"], 5740.99)
+        self.assertEqual(resolved[0]["vintage_date"], date(2026, 7, 31))
+
+        changed = dict(base, value=6000.0)
+        with self.assertRaises(HistoricalSeriesConflictError):
+            self.store.append_historical_series_observations([changed])
 
     def test_futures_snapshots_are_keyed_by_contract_and_session(self):
         contracts = [
