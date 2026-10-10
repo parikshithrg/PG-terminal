@@ -548,7 +548,7 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
 
 - Added a dedicated **Historical regimes** workspace and local API using the
   completed daily history already stored for every supported index.
-- `historical-regimes-v5` keeps the transparent daily 20% bull/bear reversal,
+- `historical-regimes-v9` keeps the transparent daily 20% bull/bear reversal,
   isolated 10–20% corrections, rapid-bear candidates, duration, confirmation
   delay, recovery to the prior peak, and 20/60/120/252-session paths from each
   episode extreme.
@@ -599,6 +599,41 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   SEBI annual reports and reform history, and RBI crisis/growth history anchor
   the narrative. Each chapter also displays the Sensex annual-change low and
   the foreign-exchange-reserve path across its window.
+- `historical-regimes-v6` carries the sourced story through 2009-10. One new
+  chapter follows the 2003-08 credit, investment, capital-flow and earnings
+  expansion; a second follows global-crisis transmission, the 2008-09 market
+  and currency shock, RBI liquidity support, fiscal widening and the first
+  annual-market stabilisation. RBI Annual Reports 2007-08 and 2008-09 plus the
+  2008-09 operations record anchor the causal account, while the seven-series
+  annual spine remains the numerical evidence layer.
+- `historical-regimes-v7` carries the sourced story through the 2019-20
+  pre-pandemic boundary with four separate chapters: post-GFC recovery and
+  inflation tightening; the growth slowdown and 2013 taper/rupee shock;
+  disinflation, flexible inflation targeting and the demonetisation/GST
+  transition; and the 2018-20 NBFC-liquidity and activity slowdown. The real-GDP
+  spine now joins RBI Handbook 2006, 2016, 2023 and 2024 vintages, preserving the
+  2004-05/2011-12 base transition and allowing official contractions.
+- `historical-regimes-v8` carries the sourced story through 2024-25 with four
+  more chapters: the pandemic activity stop and emergency stabilisation; the
+  reopening and liquidity-supported rebound; the Ukraine/inflation shock and
+  250-basis-point tightening cycle; and disinflation with resilient growth
+  under restrictive policy. RBI Annual Reports and the July 2020 Financial
+  Stability Report anchor the causal account. A new 2026 Annual Report GDP
+  vintage adds revised 2023-24 and completed 2024-25 growth at 2022-23 prices;
+  its starred 2025-26 advance estimate and repeated composition-share columns
+  are deliberately excluded from historical actuals.
+- `historical-regimes-v9` adds a ten-category fingerprint to every sourced
+  episode: trend, breadth, leadership, volatility, flows/liquidity,
+  rates/currency/credit, global risk, derivatives, earnings/valuation, and
+  macro growth/inflation. Daily selected-index and FRED market evidence is used
+  only where its dates overlap the episode; annual RBI evidence remains at its
+  honest frequency. Unavailable point-in-time breadth, membership, derivatives,
+  flow, earnings and valuation histories stay visibly unavailable rather than
+  being inferred from current constituents or hindsight. A recurring-trait map
+  compares only traits observed in at least two episode windows. These are
+  retrospective full-window descriptors and are explicitly blocked from the
+  current-regime classifier until entry-date snapshots and held-out validation
+  exist.
 - Market cycles and economic cycles are deliberately separate. Recession and
   depression sections remain visibly unclassified until a versioned definition
   and authoritative point-in-time macro history are available; an equity
@@ -608,14 +643,11 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   held-out outcome/analogue testing. Human emotion is represented only through
   measurable hypotheses such as participation, crowding, volatility, flows,
   leadership and recovery—not asserted as directly observed fact.
-- Next, extend the official macro spine beyond the archived GDP table, add
-  credit and fuller balance-of-payments histories, carry the cited episode
-  format into the 2003-2009 credit boom and global financial crisis, and attach
-  the existing trailing-only trend, breadth, leadership,
-  volatility, flow, rate/currency, global-risk, derivatives, earnings and macro
-  states to every episode. Compare common traits only after data coverage,
-  revisions and constituent membership are auditable, then test any proposed
-  trait on later held-out regimes before allowing it into the current classifier.
+- Next, add official credit and fuller balance-of-payments histories, create
+  entry-date snapshots that use only evidence available at each episode start,
+  and split the episode sequence chronologically into discovery and held-out
+  validation sets. Only traits that survive coverage gates and later unseen
+  regimes may be proposed for the current classifier.
 
 ## Validation work for observed seasonality
 

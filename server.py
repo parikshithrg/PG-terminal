@@ -28,7 +28,7 @@ from html.parser import HTMLParser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from datetime import date, datetime, time as datetime_time, timedelta, timezone
-from statistics import median
+from statistics import median, pstdev
 from zoneinfo import ZoneInfo
 
 from eod_store import (
@@ -104,7 +104,8 @@ FRED_GLOBAL_SERIES = {
 }
 SENTIMENT_EVIDENCE_MODEL_VERSION = "market-sentiment-evidence-v1"
 REGIME_RULE_VERSION = "market-regime-candidate-v1"
-HISTORICAL_REGIME_CONTRACT_VERSION = "historical-regimes-v5"
+HISTORICAL_REGIME_CONTRACT_VERSION = "historical-regimes-v9"
+HISTORICAL_FINGERPRINT_CONTRACT_VERSION = "historical-episode-fingerprint-v1"
 HISTORICAL_BULL_BEAR_THRESHOLD_PCT = 20.0
 HISTORICAL_CORRECTION_THRESHOLD_PCT = 10.0
 HISTORICAL_RAPID_BEAR_SESSIONS = 45
@@ -438,6 +439,52 @@ RBI_HISTORICAL_SERIES_SOURCES = (
         "unit": "Per cent annual growth",
         "aggregation": "published annual growth rate",
         "allow_non_positive": True,
+    },
+    {
+        "series_key": "india_real_gdp_growth_pct",
+        "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=17363",
+        "title": "RBI Handbook 2016 Table 230: Select macro-economic aggregates at constant prices",
+        "vintage_date": date(2016, 9, 16),
+        "value_column": 1,
+        "unit": "Per cent annual growth",
+        "aggregation": "published annual growth rate",
+        "allow_non_positive": True,
+    },
+    {
+        "series_key": "india_real_gdp_growth_pct",
+        "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=22028",
+        "title": "RBI Handbook 2023 Table 222: Select macro-economic aggregates at constant prices",
+        "vintage_date": date(2023, 9, 15),
+        "layout": "transposed_growth",
+        "row_label": "Gross Domestic Product",
+        "unit": "Per cent annual growth",
+        "aggregation": "published annual growth rate",
+        "allow_non_positive": True,
+        "base_period": "2011-12",
+    },
+    {
+        "series_key": "india_real_gdp_growth_pct",
+        "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=22696",
+        "title": "RBI Handbook 2024 Table 222: Select macro-economic aggregates at constant prices",
+        "vintage_date": date(2024, 9, 13),
+        "layout": "transposed_growth",
+        "row_label": "Gross Domestic Product",
+        "unit": "Per cent annual growth",
+        "aggregation": "published annual growth rate",
+        "allow_non_positive": True,
+        "base_period": "2011-12",
+    },
+    {
+        "series_key": "india_real_gdp_growth_pct",
+        "url": "https://rbi.org.in/scripts/AnnualReportPublications.aspx?Id=1475",
+        "title": "RBI Annual Report 2025-26: Growth Rates and Composition of Real Gross Domestic Product",
+        "vintage_date": date(2026, 5, 29),
+        "layout": "annual_report_growth",
+        "row_label": "8. GDP",
+        "unit": "Per cent annual growth",
+        "aggregation": "published annual growth rate",
+        "allow_non_positive": True,
+        "base_period": "2022-23",
     },
     {
         "series_key": "india_call_money_rate_annual",
@@ -2755,6 +2802,191 @@ def parse_rbi_annual_series_table(
     return observations
 
 
+def parse_rbi_transposed_annual_growth_table(
+    html_payload: str,
+    *,
+    series_key: str,
+    source_url: str,
+    source_title: str,
+    vintage_date: date,
+    row_label: str,
+    unit: str,
+    aggregation: str,
+    base_period: str,
+    allow_non_positive: bool = False,
+) -> list[dict[str, object]]:
+    """Parse an RBI table whose financial years are columns and one metric is a row."""
+    if (
+        not isinstance(html_payload, str)
+        or not html_payload.strip()
+        or not source_url.startswith("https://rbi.org.in/")
+        or not isinstance(vintage_date, date)
+        or not row_label.strip()
+        or not aggregation.strip()
+        or not base_period.strip()
+    ):
+        raise ValueError("invalid_rbi_historical_series_response")
+    parser = _RbiTableHtmlParser()
+    try:
+        parser.feed(html_payload)
+    except (ValueError, TypeError) as error:
+        raise ValueError("invalid_rbi_historical_series_response") from error
+
+    fiscal_year_pattern = re.compile(r"^(\d{4})\s*[-–]\s*(\d{2,4})$")
+    header: list[str] | None = None
+    values: list[str] | None = None
+    for cells in parser.rows:
+        if cells and cells[0].strip().casefold() == "item/year":
+            header = cells
+        elif cells and cells[0].strip().casefold() == row_label.strip().casefold():
+            values = cells
+    if header is None or values is None:
+        raise ValueError("invalid_rbi_historical_series_response")
+
+    observations: list[dict[str, object]] = []
+    for period_label, raw_value in zip(header[1:], values[1:]):
+        period_match = fiscal_year_pattern.match(period_label.strip())
+        if period_match is None:
+            continue
+        start_year = int(period_match.group(1))
+        end_text = period_match.group(2)
+        end_year = int(end_text) if len(end_text) == 4 else (start_year // 100) * 100 + int(end_text)
+        if end_year < start_year:
+            end_year += 100
+        try:
+            value = float(raw_value.replace(",", ""))
+            observation_date = date(end_year, 3, 31)
+        except (ValueError, OverflowError):
+            continue
+        if not math.isfinite(value) or (value <= 0 and not allow_non_positive):
+            continue
+        metadata: dict[str, object] = {
+            "period_basis": "Indian financial year",
+            "aggregation": aggregation.strip(),
+            "partial_period_excluded": True,
+        }
+        if allow_non_positive:
+            metadata["allows_non_positive"] = True
+        observations.append(
+            {
+                "series_key": series_key,
+                "date": observation_date,
+                "period_label": f"{start_year:04d}-{end_text}",
+                "frequency": "annual",
+                "value": value,
+                "unit": unit,
+                "base_period": base_period,
+                "source_title": source_title,
+                "source_url": source_url,
+                "source_authority": "Reserve Bank of India",
+                "vintage_date": vintage_date,
+                "metadata": metadata,
+            }
+        )
+    if len(observations) < 2:
+        raise ValueError("invalid_rbi_historical_series_response")
+    return observations
+
+
+def parse_rbi_annual_report_growth_table(
+    html_payload: str,
+    *,
+    series_key: str,
+    source_url: str,
+    source_title: str,
+    vintage_date: date,
+    row_label: str,
+    unit: str,
+    aggregation: str,
+    base_period: str,
+    allow_non_positive: bool = False,
+) -> list[dict[str, object]]:
+    """Parse completed GDP years from an RBI Annual Report growth/share table.
+
+    Annual Report appendices put an average column before annual growth and then
+    repeat the same financial years for composition shares. The first occurrence
+    of each unstarred year is therefore the growth observation; starred advance
+    estimates are deliberately excluded from the historical actuals spine.
+    """
+    if (
+        not isinstance(html_payload, str)
+        or not html_payload.strip()
+        or not source_url.startswith("https://rbi.org.in/")
+        or not isinstance(vintage_date, date)
+        or not row_label.strip()
+        or not aggregation.strip()
+        or not base_period.strip()
+    ):
+        raise ValueError("invalid_rbi_historical_series_response")
+    parser = _RbiTableHtmlParser()
+    try:
+        parser.feed(html_payload)
+    except (ValueError, TypeError) as error:
+        raise ValueError("invalid_rbi_historical_series_response") from error
+
+    fiscal_year_pattern = re.compile(r"^(\d{4})\s*[-–]\s*(\d{2,4})(\*)?$")
+    header: list[str] | None = None
+    values: list[str] | None = None
+    for cells in parser.rows:
+        if header is None and sum(bool(fiscal_year_pattern.match(cell.strip())) for cell in cells) >= 2:
+            header = cells
+        if cells and cells[0].strip().casefold() == row_label.strip().casefold():
+            values = cells
+    if header is None or values is None:
+        raise ValueError("invalid_rbi_historical_series_response")
+
+    observations: list[dict[str, object]] = []
+    seen_periods: set[str] = set()
+    for column, period_label in enumerate(header, start=1):
+        period_match = fiscal_year_pattern.match(period_label.strip())
+        if period_match is None or period_match.group(3):
+            continue
+        normalized_period = f"{period_match.group(1)}-{period_match.group(2)}"
+        if normalized_period in seen_periods:
+            break
+        seen_periods.add(normalized_period)
+        if column >= len(values):
+            continue
+        start_year = int(period_match.group(1))
+        end_text = period_match.group(2)
+        end_year = int(end_text) if len(end_text) == 4 else (start_year // 100) * 100 + int(end_text)
+        if end_year < start_year:
+            end_year += 100
+        try:
+            value = float(values[column].replace(",", ""))
+        except (ValueError, OverflowError):
+            continue
+        if not math.isfinite(value) or (value <= 0 and not allow_non_positive):
+            continue
+        metadata: dict[str, object] = {
+            "period_basis": "Indian financial year",
+            "aggregation": aggregation.strip(),
+            "partial_period_excluded": True,
+            "advance_estimates_excluded": True,
+        }
+        if allow_non_positive:
+            metadata["allows_non_positive"] = True
+        observations.append(
+            {
+                "series_key": series_key,
+                "date": date(end_year, 3, 31),
+                "period_label": normalized_period,
+                "frequency": "annual",
+                "value": value,
+                "unit": unit,
+                "base_period": base_period,
+                "source_title": source_title,
+                "source_url": source_url,
+                "source_authority": "Reserve Bank of India",
+                "vintage_date": vintage_date,
+                "metadata": metadata,
+            }
+        )
+    if len(observations) < 2:
+        raise ValueError("invalid_rbi_historical_series_response")
+    return observations
+
+
 def build_historical_series_summary(
     rows: list[dict[str, object]],
 ) -> dict[str, object]:
@@ -3092,15 +3324,494 @@ def build_historical_episode_stories(
             "how_markets_came_out": "The annual evidence marks the price trough before the 2003-04 rebound, alongside lower money-market rates and a much larger reserve stock. Recovery therefore joined cheaper funding and stronger buffers with repaired trading infrastructure; it was not just a reversal in sentiment.",
             "source_keys": ["rbi_crisis_growth_review", "sebi_annual_2001_02", "sebi_history", "rbi_reserves", "rbi_sensex", "rbi_rates"],
         },
+        {
+            "key": "credit_investment_boom_2003",
+            "period": "2003-04–2007-08",
+            "title": "Credit, investment and capital-flow expansion",
+            "family": "Broad expansion and imbalance build-up",
+            "start_year": 2003,
+            "end_year": 2007,
+            "what_happened": "India entered a sustained high-growth phase while the Sensex annual average, foreign-exchange reserves and financial intermediation expanded rapidly. RBI records average real GDP growth of 8.8% during 2003-08, but also rising inflation and demand pressure near the end of the upswing.",
+            "how_it_happened": "Investment, bank credit, corporate earnings, global liquidity and capital inflows reinforced one another. The evidence does not reduce the advance to one driver: falling early-period funding costs, reserve accumulation and strong risk appetite all formed part of the backdrop.",
+            "what_came_out": "The economy reached the global shock with stronger reserves and banking regulation than in 1991, but with asset prices and expectations conditioned by several years of unusually strong growth and abundant financing.",
+            "how_markets_came_out": "This chapter ends at the build-up rather than declaring the exact top from annual data. RBI records the Sensex peak on 8 January 2008; the next chapter follows how liquidity, capital flows, the rupee and prices reversed after that point.",
+            "source_keys": ["rbi_annual_2007_08", "rbi_annual_2008_09", "rbi_reserves", "rbi_sensex", "rbi_rates", "rbi_fx"],
+        },
+        {
+            "key": "global_financial_crisis_2008",
+            "period": "2007-08–2009-10",
+            "title": "Global financial crisis transmission and policy-supported stabilisation",
+            "family": "Global shock, drawdown and recovery",
+            "start_year": 2007,
+            "end_year": 2009,
+            "what_happened": "The global financial crisis reached India through trade, capital-flow and confidence channels. RBI records real GDP growth slowing to 6.7% in 2008-09, a reversal in capital flows, rupee pressure, contracting exports and a 60.9% Sensex fall from 8 January 2008 to 9 March 2009.",
+            "how_it_happened": "Foreign-investor selling, tighter external funding, weaker global demand and a sudden preference for liquidity hit markets and activity together. Indian banks largely avoided direct exposure to troubled overseas assets, but the domestic system still absorbed the global liquidity and confidence shock.",
+            "what_came_out": "Policy shifted from inflation restraint to preserving liquidity and credit. RBI reduced reserve and policy rates and supplied liquidity; fiscal support widened the deficit, while the pre-crisis reserve buffer helped absorb external pressure.",
+            "how_markets_came_out": "Stabilisation arrived in stages rather than on one date: wholesale-price pressure collapsed, money-market rates eased, policy liquidity expanded and the Sensex annual average rebounded in 2009-10. The evidence supports a sequence of stress relief and repricing, not a claim that the real economy recovered simultaneously.",
+            "source_keys": ["rbi_annual_2008_09", "rbi_policy_response_2008_09", "rbi_reserves", "rbi_sensex", "rbi_wpi", "rbi_rates", "rbi_fx", "rbi_fiscal"],
+        },
+        {
+            "key": "post_gfc_rebound_inflation_2009",
+            "period": "2009-10–2011-12",
+            "title": "Post-crisis rebound meets persistent inflation",
+            "family": "Recovery, overheating and policy tightening",
+            "start_year": 2009,
+            "end_year": 2011,
+            "what_happened": "Output and the Sensex annual average rebounded after the global crisis, but inflation remained persistent and growth lost momentum by 2011-12. The recovery therefore changed from broad relief into a difficult growth-inflation trade-off.",
+            "how_it_happened": "Crisis-era fiscal and monetary support, restored capital flows and domestic demand accelerated recovery. Supply constraints and price pressure then required monetary tightening even as the global environment remained fragile.",
+            "what_came_out": "The episode exposed the cost of treating a liquidity-led recovery as permanently self-sustaining: inflation, higher funding costs and weaker investment increasingly constrained the next phase.",
+            "how_markets_came_out": "The Sensex recovery preceded the later growth slowdown. The annual evidence is read as a hand-off from policy-supported repricing to a market that had to absorb higher rates and less certain earnings growth.",
+            "source_keys": ["rbi_annual_2010_11", "rbi_growth", "rbi_wpi", "rbi_rates", "rbi_sensex", "rbi_fiscal"],
+        },
+        {
+            "key": "taper_rupee_stress_2012",
+            "period": "2011-12–2013-14",
+            "title": "Growth slowdown, external vulnerability and taper stress",
+            "family": "Currency shock and stabilisation",
+            "start_year": 2011,
+            "end_year": 2013,
+            "what_happened": "Growth slowed while inflation, fiscal pressure and the current-account imbalance weakened the macro backdrop. The US Federal Reserve's 2013 taper signal then triggered capital outflows and acute rupee and bond-market pressure.",
+            "how_it_happened": "RBI records a 17% rupee depreciation and nearly US$17 billion reserve depletion from the first taper indication to 3 September 2013. Global repricing exposed domestic vulnerabilities that had accumulated before the external shock.",
+            "what_came_out": "Short-term rates were raised, liquidity was restrained and measures targeted the current-account deficit and its financing. Exchange-rate stability became the immediate priority until capital flows and reserves recovered.",
+            "how_markets_came_out": "The recovery sequence began with currency and funding stabilisation rather than a clean return to high growth. Annual averages smooth the intrayear shock, so the official event account remains essential to interpreting the path.",
+            "source_keys": ["rbi_taper_review_2013_14", "rbi_growth", "rbi_rates", "rbi_fx", "rbi_reserves", "rbi_fiscal"],
+        },
+        {
+            "key": "disinflation_formalisation_2014",
+            "period": "2014-15–2017-18",
+            "title": "Disinflation, a new monetary framework and formalisation shocks",
+            "family": "Policy transition and resilient expansion",
+            "start_year": 2014,
+            "end_year": 2017,
+            "what_happened": "Lower commodity prices and disinflation improved the macro setting while India adopted flexible inflation targeting. Demonetisation in 2016 and the GST transition in 2017 then created distinct disruptions inside an otherwise expanding market period.",
+            "how_it_happened": "A stronger external buffer and lower inflation created policy space, while the monetary framework gained a formal nominal anchor. Currency replacement and indirect-tax unification changed cash use, activity timing and reported transactions through separate channels.",
+            "what_came_out": "The period accelerated formalisation, digital payments and a national indirect-tax framework, but short-run sector effects were uneven and cannot be inferred from the broad index alone.",
+            "how_markets_came_out": "The Sensex annual average advanced across the window despite policy-event volatility. That resilience is treated as an aggregate outcome; later work must test sector leadership, breadth and earnings before calling the transition uniformly positive.",
+            "source_keys": ["rbi_annual_2016_17", "rbi_gst_review", "rbi_growth", "rbi_wpi", "rbi_reserves", "rbi_sensex"],
+        },
+        {
+            "key": "nbfc_slowdown_2018",
+            "period": "2018-19–2019-20",
+            "title": "NBFC liquidity stress and a pre-pandemic growth slowdown",
+            "family": "Credit disruption and weakening activity",
+            "start_year": 2018,
+            "end_year": 2019,
+            "what_happened": "The September 2018 IL&FS default damaged market confidence, raised NBFC funding costs and reduced non-bank credit flow. Domestic activity then slowed markedly through 2019-20 before the pandemic became the next separate regime boundary in March 2020.",
+            "how_it_happened": "Rapid NBFC balance-sheet growth had increased links with banks, debt funds and capital markets. When wholesale funding confidence broke, liquidity stress transmitted into credit availability, consumption and investment alongside an already weakening cycle.",
+            "what_came_out": "RBI supplied durable liquidity and strengthened the regulatory and supervisory focus on interconnected non-bank lenders. Monetary easing expanded as the slowdown deepened, but transmission remained constrained.",
+            "how_markets_came_out": "Headline index levels concealed a narrower and more uneven market. The annual story therefore ends at the pandemic boundary and does not combine the NBFC-led slowdown with the much faster exogenous shock that followed.",
+            "source_keys": ["rbi_annual_2018_19", "rbi_nbfc_review", "rbi_annual_2019_20", "rbi_growth", "rbi_rates", "rbi_sensex"],
+        },
+        {
+            "key": "pandemic_shock_2020",
+            "period": "2019-20–2020-21",
+            "title": "Pandemic stop, market dislocation and emergency policy response",
+            "family": "Exogenous shock and economic contraction",
+            "start_year": 2019,
+            "end_year": 2020,
+            "what_happened": "COVID-19 turned an existing domestic slowdown into an abrupt activity stop. Real GDP contracted in 2020-21 while markets faced a global dash for liquidity and the central fiscal deficit widened sharply.",
+            "how_it_happened": "Containment halted mobility and production as foreign and domestic investors sought liquidity. RBI advanced the March 2020 policy meeting, reduced the cash reserve ratio and deployed liquidity and regulatory measures to prevent market dysfunction from becoming a broader financial failure.",
+            "what_came_out": "The policy objective shifted from ordinary cyclical easing to preserving market functioning, credit transmission and viable borrower balance sheets during an unprecedented shutdown.",
+            "how_markets_came_out": "Financial prices stabilised before activity fully normalised. The annual evidence therefore separates emergency liquidity relief and the first market rebound from the following year's reopening-led economic recovery.",
+            "source_keys": ["rbi_annual_2019_20", "rbi_fsr_july_2020", "rbi_growth", "rbi_rates", "rbi_fiscal", "rbi_sensex"],
+        },
+        {
+            "key": "reopening_liquidity_recovery_2021",
+            "period": "2020-21–2021-22",
+            "title": "Reopening rebound under abundant liquidity",
+            "family": "Recovery, liquidity support and uneven reopening",
+            "start_year": 2020,
+            "end_year": 2021,
+            "what_happened": "Real GDP rebounded strongly in 2021-22 and the Sensex annual average rose, but the recovery remained uneven as India passed through second and third pandemic waves and wholesale-price pressure accelerated.",
+            "how_it_happened": "Reopening, base effects, vaccination and policy support restored activity. RBI kept the policy rate unchanged while using government-security purchases and targeted liquidity to maintain supportive financial conditions.",
+            "what_came_out": "The economy recovered its aggregate growth rate without every sector or household recovering at the same speed. Inflation and supply disruption became the next constraint as emergency support persisted.",
+            "how_markets_came_out": "The market moved from indiscriminate relief toward reopening and earnings leadership. The story treats the powerful annual-average rise as repricing during a still-fragile recovery, not proof that pandemic damage had disappeared.",
+            "source_keys": ["rbi_annual_2021_22", "rbi_monetary_2021_22", "rbi_growth", "rbi_wpi", "rbi_sensex"],
+        },
+        {
+            "key": "ukraine_inflation_tightening_2022",
+            "period": "2021-22–2022-23",
+            "title": "Ukraine shock, inflation breakout and rapid rate tightening",
+            "family": "Supply shock and monetary reset",
+            "start_year": 2021,
+            "end_year": 2022,
+            "what_happened": "Russia's invasion of Ukraine intensified food, fuel and supply pressures just as the pandemic recovery was maturing. RBI records CPI inflation of 6.7% in 2022-23 and inflation above the upper tolerance level for ten successive months.",
+            "how_it_happened": "Imported commodity pressure, global dollar strength and domestic price persistence changed the policy trade-off. RBI raised the repo rate by 250 basis points between May 2022 and February 2023 and withdrew accommodation while growth continued.",
+            "what_came_out": "The regime moved from emergency support to inflation control. Funding conditions tightened, the rupee came under pressure and the market had to distinguish nominal earnings growth from durable real growth.",
+            "how_markets_came_out": "Indian equities absorbed the shock without repeating the pandemic collapse, but the annual average concealed sharp rotations. Stabilisation depended on inflation peaking, external pressure easing and growth remaining resilient under higher rates.",
+            "source_keys": ["rbi_annual_2022_23", "rbi_growth", "rbi_wpi", "rbi_rates", "rbi_fx", "rbi_reserves"],
+        },
+        {
+            "key": "disinflation_resilience_2023",
+            "period": "2022-23–2024-25",
+            "title": "Disinflation with resilient growth and a restrictive policy backdrop",
+            "family": "Soft-landing attempt and expansion",
+            "start_year": 2022,
+            "end_year": 2024,
+            "what_happened": "Inflation pressure moderated from the 2022-23 shock while revised official GDP estimates show continued real growth in 2023-24 and 2024-25. The Sensex annual average advanced as the economy absorbed restrictive rates.",
+            "how_it_happened": "Easing supply pressure, domestic demand, public capital expenditure, services activity and a rebuilt external buffer supported resilience. Monetary policy remained focused on aligning inflation with target rather than immediately reversing the earlier tightening.",
+            "what_came_out": "The period looks different from both the liquidity-led reopening and the inflation breakout: growth stayed firm while disinflation progressed, but the cost of capital and global risks remained material.",
+            "how_markets_came_out": "The broad index rerated as macro stress eased, yet the story remains conditional on participation, earnings and balance-sheet evidence. Annual data establish the arc; daily sector leadership and breadth must test how widely the resilience was shared.",
+            "source_keys": ["rbi_annual_2023_24", "rbi_gdp_2025_26", "rbi_growth", "rbi_wpi", "rbi_rates", "rbi_reserves", "rbi_sensex"],
+        },
     ]
     for episode in episodes:
-        episode["evidence"] = evidence_for(int(episode.pop("start_year")), int(episode.pop("end_year")))
+        start_financial_year = int(episode.pop("start_year"))
+        end_financial_year = int(episode.pop("end_year"))
+        episode["window"] = {
+            "start_financial_year": start_financial_year,
+            "end_financial_year": end_financial_year,
+        }
+        episode["evidence"] = evidence_for(start_financial_year, end_financial_year)
         episode["research_state"] = (
             "Official annual evidence connected"
             if len(episode["evidence"]) >= 4
             else "Additional official series required"
         )
     return episodes
+
+
+def build_historical_episode_fingerprints(
+    episode_stories: list[dict[str, object]],
+    official_history: dict[str, object],
+    index_candles: list[dict[str, object]],
+    *,
+    instrument: str,
+    global_risk_rows: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    """Attach retrospective, coverage-aware evidence states to story episodes.
+
+    These summaries describe the full episode window and therefore include
+    outcomes. They are intentionally barred from the live classifier until a
+    separate entry-date snapshot and held-out validation contract exists.
+    """
+    timeline = official_history.get("timeline")
+    annual_rows = [row for row in timeline if isinstance(row, dict)] if isinstance(timeline, list) else []
+    daily_rows = sorted(
+        (
+            (row["date"], float(row["close"]))
+            for row in index_candles
+            if isinstance(row, dict)
+            and isinstance(row.get("date"), date)
+            and isinstance(row.get("close"), (int, float))
+            and not isinstance(row.get("close"), bool)
+            and math.isfinite(float(row["close"]))
+            and float(row["close"]) > 0
+        ),
+        key=lambda item: item[0],
+    )
+    global_rows = [
+        row
+        for row in (global_risk_rows or [])
+        if isinstance(row, dict)
+        and isinstance(row.get("date"), date)
+        and isinstance(row.get("value"), (int, float))
+        and not isinstance(row.get("value"), bool)
+        and math.isfinite(float(row["value"]))
+    ]
+
+    def start_year(row: dict[str, object]) -> int:
+        try:
+            return int(str(row.get("period", ""))[:4])
+        except ValueError:
+            return -1
+
+    def numeric_values(rows: list[dict[str, object]], key: str) -> list[float]:
+        return [float(row[key]) for row in rows if isinstance(row.get(key), (int, float))]
+
+    def path_pct(values: list[float]) -> float | None:
+        return round((values[-1] / values[0] - 1) * 100, 2) if len(values) >= 2 and values[0] != 0 else None
+
+    def max_drawdown_pct(values: list[float]) -> float | None:
+        if len(values) < 2:
+            return None
+        peak = values[0]
+        worst = 0.0
+        for value in values:
+            peak = max(peak, value)
+            worst = min(worst, (value / peak - 1) * 100)
+        return round(worst, 2)
+
+    def card(
+        key: str,
+        label: str,
+        status: str,
+        state: str,
+        observation: str,
+        frequency: str,
+        limitation: str,
+    ) -> dict[str, object]:
+        return {
+            "key": key,
+            "label": label,
+            "status": status,
+            "state": state,
+            "observation": observation,
+            "frequency": frequency,
+            "limitation": limitation,
+        }
+
+    trait_labels = {
+        "growth_contraction": "Real-economy contraction",
+        "growth_slowdown": "Growth slowdown",
+        "strong_rebound": "Strong growth rebound",
+        "inflation_shock": "Inflation shock",
+        "funding_stress": "Tight money-market conditions",
+        "currency_stress": "Rupee depreciation pressure",
+        "fiscal_expansion": "Wide central fiscal deficit",
+        "reserve_drawdown": "Foreign-exchange reserve drawdown",
+        "external_buffer_rebuild": "Foreign-exchange reserve rebuild",
+        "equity_drawdown": "Material equity drawdown",
+        "equity_recovery": "Strong equity recovery path",
+        "global_risk_spike": "Global risk spike",
+    }
+    trait_episodes: dict[str, list[dict[str, str]]] = defaultdict(list)
+
+    for episode in episode_stories:
+        window = episode.get("window") if isinstance(episode.get("window"), dict) else {}
+        start_fy = int(window.get("start_financial_year", -1))
+        end_fy = int(window.get("end_financial_year", -1))
+        episode_start = date(start_fy, 4, 1) if start_fy > 0 else date.min
+        episode_end = date(end_fy + 1, 3, 31) if end_fy > 0 else date.min
+        annual_window = [row for row in annual_rows if start_fy <= start_year(row) <= end_fy]
+        daily_window = [(row_date, close) for row_date, close in daily_rows if episode_start <= row_date <= episode_end]
+        global_window = [row for row in global_rows if episode_start <= row["date"] <= episode_end]
+
+        growth = numeric_values(annual_window, "real_gdp_growth_pct")
+        inflation = numeric_values(annual_window, "wpi_change_pct")
+        call_rates = numeric_values(annual_window, "call_money_rate_pct")
+        rupee_changes = numeric_values(annual_window, "inr_usd_change_pct")
+        fiscal = numeric_values(annual_window, "central_gfd_pct_gdp")
+        reserves = numeric_values(annual_window, "foreign_exchange_reserves_usd_mn")
+        sensex = numeric_values(annual_window, "sensex_average")
+        sensex_changes = numeric_values(annual_window, "sensex_change_pct")
+        reserve_path = path_pct(reserves)
+        sensex_path = path_pct(sensex)
+        selected_values = [close for _row_date, close in daily_window]
+        selected_path = path_pct(selected_values)
+        selected_drawdown = max_drawdown_pct(selected_values)
+
+        categories: list[dict[str, object]] = []
+        if len(selected_values) >= 20:
+            trend_state = "advance" if float(selected_path or 0) >= 10 else "decline" if float(selected_path or 0) <= -10 else "range"
+            categories.append(card(
+                "trend_momentum",
+                "Trend and momentum",
+                "ready",
+                trend_state,
+                f"{instrument} {selected_path:+.2f}% across {len(selected_values)} completed sessions; maximum drawdown {selected_drawdown:.2f}%.",
+                "daily",
+                "Full-window outcome descriptor; not an entry-date signal.",
+            ))
+        elif sensex_path is not None:
+            trend_state = "advance" if sensex_path >= 10 else "decline" if sensex_path <= -10 else "range"
+            categories.append(card(
+                "trend_momentum",
+                "Trend and momentum",
+                "partial",
+                trend_state,
+                f"Sensex financial-year annual-average path {sensex_path:+.2f}%.",
+                "annual",
+                "Annual averages cannot locate an intrayear turning point or momentum signal.",
+            ))
+        else:
+            categories.append(card("trend_momentum", "Trend and momentum", "unavailable", "not_observed", "No complete price path is connected for this window.", "unavailable", "Do not infer trend from narrative text."))
+
+        categories.append(card(
+            "breadth_participation",
+            "Breadth and participation",
+            "unavailable",
+            "not_observed",
+            "Point-in-time constituent breadth is not stored for this episode.",
+            "unavailable",
+            "Today's membership would introduce survivorship bias.",
+        ))
+        categories.append(card(
+            "leadership_concentration",
+            "Leadership and concentration",
+            "unavailable",
+            "not_observed",
+            "Effective-dated sector membership and weights are not stored for this episode.",
+            "unavailable",
+            "Current constituents are not substituted for historical membership.",
+        ))
+
+        if len(selected_values) >= 20:
+            returns = [(selected_values[index] / selected_values[index - 1] - 1) for index in range(1, len(selected_values))]
+            realised_volatility = round(pstdev(returns) * math.sqrt(252) * 100, 2) if len(returns) >= 2 else None
+            stress_state = "high_stress" if float(selected_drawdown or 0) <= -20 else "correction" if float(selected_drawdown or 0) <= -10 else "contained"
+            categories.append(card(
+                "volatility_stress",
+                "Volatility and stress",
+                "ready",
+                stress_state,
+                f"{instrument} realised volatility {realised_volatility:.2f}% annualised; maximum drawdown {selected_drawdown:.2f}%.",
+                "daily",
+                "Calculated across the full episode window and therefore contains outcome information.",
+            ))
+        else:
+            categories.append(card("volatility_stress", "Volatility and stress", "unavailable", "not_observed", "Consistent daily closes are unavailable for volatility measurement.", "unavailable", "Annual averages cannot recover crash speed or realised volatility."))
+
+        if call_rates:
+            funding_state = "tight" if max(call_rates) >= 10 else "restrictive" if max(call_rates) >= 7 else "supportive"
+            categories.append(card(
+                "institutional_flows_liquidity",
+                "Institutional flows and liquidity",
+                "partial",
+                funding_state,
+                f"Call-money rate reached {max(call_rates):.2f}%; historical FII/DII flow history is not connected.",
+                "annual",
+                "Funding conditions are a liquidity proxy, not investor-flow evidence.",
+            ))
+        else:
+            categories.append(card("institutional_flows_liquidity", "Institutional flows and liquidity", "unavailable", "not_observed", "Neither historical flow nor funding evidence is connected.", "unavailable", "No flow state is inferred."))
+
+        if call_rates or rupee_changes or reserve_path is not None:
+            rate_currency_state = "stress" if (call_rates and max(call_rates) >= 10) or (rupee_changes and max(rupee_changes) >= 10) or (reserve_path is not None and reserve_path <= -5) else "pressure" if (call_rates and max(call_rates) >= 7) or (rupee_changes and max(rupee_changes) >= 5) else "contained"
+            parts = []
+            if call_rates:
+                parts.append(f"call rate high {max(call_rates):.2f}%")
+            if rupee_changes:
+                parts.append(f"rupee depreciation high {max(rupee_changes):.2f}%")
+            if reserve_path is not None:
+                parts.append(f"reserve path {reserve_path:+.2f}%")
+            categories.append(card(
+                "rates_currency_credit",
+                "Rates, currency, and credit",
+                "partial",
+                rate_currency_state,
+                "; ".join(parts) + ".",
+                "annual",
+                "Credit growth and spreads are not yet connected, so this category cannot be complete.",
+            ))
+        else:
+            categories.append(card("rates_currency_credit", "Rates, currency, and credit", "unavailable", "not_observed", "No rates, currency, reserve or credit evidence is connected.", "unavailable", "No state is inferred."))
+
+        global_by_key: dict[str, list[float]] = defaultdict(list)
+        for row in global_window:
+            global_by_key[str(row.get("metric_key"))].append(float(row["value"]))
+        vix_values = global_by_key.get("us_vix", [])
+        sp500_values = global_by_key.get("sp500", [])
+        brent_values = global_by_key.get("brent_crude", [])
+        sp500_path = path_pct(sp500_values)
+        brent_path = path_pct(brent_values)
+        if vix_values or sp500_path is not None or brent_path is not None:
+            risk_state = "risk_off" if (vix_values and max(vix_values) >= 30) or (sp500_path is not None and sp500_path <= -10) else "mixed" if (vix_values and max(vix_values) >= 20) else "risk_on"
+            global_parts = []
+            if vix_values:
+                global_parts.append(f"VIX high {max(vix_values):.2f}")
+            if sp500_path is not None:
+                global_parts.append(f"S&P 500 path {sp500_path:+.2f}%")
+            if brent_path is not None:
+                global_parts.append(f"Brent path {brent_path:+.2f}%")
+            categories.append(card("global_risk", "Global risk backdrop", "ready", risk_state, "; ".join(global_parts) + ".", "daily", "Current FRED vintage; market series are not a reconstruction of every release known at the time."))
+        else:
+            categories.append(card("global_risk", "Global risk backdrop", "unavailable", "not_observed", "No aligned global-market observations are stored for this episode.", "unavailable", "No proxy or narrative substitution is used."))
+
+        categories.append(card("derivatives_positioning", "Derivatives positioning", "unavailable", "not_observed", "Comparable futures and open-interest history is not stored for this episode.", "unavailable", "Modern derivatives data cannot be backfilled into earlier market structures."))
+        categories.append(card("earnings_valuation", "Earnings and valuation", "unavailable", "not_observed", "Point-in-time earnings estimates and valuation histories are not connected.", "unavailable", "Later reported earnings are not inserted into an earlier information set."))
+
+        if growth or inflation or fiscal:
+            if growth and min(growth) < 0 and inflation and max(inflation) >= 8:
+                macro_state = "contraction_with_inflation"
+            elif growth and min(growth) < 0:
+                macro_state = "contraction"
+            elif inflation and max(inflation) >= 8:
+                macro_state = "inflation_pressure"
+            elif growth and min(growth) >= 6:
+                macro_state = "resilient_growth"
+            else:
+                macro_state = "mixed_growth"
+            macro_parts = []
+            if growth:
+                macro_parts.append(f"growth low {min(growth):.2f}% and high {max(growth):.2f}%")
+            if inflation:
+                macro_parts.append(f"WPI inflation high {max(inflation):.2f}%")
+            if fiscal:
+                macro_parts.append(f"central deficit high {max(fiscal):.2f}% of GDP")
+            categories.append(card("macro_growth_inflation", "Macro growth and inflation", "ready", macro_state, "; ".join(macro_parts) + ".", "annual", "Latest RBI publication vintages describe the episode retrospectively; they are not unrevised real-time releases."))
+        else:
+            categories.append(card("macro_growth_inflation", "Macro growth and inflation", "unavailable", "not_observed", "No aligned growth, inflation or fiscal observations are connected.", "unavailable", "No macro state is inferred."))
+
+        traits: list[dict[str, str]] = []
+        def add_trait(key: str, evidence: str) -> None:
+            traits.append({"key": key, "label": trait_labels[key], "evidence": evidence})
+            trait_episodes[key].append({"key": str(episode.get("key")), "title": str(episode.get("title"))})
+
+        if growth and min(growth) < 0:
+            add_trait("growth_contraction", f"growth low {min(growth):.2f}%")
+        elif growth and min(growth) < 4:
+            add_trait("growth_slowdown", f"growth low {min(growth):.2f}%")
+        if growth and max(growth) >= 8:
+            add_trait("strong_rebound", f"growth high {max(growth):.2f}%")
+        if inflation and max(inflation) >= 8:
+            add_trait("inflation_shock", f"WPI inflation high {max(inflation):.2f}%")
+        if call_rates and max(call_rates) >= 10:
+            add_trait("funding_stress", f"call-money rate high {max(call_rates):.2f}%")
+        if rupee_changes and max(rupee_changes) >= 10:
+            add_trait("currency_stress", f"rupee depreciation high {max(rupee_changes):.2f}%")
+        if fiscal and max(fiscal) >= 6:
+            add_trait("fiscal_expansion", f"central deficit high {max(fiscal):.2f}% of GDP")
+        if reserve_path is not None and reserve_path <= -5:
+            add_trait("reserve_drawdown", f"reserve path {reserve_path:+.2f}%")
+        if reserve_path is not None and reserve_path >= 10:
+            add_trait("external_buffer_rebuild", f"reserve path {reserve_path:+.2f}%")
+        equity_low = selected_drawdown if selected_drawdown is not None else (min(sensex_changes) if sensex_changes else None)
+        equity_path = selected_path if selected_path is not None else sensex_path
+        if equity_low is not None and equity_low <= -10:
+            add_trait("equity_drawdown", f"observed equity decline {equity_low:.2f}%")
+        if equity_path is not None and equity_path >= 20:
+            add_trait("equity_recovery", f"observed equity path {equity_path:+.2f}%")
+        if vix_values and max(vix_values) >= 30:
+            add_trait("global_risk_spike", f"VIX high {max(vix_values):.2f}")
+
+        episode["fingerprint"] = {
+            "contract_version": HISTORICAL_FINGERPRINT_CONTRACT_VERSION,
+            "window_start": episode_start.isoformat(),
+            "window_end": episode_end.isoformat(),
+            "classification_role": "retrospective_episode_descriptor_only",
+            "coverage": {
+                "ready": sum(item["status"] == "ready" for item in categories),
+                "partial": sum(item["status"] == "partial" for item in categories),
+                "unavailable": sum(item["status"] == "unavailable" for item in categories),
+                "total": len(categories),
+            },
+            "categories": categories,
+            "traits": traits,
+        }
+
+    recurring_traits = [
+        {
+            "key": key,
+            "label": trait_labels[key],
+            "episode_count": len(episodes),
+            "episode_share_pct": round(len(episodes) / len(episode_stories) * 100, 1) if episode_stories else 0.0,
+            "episodes": episodes,
+        }
+        for key, episodes in trait_episodes.items()
+        if len(episodes) >= 2
+    ]
+    recurring_traits.sort(key=lambda item: (-int(item["episode_count"]), str(item["label"])))
+    return {
+        "contract_version": HISTORICAL_FINGERPRINT_CONTRACT_VERSION,
+        "episodes_evaluated": len(episode_stories),
+        "categories": [
+            "Trend and momentum",
+            "Breadth and participation",
+            "Leadership and concentration",
+            "Volatility and stress",
+            "Institutional flows and liquidity",
+            "Rates, currency, and credit",
+            "Global risk backdrop",
+            "Derivatives positioning",
+            "Earnings and valuation",
+            "Macro growth and inflation",
+        ],
+        "recurring_traits": recurring_traits,
+        "classifier_admission": "blocked",
+        "classifier_admission_reason": "Fingerprints describe full episode windows and include outcomes. A trait can enter the current-regime classifier only after point-in-time entry snapshots, coverage gates and held-out validation are implemented.",
+        "method": "Thresholded retrospective descriptors built only from connected observations. Missing categories remain visible and are never inferred from narrative text or today's constituents.",
+    }
 
 
 def calculate_macro_context_summary(rows: list[dict[str, object]]) -> dict[str, object]:
@@ -3514,6 +4225,7 @@ def build_historical_regime_workspace(
     *,
     instrument: str = "Nifty 50",
     official_history_rows: list[dict[str, object]] | None = None,
+    global_risk_rows: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     """Identify transparent price-cycle episodes from completed index closes.
 
@@ -3774,6 +4486,13 @@ def build_historical_regime_workspace(
     official_history = build_historical_series_summary(official_history_rows or [])
     official_ready = official_history["status"] == "ready"
     episode_stories = build_historical_episode_stories(official_history)
+    episode_fingerprint_comparison = build_historical_episode_fingerprints(
+        episode_stories,
+        official_history,
+        index_candles,
+        instrument=instrument,
+        global_risk_rows=global_risk_rows,
+    )
     coverage_ladder = [
         {
             "period": "1875–1978",
@@ -3918,8 +4637,12 @@ def build_historical_regime_workspace(
                 era["research_state"] = "Official annual market and macro evidence connected; sourced episodes active"
             elif era["period"] in {"1991–1995", "1995–2003"}:
                 era["research_state"] = "Official annual market and macro evidence connected; sourced episodes active"
-            elif era["period"] in {"2003–2009", "2009–2020"}:
-                era["research_state"] = "Official annual market and macro anchors connected; higher-frequency episode joins queued"
+            elif era["period"] == "2003–2009":
+                era["research_state"] = "Official annual evidence and RBI crisis accounts connected; sourced episodes active"
+            elif era["period"] == "2009–2020":
+                era["research_state"] = "Official annual evidence and RBI policy accounts connected; sourced episodes active"
+            elif era["period"] == "2020–present":
+                era["research_state"] = "Official annual evidence and RBI pandemic, recovery and inflation accounts connected; sourced episodes active"
     source_registry = [
         {
             "key": "sebi_history",
@@ -3965,10 +4688,10 @@ def build_historical_regime_workspace(
         },
         {
             "key": "rbi_growth",
-            "name": "RBI Handbook 2006 Table 237",
+            "name": "RBI Handbook and Annual Report real-GDP growth vintages",
             "authority": "Reserve Bank of India",
-            "use": "Historical real GDP growth at stated constant-price bases",
-            "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=8787",
+            "use": "Historical real GDP growth with stated base periods and publication vintages",
+            "url": "https://rbi.org.in/scripts/AnnualReportPublications.aspx?Id=1475",
         },
         {
             "key": "rbi_rates",
@@ -4034,6 +4757,118 @@ def build_historical_regime_workspace(
             "url": "https://rbi.org.in/scripts/AnnualReportPublications.aspx?Id=896",
         },
         {
+            "key": "rbi_annual_2007_08",
+            "name": "RBI Annual Report 2007-08",
+            "authority": "Reserve Bank of India",
+            "use": "Pre-crisis growth, inflation, capital flows and emerging global financial stress",
+            "url": "https://www.rbi.org.in/scripts/AnnualReportPublications.aspx?Id=808",
+        },
+        {
+            "key": "rbi_annual_2008_09",
+            "name": "RBI Annual Report 2008-09",
+            "authority": "Reserve Bank of India",
+            "use": "Global-crisis transmission, output slowdown, market drawdown and stabilisation",
+            "url": "https://rbi.org.in/scripts/AnnualReportPublications.aspx?Id=896",
+        },
+        {
+            "key": "rbi_policy_response_2008_09",
+            "name": "RBI operations and policy response 2008-09",
+            "authority": "Reserve Bank of India",
+            "use": "Reserve-ratio, policy-rate and liquidity measures during the global financial crisis",
+            "url": "https://www.rbi.org.in/scripts/AnnualReportPublications.aspx?Id=897",
+        },
+        {
+            "key": "rbi_annual_2010_11",
+            "name": "RBI Annual Report 2010-11",
+            "authority": "Reserve Bank of India",
+            "use": "Post-crisis recovery, inflation persistence, monetary tightening and financial resilience",
+            "url": "https://www.rbi.org.in/scripts/AnnualReportPublications.aspx?Id=1003",
+        },
+        {
+            "key": "rbi_taper_review_2013_14",
+            "name": "RBI review of 2013-14 monetary and liquidity conditions",
+            "authority": "Reserve Bank of India",
+            "use": "Taper-shock capital outflows, rupee pressure, reserve loss and stabilisation measures",
+            "url": "https://www.rbi.org.in/scripts/PublicationsView.aspx?Id=15709",
+        },
+        {
+            "key": "rbi_annual_2016_17",
+            "name": "RBI Annual Report 2016-17",
+            "authority": "Reserve Bank of India",
+            "use": "Demonetisation, monetary-framework transition and the 2016-17 economy",
+            "url": "https://www.rbi.org.in/scripts/AnnualReportPublications.aspx?year=2017",
+        },
+        {
+            "key": "rbi_gst_review",
+            "name": "RBI review of the Goods and Services Tax transition",
+            "authority": "Reserve Bank of India",
+            "use": "Official assessment of the national indirect-tax framework and transition",
+            "url": "https://www.rbi.org.in/scripts/PublicationsView.aspx?id=17470",
+        },
+        {
+            "key": "rbi_annual_2018_19",
+            "name": "RBI Annual Report 2018-19",
+            "authority": "Reserve Bank of India",
+            "use": "Growth deceleration, market liquidity and changing credit flows during NBFC stress",
+            "url": "https://www.rbi.org.in/scripts/AnnualReportPublications.aspx?Id=1250",
+        },
+        {
+            "key": "rbi_nbfc_review",
+            "name": "RBI review of the NBFC sector",
+            "authority": "Reserve Bank of India",
+            "use": "IL&FS default, NBFC interconnectedness, liquidity stress and funding costs",
+            "url": "https://www.rbi.org.in/scripts/BS_ViewBulletin.aspx?Id=20262",
+        },
+        {
+            "key": "rbi_annual_2019_20",
+            "name": "RBI Annual Report 2019-20",
+            "authority": "Reserve Bank of India",
+            "use": "Pre-pandemic slowdown, monetary easing and the March 2020 regime boundary",
+            "url": "https://www.rbi.org.in/scripts/AnnualReportPublications.aspx?Id=1283",
+        },
+        {
+            "key": "rbi_fsr_july_2020",
+            "name": "RBI Financial Stability Report, July 2020",
+            "authority": "Reserve Bank of India",
+            "use": "Pandemic market dislocation, emergency support and financial-system stabilisation",
+            "url": "https://www.rbi.org.in/scripts/PublicationReportDetails.aspx?ID=1147",
+        },
+        {
+            "key": "rbi_annual_2021_22",
+            "name": "RBI Annual Report 2021-22",
+            "authority": "Reserve Bank of India",
+            "use": "Pandemic waves, uneven reopening, growth rebound and inflation pressure",
+            "url": "https://www.rbi.org.in/scripts/AnnualReportPublications.aspx?Id=1341",
+        },
+        {
+            "key": "rbi_monetary_2021_22",
+            "name": "RBI monetary policy operations 2021-22",
+            "authority": "Reserve Bank of India",
+            "use": "Policy-rate pause, G-SAP, targeted liquidity and recovery support",
+            "url": "https://www.rbi.org.in/scripts/AnnualReportPublications.aspx?Id=1345",
+        },
+        {
+            "key": "rbi_annual_2022_23",
+            "name": "RBI Annual Report 2022-23",
+            "authority": "Reserve Bank of India",
+            "use": "Ukraine shock, inflation breakout, rupee pressure and 250-basis-point tightening",
+            "url": "https://www.rbi.org.in/scripts/AnnualReportPublications.aspx?Id=1373",
+        },
+        {
+            "key": "rbi_annual_2023_24",
+            "name": "RBI Annual Report 2023-24",
+            "authority": "Reserve Bank of India",
+            "use": "Disinflation, resilient domestic growth and the restrictive policy backdrop",
+            "url": "https://www.rbi.org.in/scripts/AnnualReportPublications.aspx?year=2024",
+        },
+        {
+            "key": "rbi_gdp_2025_26",
+            "name": "RBI Annual Report 2025-26 real-GDP appendix",
+            "authority": "Reserve Bank of India",
+            "use": "Revised 2023-24 and 2024-25 real-GDP growth at 2022-23 prices",
+            "url": "https://www.rbi.org.in/scripts/AnnualReportPublications.aspx?Id=1475",
+        },
+        {
             "key": "rbi_reserves",
             "name": "RBI Handbook 2024 Table 150",
             "authority": "Reserve Bank of India",
@@ -4055,6 +4890,7 @@ def build_historical_regime_workspace(
         "resolution_views": resolution_views,
         "official_history": official_history,
         "episode_stories": episode_stories,
+        "episode_fingerprint_comparison": episode_fingerprint_comparison,
         "coverage_ladder": coverage_ladder,
         "story_eras": story_eras,
         "story_method": [
@@ -9650,6 +10486,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                     candles,
                     instrument=instrument,
                     official_history_rows=store.load_historical_series_observations(),
+                    global_risk_rows=store.load_global_risk_observations(),
                 ),
             )
         except ValueError as error:
@@ -9678,8 +10515,34 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 )
                 return
             try:
-                observations.extend(
-                    parse_rbi_annual_series_table(
+                if source.get("layout") == "transposed_growth":
+                    parsed = parse_rbi_transposed_annual_growth_table(
+                        text_payload or "",
+                        series_key=str(source["series_key"]),
+                        source_url=str(source["url"]),
+                        source_title=str(source["title"]),
+                        vintage_date=source["vintage_date"],
+                        row_label=str(source["row_label"]),
+                        unit=str(source["unit"]),
+                        aggregation=str(source["aggregation"]),
+                        base_period=str(source["base_period"]),
+                        allow_non_positive=bool(source.get("allow_non_positive", False)),
+                    )
+                elif source.get("layout") == "annual_report_growth":
+                    parsed = parse_rbi_annual_report_growth_table(
+                        text_payload or "",
+                        series_key=str(source["series_key"]),
+                        source_url=str(source["url"]),
+                        source_title=str(source["title"]),
+                        vintage_date=source["vintage_date"],
+                        row_label=str(source["row_label"]),
+                        unit=str(source["unit"]),
+                        aggregation=str(source["aggregation"]),
+                        base_period=str(source["base_period"]),
+                        allow_non_positive=bool(source.get("allow_non_positive", False)),
+                    )
+                else:
+                    parsed = parse_rbi_annual_series_table(
                         text_payload or "",
                         series_key=str(source["series_key"]),
                         source_url=str(source["url"]),
@@ -9701,7 +10564,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                         ),
                         duplicate_resolution=str(source.get("duplicate_resolution", "last")),
                     )
-                )
+                observations.extend(parsed)
             except ValueError:
                 self._send_json(
                     HTTPStatus.BAD_GATEWAY,

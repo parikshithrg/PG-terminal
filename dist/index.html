@@ -1219,6 +1219,32 @@
     .historical-episode-sources { padding: 0 18px 13px; color: var(--muted); font-size: 10px; }
     .historical-episode-sources a { color: var(--brand-deep); text-decoration: none; }
     .historical-episode-sources a:hover { text-decoration: underline; }
+    .historical-fingerprint-panel { border-top: 1px solid var(--line); }
+    .historical-fingerprint-panel summary {
+      padding: 13px 18px;
+      color: var(--heading);
+      background: var(--surface-soft);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .historical-fingerprint-panel[open] summary { border-bottom: 1px solid var(--line); }
+    .historical-fingerprint-panel .historical-fingerprint-grid { padding: 14px 18px; margin-top: 0; }
+    .historical-fingerprint-card .fingerprint-state {
+      display: inline-block;
+      margin-top: 5px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--panel);
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .historical-fingerprint-card.ready { border-top: 3px solid var(--success); }
+    .historical-fingerprint-card.partial { border-top: 3px solid var(--warning); }
+    .historical-fingerprint-card.unavailable { border-top: 3px solid var(--line-strong); opacity: .82; }
+    .historical-fingerprint-card .fingerprint-limitation { margin-top: 7px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+    .historical-trait-episodes { margin-top: 7px; color: var(--muted); font-size: 10px; line-height: 1.45; }
     .historical-source-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
     .historical-source {
       padding: 14px;
@@ -2936,10 +2962,18 @@
           </section>
 
           <section class="analysis-section">
-            <h2>Sourced episode stories · 1978/79–2003</h2>
+            <h2>Recurring episode traits</h2>
+            <p class="section-note" id="historicalFingerprintNote">Episode fingerprints have not been calculated yet. Missing categories will remain visible rather than being inferred.</p>
+            <div class="historical-fingerprint-grid" id="historicalTraitGrid">
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting atlas</div><h3>No trait comparison</h3><p>Build the historical atlas to compare covered episode traits.</p></article>
+            </div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Sourced episode stories · 1978/79–2024/25</h2>
             <p class="section-note">These chapters connect observable annual market and macro evidence to official RBI and SEBI historical accounts. Evidence points describe the window; they do not prove a single cause.</p>
             <div class="historical-era-list" id="historicalEpisodeList">
-              <article class="historical-era"><div class="historical-era-head"><div><div class="historical-era-period">1978/79–2003</div><h3>Update official RBI history to connect the first episodes</h3></div></div></article>
+              <article class="historical-era"><div class="historical-era-head"><div><div class="historical-era-period">1978/79–2024/25</div><h3>Update official RBI history to connect the first episodes</h3></div></div></article>
             </div>
           </section>
 
@@ -6394,6 +6428,8 @@
       const officialHistory = result.official_history || {};
       const officialSeries = Array.isArray(officialHistory.series) ? officialHistory.series : [];
       const officialTimeline = Array.isArray(officialHistory.timeline) ? officialHistory.timeline : [];
+      const fingerprintComparison = result.episode_fingerprint_comparison || {};
+      const recurringTraits = Array.isArray(fingerprintComparison.recurring_traits) ? fingerprintComparison.recurring_traits : [];
 
       document.getElementById('historicalStoryMethodGrid').innerHTML = storyMethod.length
         ? storyMethod.map((row) => `<article class="historical-story-method">
@@ -6459,10 +6495,30 @@
           </tr>`).join('')
         : '<tr><td colspan="12">Official annual history has not been imported.</td></tr>';
 
+      document.getElementById('historicalFingerprintNote').textContent = fingerprintComparison.contract_version
+        ? `${fingerprintComparison.method} Classifier admission: ${fingerprintComparison.classifier_admission}. ${fingerprintComparison.classifier_admission_reason}`
+        : 'Episode fingerprints have not been calculated yet. Missing categories will remain visible rather than being inferred.';
+      document.getElementById('historicalTraitGrid').innerHTML = recurringTraits.length
+        ? recurringTraits.slice(0, 10).map((trait) => {
+            const episodes = Array.isArray(trait.episodes) ? trait.episodes : [];
+            const names = episodes.slice(0, 4).map((episode) => episode.title).join(' · ');
+            const remaining = Math.max(0, episodes.length - 4);
+            return `<article class="historical-fingerprint-card ready">
+              <div class="historical-step">${Number(trait.episode_count || 0)}/${Number(fingerprintComparison.episodes_evaluated || 0)} episodes · ${Number(trait.episode_share_pct || 0).toFixed(1)}%</div>
+              <h3>${escapeHtml(trait.label)}</h3>
+              <p>Observed in multiple completed story windows.</p>
+              <div class="historical-trait-episodes">${escapeHtml(names)}${remaining ? ` · +${remaining} more` : ''}</div>
+            </article>`;
+          }).join('')
+        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">No repeat yet</div><h3>Recurring traits unavailable</h3><p>At least two covered episodes are required before a trait is shown here.</p></article>';
+
       const sourceByKey = Object.fromEntries(sourceRegistry.map((source) => [String(source.key || ''), source]));
       document.getElementById('historicalEpisodeList').innerHTML = episodeStories.length
         ? episodeStories.map((episode) => {
             const evidence = Array.isArray(episode.evidence) ? episode.evidence : [];
+            const fingerprint = episode.fingerprint || {};
+            const fingerprintCategories = Array.isArray(fingerprint.categories) ? fingerprint.categories : [];
+            const fingerprintCoverage = fingerprint.coverage || {};
             const sourceLinks = (Array.isArray(episode.source_keys) ? episode.source_keys : [])
               .map((key) => sourceByKey[String(key)])
               .filter(Boolean)
@@ -6478,11 +6534,24 @@
                 <div class="historical-era-chapter"><strong>What came out of it?</strong><p>${escapeHtml(episode.what_came_out)}</p></div>
                 <div class="historical-era-chapter"><strong>How did markets come out?</strong><p>${escapeHtml(episode.how_markets_came_out)}</p></div>
               </div>
+              <details class="historical-fingerprint-panel">
+                <summary>Episode fingerprint · ${Number(fingerprintCoverage.ready || 0)} ready · ${Number(fingerprintCoverage.partial || 0)} partial · ${Number(fingerprintCoverage.unavailable || 0)} unavailable</summary>
+                <div class="historical-fingerprint-grid">${fingerprintCategories.map((category) => {
+                  const status = ['ready', 'partial', 'unavailable'].includes(category.status) ? category.status : 'unavailable';
+                  return `<article class="historical-fingerprint-card ${status}">
+                    <div class="historical-step">${escapeHtml(category.frequency || 'unavailable')} · ${escapeHtml(status)}</div>
+                    <h3>${escapeHtml(category.label)}</h3>
+                    <span class="fingerprint-state">${escapeHtml(String(category.state || '').replaceAll('_', ' '))}</span>
+                    <p>${escapeHtml(category.observation)}</p>
+                    <div class="fingerprint-limitation">${escapeHtml(category.limitation)}</div>
+                  </article>`;
+                }).join('')}</div>
+              </details>
               <div class="historical-episode-evidence">${evidence.map((point) => `<div class="historical-evidence-point"><strong>${Number(point.value) > 0 ? '+' : ''}${Number(point.value).toFixed(2)}${escapeHtml(point.suffix)}</strong><span>${escapeHtml(point.label)} · ${escapeHtml(point.period)}</span></div>`).join('')}</div>
               <div class="historical-episode-sources">Official anchors: ${sourceLinks.join(' · ') || 'additional source joins pending'}</div>
             </article>`;
           }).join('')
-        : '<article class="historical-era"><div class="historical-era-head"><div><div class="historical-era-period">1978/79–2003</div><h3>Official macro evidence is not fully connected yet</h3></div></div></article>';
+        : '<article class="historical-era"><div class="historical-era-head"><div><div class="historical-era-period">1978/79–2024/25</div><h3>Official macro evidence is not fully connected yet</h3></div></div></article>';
 
       document.getElementById('historicalEraList').innerHTML = storyEras.length
         ? storyEras.map((era) => `<article class="historical-era">

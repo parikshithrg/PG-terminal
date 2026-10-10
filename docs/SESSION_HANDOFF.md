@@ -376,12 +376,42 @@ orders or position sizing.
   RBI narrative anchors and display the annual Sensex low, rupee stress, growth,
   rates, fiscal position and reserve-stock path. All seven chapters report
   official annual evidence connected.
+- Extended the story through 2009-10 in `historical-regimes-v6`: the
+  2003-08 credit/investment and capital-flow expansion now leads into a
+  separate global-financial-crisis chapter covering the trade, capital-flow,
+  confidence, rupee, liquidity and policy-response sequence. RBI Annual
+  Reports 2007-08 and 2008-09 and the 2008-09 operations record provide the
+  official narrative anchors; the seven existing annual series provide the
+  visible evidence points.
+- Extended the story through the 2019-20 pre-pandemic boundary in
+  `historical-regimes-v7`. Four new chapters separate the post-GFC rebound and
+  inflation tightening, 2013 taper/rupee stress, the disinflation and
+  formalisation transition, and NBFC liquidity stress plus the 2019-20
+  slowdown. Added RBI Handbook 2016, 2023 and 2024 GDP-growth vintages so official
+  growth evidence now crosses the 2004-05/2011-12 base transition instead of
+  stopping in 2005-06.
+- Extended the story through 2024-25 in `historical-regimes-v8`. Four new
+  chapters separate the pandemic shock and emergency financial stabilisation,
+  the reopening/liquidity rebound, the Ukraine-driven inflation shock and rapid
+  rate tightening, and the later disinflation-with-resilience phase. Official
+  RBI Annual Reports and the July 2020 Financial Stability Report anchor the
+  account. The GDP importer now includes the 2026 Annual Report vintage at the
+  2022-23 base, while excluding the starred 2025-26 advance estimate and the
+  repeated GDP-share columns.
+- Added coverage-aware episode fingerprints in `historical-regimes-v9`. Every
+  sourced chapter now exposes all ten research categories, with daily selected-
+  index and global-market measurements where aligned, annual RBI macro and
+  funding evidence at its honest frequency, and explicit unavailable states for
+  missing point-in-time breadth, leadership, flows, derivatives, earnings and
+  valuation histories. A recurring-trait map counts traits observed in at least
+  two episode windows. The contract marks every fingerprint as a retrospective
+  full-window descriptor and blocks it from the live classifier until entry-date
+  snapshots and held-out validation exist.
 
 ## Next work
 
-1. Continue the cited Historical Regimes story into the 2003-2009 credit boom
-   and global financial crisis. Extend real-GDP
-   coverage beyond the archived 2005-06 series, add official credit and
+1. Build entry-date, point-in-time Historical Regimes snapshots and a
+   chronological discovery/held-out validation split. Add official credit and
    external-balance histories, and connect higher-frequency price paths where
    genuinely available. Preserve releases, revisions, base changes, and honest
    frequency; never synthesize missing daily values.
