@@ -544,11 +544,11 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   derivatives-history readiness, and the next verified macro catalyst—so the
   narrative remains falsifiable rather than becoming a static opinion.
 
-### Historical Regimes story foundation and first official evidence spine — complete
+### Historical Regimes story foundation and early-episode evidence spine — complete
 
 - Added a dedicated **Historical regimes** workspace and local API using the
   completed daily history already stored for every supported index.
-- `historical-regimes-v3` keeps the transparent daily 20% bull/bear reversal,
+- `historical-regimes-v5` keeps the transparent daily 20% bull/bear reversal,
   isolated 10–20% corrections, rapid-bear candidates, duration, confirmation
   delay, recovery to the prior peak, and 20/60/120/252-session paths from each
   episode extreme.
@@ -568,9 +568,12 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   carries an evidence grade, analysis frequency, and visible research state so
   an unfinished narrative cannot look fully validated.
 - Registered official SEBI, BSE, NSE Indices, and RBI source families in the
-  interface. The first numerical spine now imports the RBI Handbook's annual
-  BSE Sensex averages from 1979-80 through 2025-26 and all-commodities WPI
-  averages from 1980-81 through 2025-26.
+  interface. The numerical spine now imports seven RBI Handbook series: annual
+  BSE Sensex averages, all-commodities WPI, real GDP growth, call-money rates,
+  INR/USD annual averages, the central gross fiscal deficit as a share of GDP,
+  and the end-financial-year foreign-exchange reserve stock. The joined
+  financial-year timeline contains 75 annual periods; each
+  series retains its own honest coverage rather than being forward-filled.
 - Official observations are stored separately from daily candles with their
   financial-year label, honest annual frequency, publication URL, publication
   vintage, authority, unit, and stated index base. Overlapping RBI publication
@@ -579,9 +582,23 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   base block when the current Handbook publishes overlapping observations.
   Year-on-year WPI change is withheld across a base break instead of turning a
   rebasing discontinuity into false inflation.
-- Historical Regimes now shows the imported coverage, latest values and a
-  financial-year Sensex/WPI evidence table. The official-history update is
-  idempotent and is included as a fault-isolated EOD Update stage.
+- Historical Regimes now shows the imported coverage, latest values and an
+  12-column financial-year evidence table joining market, growth, inflation,
+  money-market, currency, fiscal, and reserve observations. The official-history
+  update is idempotent and is included as a fault-isolated EOD Update stage.
+- Added four cited, source-linked episode stories for 1978/79-1995: the
+  1979-80 growth break and rebound, the late-1980s acceleration with widening
+  imbalances, the 1991 balance-of-payments crisis and rupee reset, and the
+  liberalisation/market-structure rebound. Each chapter leads with what
+  happened, how it happened, what followed, and how markets adapted, then shows
+  the exact official annual observations supporting the narrative.
+- `historical-regimes-v5` extends the sourced story through 2003-04 with three
+  more chapters: electronic trading and dematerialisation, Asian-crisis
+  transmission without a repeat of the 1991 reserve break, and the technology
+  boom/bust followed by settlement-system repair. Official NSE milestones,
+  SEBI annual reports and reform history, and RBI crisis/growth history anchor
+  the narrative. Each chapter also displays the Sensex annual-change low and
+  the foreign-exchange-reserve path across its window.
 - Market cycles and economic cycles are deliberately separate. Recession and
   depression sections remain visibly unclassified until a versioned definition
   and authoritative point-in-time macro history are available; an equity
@@ -591,9 +608,9 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   held-out outcome/analogue testing. Human emotion is represented only through
   measurable hypotheses such as participation, crowding, volatility, flows,
   leadership and recovery—not asserted as directly observed fact.
-- Next, add the remaining authoritative growth, rates, currency, credit and
-  fiscal histories at their honest available frequencies, split the evidence
-  into source-complete episodes, and attach
+- Next, extend the official macro spine beyond the archived GDP table, add
+  credit and fuller balance-of-payments histories, carry the cited episode
+  format into the 2003-2009 credit boom and global financial crisis, and attach
   the existing trailing-only trend, breadth, leadership,
   volatility, flow, rate/currency, global-risk, derivatives, earnings and macro
   states to every episode. Compare common traits only after data coverage,

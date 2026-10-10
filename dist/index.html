@@ -1200,6 +1200,25 @@
     .historical-era-chapter strong { display: block; color: var(--heading); font-size: 12px; }
     .historical-era-chapter p { margin: 7px 0 0; color: var(--small-text); font-size: 12px; line-height: 1.55; }
     .historical-era-state { padding: 10px 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+    .historical-episode-evidence {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      padding: 14px 18px;
+      border-top: 1px solid var(--line);
+    }
+    .historical-evidence-point {
+      min-width: 0;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface-soft);
+    }
+    .historical-evidence-point strong { display: block; color: var(--heading); font-size: 14px; }
+    .historical-evidence-point span { display: block; margin-top: 3px; color: var(--small-text); font-size: 10px; }
+    .historical-episode-sources { padding: 0 18px 13px; color: var(--muted); font-size: 10px; }
+    .historical-episode-sources a { color: var(--brand-deep); text-decoration: none; }
+    .historical-episode-sources a:hover { text-decoration: underline; }
     .historical-source-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
     .historical-source {
       padding: 14px;
@@ -1210,7 +1229,7 @@
     .historical-source a { color: var(--brand-deep); font-weight: 700; text-decoration: none; }
     .historical-source a:hover { text-decoration: underline; }
     .historical-source span { display: block; margin-top: 5px; color: var(--small-text); font-size: 12px; }
-    #historicalRegimesView .table-wrap table { min-width: 1120px; }
+    #historicalRegimesView .table-wrap table { min-width: 1720px; }
     #historicalRegimesView .table-wrap th,
     #historicalRegimesView .table-wrap td { white-space: nowrap; }
 
@@ -1232,7 +1251,8 @@
       .historical-taxonomy-grid { grid-template-columns: 1fr; }
       .historical-story-method-grid,
       .historical-frequency-grid,
-      .historical-era-story { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .historical-era-story,
+      .historical-episode-evidence { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .historical-era-chapter:nth-child(2) { border-right: 0; }
       .historical-era-chapter:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
       .brand-note { display: none; }
@@ -2911,8 +2931,16 @@
               <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">BSE Sensex annual average</div></article>
               <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">India WPI annual average</div></article>
             </div>
-            <div class="table-guide"><strong>How to read:</strong> Each row joins one Indian financial year. Sensex is the annual average, not the year-end close. WPI year-on-year change is deliberately blank across an official index-base break.</div>
-            <div class="table-wrap"><table><thead><tr><th>Financial year</th><th>Sensex average</th><th>Sensex change</th><th>WPI average</th><th>WPI change</th><th>WPI base</th></tr></thead><tbody id="historicalOfficialTimelineBody"><tr><td colspan="6">Official annual history has not been imported.</td></tr></tbody></table></div>
+            <div class="table-guide"><strong>How to read:</strong> Each row joins one Indian financial year at its honest annual resolution. GDP growth, call money and fiscal deficit remain published rates; Sensex, WPI and INR/USD are annual averages; reserves are the end-year US-dollar stock. WPI change is blank across an official index-base break.</div>
+            <div class="table-wrap"><table><thead><tr><th>Financial year</th><th>Sensex average</th><th>Sensex change</th><th>Real GDP growth</th><th>WPI change</th><th>Call money</th><th>INR / USD average</th><th>INR depreciation</th><th>Central GFD / GDP</th><th>FX reserves</th><th>WPI average</th><th>WPI base</th></tr></thead><tbody id="historicalOfficialTimelineBody"><tr><td colspan="12">Official annual history has not been imported.</td></tr></tbody></table></div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Sourced episode stories · 1978/79–2003</h2>
+            <p class="section-note">These chapters connect observable annual market and macro evidence to official RBI and SEBI historical accounts. Evidence points describe the window; they do not prove a single cause.</p>
+            <div class="historical-era-list" id="historicalEpisodeList">
+              <article class="historical-era"><div class="historical-era-head"><div><div class="historical-era-period">1978/79–2003</div><h3>Update official RBI history to connect the first episodes</h3></div></div></article>
+            </div>
           </section>
 
           <section class="analysis-section">
@@ -6360,6 +6388,7 @@
       const storyMethod = Array.isArray(result.story_method) ? result.story_method : [];
       const coverageLadder = Array.isArray(result.coverage_ladder) ? result.coverage_ladder : [];
       const storyEras = Array.isArray(result.story_eras) ? result.story_eras : [];
+      const episodeStories = Array.isArray(result.episode_stories) ? result.episode_stories : [];
       const sourceRegistry = Array.isArray(result.source_registry) ? result.source_registry : [];
       const resolutionViews = result.resolution_views || {};
       const officialHistory = result.official_history || {};
@@ -6395,7 +6424,11 @@
         ? officialSeries.map((series) => {
             const ready = series.status === 'ready';
             const latest = ready ? Number(series.latest_value).toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—';
-            const change = ready && series.latest_change_pct != null ? ` · ${signedPercentage(series.latest_change_pct)} vs prior FY` : '';
+            const change = ready && series.latest_change_pct != null
+              ? ` · ${signedPercentage(series.latest_change_pct)} vs prior FY`
+              : ready && series.latest_delta != null
+                ? ` · ${Number(series.latest_delta) > 0 ? '+' : ''}${Number(series.latest_delta).toFixed(2)} pp vs prior FY`
+                : '';
             const coverage = ready
               ? `${formatDisplayDate(series.from_date)} to ${formatDisplayDate(series.to_date)} · ${Number(series.observations || 0).toLocaleString('en-IN')} annual observations`
               : 'Run the official RBI history update';
@@ -6412,13 +6445,44 @@
       historicalOfficialTimelineBody.innerHTML = officialTimeline.length
         ? [...officialTimeline].reverse().map((row) => `<tr>
             <td>${escapeHtml(row.period)}</td>
-            <td>${Number(row.sensex_average).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+            <td>${row.sensex_average == null ? '—' : Number(row.sensex_average).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
             <td class="${Number(row.sensex_change_pct) >= 0 ? 'positive' : 'negative'}">${signedPercentage(row.sensex_change_pct)}</td>
-            <td>${row.wpi_average == null ? '—' : Number(row.wpi_average).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+            <td class="${Number(row.real_gdp_growth_pct) >= 0 ? 'positive' : 'negative'}">${signedPercentage(row.real_gdp_growth_pct)}</td>
             <td class="${Number(row.wpi_change_pct) >= 0 ? 'positive' : 'negative'}">${signedPercentage(row.wpi_change_pct)}</td>
+            <td>${row.call_money_rate_pct == null ? '—' : `${Number(row.call_money_rate_pct).toFixed(2)}%`}</td>
+            <td>${row.inr_usd_average == null ? '—' : `₹${Number(row.inr_usd_average).toFixed(2)}`}</td>
+            <td class="${Number(row.inr_usd_change_pct) <= 0 ? 'positive' : 'negative'}">${signedPercentage(row.inr_usd_change_pct)}</td>
+            <td>${row.central_gfd_pct_gdp == null ? '—' : `${Number(row.central_gfd_pct_gdp).toFixed(2)}%`}</td>
+            <td>${row.foreign_exchange_reserves_usd_mn == null ? '—' : `$${Number(row.foreign_exchange_reserves_usd_mn).toLocaleString('en-IN', { maximumFractionDigits: 0 })}m`}</td>
+            <td>${row.wpi_average == null ? '—' : Number(row.wpi_average).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
             <td>${escapeHtml(row.wpi_base_period || '—')}</td>
           </tr>`).join('')
-        : '<tr><td colspan="6">Official annual history has not been imported.</td></tr>';
+        : '<tr><td colspan="12">Official annual history has not been imported.</td></tr>';
+
+      const sourceByKey = Object.fromEntries(sourceRegistry.map((source) => [String(source.key || ''), source]));
+      document.getElementById('historicalEpisodeList').innerHTML = episodeStories.length
+        ? episodeStories.map((episode) => {
+            const evidence = Array.isArray(episode.evidence) ? episode.evidence : [];
+            const sourceLinks = (Array.isArray(episode.source_keys) ? episode.source_keys : [])
+              .map((key) => sourceByKey[String(key)])
+              .filter(Boolean)
+              .map((source) => `<a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">${escapeHtml(source.name)}</a>`);
+            return `<article class="historical-era">
+              <div class="historical-era-head">
+                <div><div class="historical-era-period">${escapeHtml(episode.period)} · ${escapeHtml(episode.family)}</div><h3>${escapeHtml(episode.title)}</h3></div>
+                <div class="historical-era-meta">${escapeHtml(episode.research_state)}</div>
+              </div>
+              <div class="historical-era-story">
+                <div class="historical-era-chapter"><strong>What happened?</strong><p>${escapeHtml(episode.what_happened)}</p></div>
+                <div class="historical-era-chapter"><strong>How did it happen?</strong><p>${escapeHtml(episode.how_it_happened)}</p></div>
+                <div class="historical-era-chapter"><strong>What came out of it?</strong><p>${escapeHtml(episode.what_came_out)}</p></div>
+                <div class="historical-era-chapter"><strong>How did markets come out?</strong><p>${escapeHtml(episode.how_markets_came_out)}</p></div>
+              </div>
+              <div class="historical-episode-evidence">${evidence.map((point) => `<div class="historical-evidence-point"><strong>${Number(point.value) > 0 ? '+' : ''}${Number(point.value).toFixed(2)}${escapeHtml(point.suffix)}</strong><span>${escapeHtml(point.label)} · ${escapeHtml(point.period)}</span></div>`).join('')}</div>
+              <div class="historical-episode-sources">Official anchors: ${sourceLinks.join(' · ') || 'additional source joins pending'}</div>
+            </article>`;
+          }).join('')
+        : '<article class="historical-era"><div class="historical-era-head"><div><div class="historical-era-period">1978/79–2003</div><h3>Official macro evidence is not fully connected yet</h3></div></div></article>';
 
       document.getElementById('historicalEraList').innerHTML = storyEras.length
         ? storyEras.map((era) => `<article class="historical-era">

@@ -37,6 +37,7 @@ from server import (
     build_regime_external_cluster_readiness,
     build_historical_regime_workspace,
     build_historical_series_summary,
+    build_historical_episode_stories,
     aggregate_historical_closes,
     apply_recovering_market_state,
     build_regime_validation_universe,
@@ -145,7 +146,7 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
 
         result = build_historical_regime_workspace(candles)
 
-        self.assertEqual(result["contract_version"], "historical-regimes-v3")
+        self.assertEqual(result["contract_version"], "historical-regimes-v5")
         self.assertGreaterEqual(result["summary"]["bull_markets"]["count"], 2)
         self.assertGreaterEqual(result["summary"]["bear_markets"]["count"], 1)
         self.assertGreaterEqual(result["summary"]["corrections"]["count"], 1)
@@ -205,10 +206,174 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
             dict(common, series_key="india_wpi_all_commodities_annual_average", date=date(2025, 3, 31), period_label="2024-25", value=101.0, base_period="2022-23 = 100"),
         ]
         summary = build_historical_series_summary(rows)
-        self.assertEqual(summary["status"], "ready")
+        self.assertEqual(summary["status"], "partial")
         self.assertEqual(summary["joined_annual_observations"], 2)
         self.assertEqual(summary["timeline"][-1]["sensex_change_pct"], 10.0)
         self.assertIsNone(summary["timeline"][-1]["wpi_change_pct"])
+
+    def test_rbi_growth_parser_keeps_contractions_and_publication_status(self):
+        html = """
+        <table>
+          <tr><th>Old series (Base : 1993-94)</th></tr>
+          <tr><td>1978-79</td><td>5.5</td></tr>
+          <tr><td>1979-80</td><td>-5.2</td></tr>
+          <tr><td>2004-05 RE</td><td>6.9</td></tr>
+        </table>
+        """
+        rows = parse_rbi_annual_series_table(
+            html,
+            series_key="india_real_gdp_growth_pct",
+            source_url="https://rbi.org.in/scripts/PublicationsView.aspx?id=8787",
+            source_title="RBI Handbook 2006 Table 237",
+            vintage_date=date(2006, 9, 18),
+            value_column=1,
+            unit="Per cent annual growth",
+            aggregation="published annual growth rate",
+            allow_non_positive=True,
+        )
+        self.assertEqual([row["value"] for row in rows], [5.5, -5.2, 6.9])
+        self.assertEqual(rows[1]["base_period"], "1993-94")
+        self.assertEqual(rows[-1]["period_label"], "2004-05")
+        self.assertEqual(rows[-1]["metadata"]["publication_status"], "RE")
+
+    def test_rbi_fiscal_parser_keeps_first_table_when_page_repeats_years(self):
+        html = """
+        <table>
+          <tr><th>Year</th><th>Gross fiscal deficit</th></tr>
+          <tr><td>1984-85</td><td>6.79</td></tr>
+          <tr><td>1990-91</td><td>7.61</td></tr>
+        </table>
+        <table>
+          <tr><th>Year</th><th>Revenue expenditure</th></tr>
+          <tr><td>1984-85</td><td>10.79</td></tr>
+          <tr><td>1990-91</td><td>12.54</td></tr>
+        </table>
+        """
+        rows = parse_rbi_annual_series_table(
+            html,
+            series_key="central_gross_fiscal_deficit_pct_gdp",
+            source_url="https://rbi.org.in/scripts/PublicationsView.aspx?id=24062",
+            source_title="RBI Handbook 2026 Table 237",
+            vintage_date=date(2026, 7, 31),
+            value_column=1,
+            unit="Per cent of GDP",
+            aggregation="financial-year fiscal ratio",
+            base_period_override="Not applicable",
+            duplicate_resolution="first",
+        )
+        self.assertEqual([row["value"] for row in rows], [6.79, 7.61])
+
+    def test_rbi_reserve_parser_selects_total_us_dollar_stock(self):
+        html = """
+        <table>
+          <tr><th>Year</th><th>SDR ₹</th><th>SDR USD</th><th>Gold ₹</th><th>Gold USD</th><th>FCA ₹</th><th>FCA USD</th><th>RTP ₹</th><th>RTP USD</th><th>Total ₹</th><th>Total USD</th></tr>
+          <tr><td>1997-98</td><td>4</td><td>1</td><td>13394</td><td>3391</td><td>102507</td><td>25975</td><td>-</td><td>-</td><td>115905</td><td>29367</td></tr>
+          <tr><td>1998-99</td><td>34</td><td>8</td><td>12559</td><td>2960</td><td>125412</td><td>29522</td><td>-</td><td>-</td><td>138005</td><td>32490</td></tr>
+        </table>
+        """
+        rows = parse_rbi_annual_series_table(
+            html,
+            series_key="india_foreign_exchange_reserves_usd_mn",
+            source_url="https://rbi.org.in/scripts/PublicationsView.aspx?id=22624",
+            source_title="RBI Handbook 2024 Table 150",
+            vintage_date=date(2024, 9, 13),
+            value_column=10,
+            unit="US dollar million",
+            aggregation="end of financial year stock",
+            base_period_override="Not applicable",
+        )
+        self.assertEqual([row["value"] for row in rows], [29367.0, 32490.0])
+
+    def test_historical_episode_story_joins_crisis_evidence(self):
+        common = {
+            "frequency": "annual",
+            "source_title": "RBI Handbook",
+            "source_url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=1",
+            "source_authority": "Reserve Bank of India",
+            "vintage_date": date(2026, 7, 31),
+            "retrieved_at": "2026-10-10T00:00:00+00:00",
+            "metadata": {},
+        }
+        values = {
+            "bse_sensex_annual_average": ((1038.66, 1908.85, 2615.37), "Index average", "1978-79 = 100"),
+            "india_wpi_all_commodities_annual_average": ((182.7, 207.8, 228.7), "Index average", "1981-82 = 100"),
+            "india_real_gdp_growth_pct": ((5.6, 1.3, 5.1), "Per cent annual growth", "1993-94"),
+            "india_call_money_rate_annual": ((15.85, 19.57, 14.42), "Per cent per annum", "Base not stated"),
+            "inr_usd_annual_average": ((17.9428, 24.4737, 30.6488), "Indian rupees per US dollar", "Base not stated"),
+            "central_gross_fiscal_deficit_pct_gdp": ((7.61, 5.39, 5.19), "Per cent of GDP", "Not applicable"),
+            "india_foreign_exchange_reserves_usd_mn": ((5834, 9220, 9832), "US dollar million", "Not applicable"),
+        }
+        rows = []
+        periods = (("1990-91", date(1991, 3, 31)), ("1991-92", date(1992, 3, 31)), ("1992-93", date(1993, 3, 31)))
+        for key, (series_values, unit, base_period) in values.items():
+            for (period, observation_date), value in zip(periods, series_values):
+                rows.append(dict(common, series_key=key, date=observation_date, period_label=period, value=value, unit=unit, base_period=base_period))
+        summary = build_historical_series_summary(rows)
+        episodes = build_historical_episode_stories(summary)
+        crisis = next(item for item in episodes if item["key"] == "bop_crisis_1991")
+        self.assertEqual(summary["status"], "ready")
+        self.assertEqual(crisis["research_state"], "Official annual evidence connected")
+        self.assertGreaterEqual(len(crisis["evidence"]), 5)
+        self.assertEqual(
+            next(item for item in crisis["evidence"] if item["label"] == "Growth low")["period"],
+            "1991-92",
+        )
+
+    def test_historical_episode_story_extends_through_technology_bust_and_recovery(self):
+        periods = (
+            ("1999-00", date(2000, 3, 31)),
+            ("2000-01", date(2001, 3, 31)),
+            ("2001-02", date(2002, 3, 31)),
+            ("2002-03", date(2003, 3, 31)),
+            ("2003-04", date(2004, 3, 31)),
+        )
+        series_values = {
+            "bse_sensex_annual_average": (4658.63, 4269.69, 3331.95, 3206.29, 4492.19),
+            "india_wpi_all_commodities_annual_average": (145.3, 155.7, 161.3, 166.8, 175.9),
+            "india_real_gdp_growth_pct": (6.1, 4.4, 5.8, 3.8, 8.5),
+            "india_call_money_rate_annual": (8.87, 9.15, 7.16, 5.89, 4.62),
+            "inr_usd_annual_average": (43.3327, 45.6844, 47.6919, 48.3953, 45.9516),
+            "central_gross_fiscal_deficit_pct_gdp": (5.18, 5.46, 5.98, 5.72, 4.34),
+            "india_foreign_exchange_reserves_usd_mn": (38036, 42281, 54106, 76100, 112959),
+        }
+        units = {
+            "bse_sensex_annual_average": "Index average",
+            "india_wpi_all_commodities_annual_average": "Index average",
+            "india_real_gdp_growth_pct": "Per cent annual growth",
+            "india_call_money_rate_annual": "Per cent per annum",
+            "inr_usd_annual_average": "Indian rupees per US dollar",
+            "central_gross_fiscal_deficit_pct_gdp": "Per cent of GDP",
+            "india_foreign_exchange_reserves_usd_mn": "US dollar million",
+        }
+        rows = []
+        for key, values in series_values.items():
+            for (period, observation_date), value in zip(periods, values):
+                rows.append({
+                    "series_key": key,
+                    "date": observation_date,
+                    "period_label": period,
+                    "frequency": "annual",
+                    "value": value,
+                    "unit": units[key],
+                    "base_period": "1993-94 = 100" if "wpi" in key else "Not applicable",
+                    "source_title": "RBI Handbook",
+                    "source_url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=1",
+                    "source_authority": "Reserve Bank of India",
+                    "vintage_date": date(2024, 9, 13),
+                    "retrieved_at": "2026-10-10T00:00:00+00:00",
+                    "metadata": {},
+                })
+        episodes = build_historical_episode_stories(build_historical_series_summary(rows))
+        technology = next(item for item in episodes if item["key"] == "technology_boom_bust_1999")
+        self.assertEqual(technology["research_state"], "Official annual evidence connected")
+        self.assertEqual(
+            next(item for item in technology["evidence"] if item["label"] == "Sensex annual change low")["period"],
+            "2001-02",
+        )
+        self.assertGreater(
+            next(item for item in technology["evidence"] if item["label"] == "FX-reserve stock path")["value"],
+            190,
+        )
 
     def test_historical_close_aggregation_uses_period_end_without_interpolation(self):
         observations = [

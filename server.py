@@ -104,7 +104,7 @@ FRED_GLOBAL_SERIES = {
 }
 SENTIMENT_EVIDENCE_MODEL_VERSION = "market-sentiment-evidence-v1"
 REGIME_RULE_VERSION = "market-regime-candidate-v1"
-HISTORICAL_REGIME_CONTRACT_VERSION = "historical-regimes-v3"
+HISTORICAL_REGIME_CONTRACT_VERSION = "historical-regimes-v5"
 HISTORICAL_BULL_BEAR_THRESHOLD_PCT = 20.0
 HISTORICAL_CORRECTION_THRESHOLD_PCT = 10.0
 HISTORICAL_RAPID_BEAR_SESSIONS = 45
@@ -428,6 +428,74 @@ RBI_HISTORICAL_SERIES_SOURCES = (
         "vintage_date": date(2026, 7, 31),
         "value_column": 1,
         "unit": "Index average",
+    },
+    {
+        "series_key": "india_real_gdp_growth_pct",
+        "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=8787",
+        "title": "RBI Handbook 2006 Table 237: Select macro-economic aggregates at constant prices",
+        "vintage_date": date(2006, 9, 18),
+        "value_column": 1,
+        "unit": "Per cent annual growth",
+        "aggregation": "published annual growth rate",
+        "allow_non_positive": True,
+    },
+    {
+        "series_key": "india_call_money_rate_annual",
+        "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=8624",
+        "title": "RBI Handbook 2006 Table 74: Structure of interest rates",
+        "vintage_date": date(2006, 9, 18),
+        "value_column": 1,
+        "unit": "Per cent per annum",
+        "aggregation": "financial-year annual rate",
+    },
+    {
+        "series_key": "india_call_money_rate_annual",
+        "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=23884",
+        "title": "RBI Handbook 2026 Table 59: Structure of interest rates",
+        "vintage_date": date(2026, 7, 31),
+        "value_column": 1,
+        "unit": "Per cent per annum",
+        "aggregation": "financial-year annual rate",
+        "maximum_end_year": 2026,
+    },
+    {
+        "series_key": "inr_usd_annual_average",
+        "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=8704",
+        "title": "RBI Handbook 2006 Table 154: Financial-year exchange rates",
+        "vintage_date": date(2006, 9, 18),
+        "value_column": 3,
+        "unit": "Indian rupees per US dollar",
+    },
+    {
+        "series_key": "inr_usd_annual_average",
+        "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=23958",
+        "title": "RBI Handbook 2026 Table 133: Financial-year exchange rates",
+        "vintage_date": date(2026, 7, 31),
+        "value_column": 3,
+        "unit": "Indian rupees per US dollar",
+    },
+    {
+        "series_key": "central_gross_fiscal_deficit_pct_gdp",
+        "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=24062",
+        "title": "RBI Handbook 2026 Table 237: Central government fiscal indicators as percentage to GDP",
+        "vintage_date": date(2026, 7, 31),
+        "value_column": 1,
+        "unit": "Per cent of GDP",
+        "aggregation": "financial-year fiscal ratio",
+        "base_period": "Not applicable",
+        "maximum_end_year": 2025,
+        "duplicate_resolution": "first",
+    },
+    {
+        "series_key": "india_foreign_exchange_reserves_usd_mn",
+        "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=22624",
+        "title": "RBI Handbook 2024 Table 150: Foreign exchange reserves",
+        "vintage_date": date(2024, 9, 13),
+        "value_column": 10,
+        "unit": "US dollar million",
+        "aggregation": "end of financial year stock",
+        "base_period": "Not applicable",
+        "maximum_end_year": 2024,
     },
 )
 RBI_HISTORICAL_SERIES_SOURCE = "Reserve Bank of India Handbook of Statistics on Indian Economy"
@@ -2584,6 +2652,11 @@ def parse_rbi_annual_series_table(
     vintage_date: date,
     value_column: int,
     unit: str,
+    aggregation: str = "annual average",
+    allow_non_positive: bool = False,
+    base_period_override: str | None = None,
+    maximum_end_year: int | None = None,
+    duplicate_resolution: str = "last",
 ) -> list[dict[str, object]]:
     """Parse one fiscal-year RBI Handbook series and retain its stated base."""
     if (
@@ -2593,6 +2666,11 @@ def parse_rbi_annual_series_table(
         or not isinstance(vintage_date, date)
         or not isinstance(value_column, int)
         or value_column < 1
+        or not isinstance(aggregation, str)
+        or not aggregation.strip()
+        or (base_period_override is not None and not base_period_override.strip())
+        or (maximum_end_year is not None and maximum_end_year < 1900)
+        or duplicate_resolution not in {"first", "last"}
     ):
         raise ValueError("invalid_rbi_historical_series_response")
     parser = _RbiTableHtmlParser()
@@ -2601,39 +2679,61 @@ def parse_rbi_annual_series_table(
     except (ValueError, TypeError) as error:
         raise ValueError("invalid_rbi_historical_series_response") from error
 
-    base_period = "Base not stated"
+    base_period = base_period_override or "Base not stated"
     observations: list[dict[str, object]] = []
-    fiscal_year_pattern = re.compile(r"^(\d{4})\s*[-–]\s*(\d{2,4})(\*)?$")
+    fiscal_year_pattern = re.compile(
+        r"^(\d{4})\s*[-–]\s*(\d{2,4})(?:\s*(\*+|P|QE|RE|@))?$",
+        flags=re.IGNORECASE,
+    )
     base_pattern = re.compile(r"Base\s*:?\s*([^\)]+)", flags=re.IGNORECASE)
     for cells in parser.rows:
         joined = " ".join(cells)
         base_match = base_pattern.search(joined)
-        if base_match is not None and not fiscal_year_pattern.match(cells[0].strip() if cells else ""):
+        if (
+            base_period_override is None
+            and base_match is not None
+            and not fiscal_year_pattern.match(cells[0].strip() if cells else "")
+        ):
             base_period = re.sub(r"\s+", " ", base_match.group(1)).strip(" )")
             continue
         if len(cells) <= value_column:
             continue
         period_label = cells[0].strip()
         period_match = fiscal_year_pattern.match(period_label)
-        if period_match is None or period_match.group(3):
+        if period_match is None:
+            continue
+        status_marker = (period_match.group(3) or "").upper()
+        if status_marker.startswith("*") or status_marker == "@":
             continue
         start_year = int(period_match.group(1))
         end_text = period_match.group(2)
         end_year = int(end_text) if len(end_text) == 4 else (start_year // 100) * 100 + int(end_text)
         if end_year < start_year:
             end_year += 100
+        if maximum_end_year is not None and end_year > maximum_end_year:
+            continue
         try:
             value = float(cells[value_column].replace(",", ""))
             observation_date = date(end_year, 3, 31)
         except (ValueError, OverflowError):
             continue
-        if not math.isfinite(value) or value <= 0:
+        if not math.isfinite(value) or (value <= 0 and not allow_non_positive):
             continue
+        normalized_period = f"{start_year:04d}-{end_text}"
+        metadata: dict[str, object] = {
+            "period_basis": "Indian financial year",
+            "aggregation": aggregation.strip(),
+            "partial_period_excluded": True,
+        }
+        if status_marker:
+            metadata["publication_status"] = status_marker
+        if allow_non_positive:
+            metadata["allows_non_positive"] = True
         observations.append(
             {
                 "series_key": series_key,
                 "date": observation_date,
-                "period_label": period_label,
+                "period_label": normalized_period,
                 "frequency": "annual",
                 "value": value,
                 "unit": unit,
@@ -2642,17 +2742,13 @@ def parse_rbi_annual_series_table(
                 "source_url": source_url,
                 "source_authority": "Reserve Bank of India",
                 "vintage_date": vintage_date,
-                "metadata": {
-                    "period_basis": "Indian financial year",
-                    "aggregation": "annual average",
-                    "partial_period_excluded": True,
-                },
+                "metadata": metadata,
             }
         )
-    deduplicated = {
-        row["date"]: row
-        for row in observations
-    }
+    deduplicated: dict[object, dict[str, object]] = {}
+    for row in observations:
+        if duplicate_resolution == "last" or row["date"] not in deduplicated:
+            deduplicated[row["date"]] = row
     observations = [deduplicated[item] for item in sorted(deduplicated)]
     if len(observations) < 2:
         raise ValueError("invalid_rbi_historical_series_response")
@@ -2662,23 +2758,49 @@ def parse_rbi_annual_series_table(
 def build_historical_series_summary(
     rows: list[dict[str, object]],
 ) -> dict[str, object]:
-    labels = {
-        "bse_sensex_annual_average": "BSE Sensex annual average",
-        "india_wpi_all_commodities_annual_average": "India WPI all commodities annual average",
+    definitions = {
+        "bse_sensex_annual_average": {
+            "label": "BSE Sensex annual average",
+            "comparison": "percent_change",
+        },
+        "india_wpi_all_commodities_annual_average": {
+            "label": "India WPI all commodities annual average",
+            "comparison": "percent_change_same_base",
+        },
+        "india_real_gdp_growth_pct": {
+            "label": "India real GDP growth",
+            "comparison": "percentage_point_change",
+        },
+        "india_call_money_rate_annual": {
+            "label": "India call money rate",
+            "comparison": "percentage_point_change",
+        },
+        "inr_usd_annual_average": {
+            "label": "INR per US dollar annual average",
+            "comparison": "percent_change",
+        },
+        "central_gross_fiscal_deficit_pct_gdp": {
+            "label": "Central gross fiscal deficit",
+            "comparison": "percentage_point_change",
+        },
+        "india_foreign_exchange_reserves_usd_mn": {
+            "label": "India foreign-exchange reserves",
+            "comparison": "percent_change",
+        },
     }
     grouped: dict[str, list[dict[str, object]]] = defaultdict(list)
     for row in rows:
-        if row.get("series_key") in labels and isinstance(row.get("date"), date):
+        if row.get("series_key") in definitions and isinstance(row.get("date"), date):
             grouped[str(row["series_key"])].append(row)
 
     series: list[dict[str, object]] = []
-    for key, label in labels.items():
+    for key, definition in definitions.items():
         values = sorted(grouped.get(key, []), key=lambda item: item["date"])
         if not values:
             series.append(
                 {
                     "series_key": key,
-                    "label": label,
+                    "label": definition["label"],
                     "status": "not_imported",
                     "frequency": "annual",
                     "observations": 0,
@@ -2688,12 +2810,25 @@ def build_historical_series_summary(
         bases = list(dict.fromkeys(str(item.get("base_period") or "") for item in values))
         vintages = sorted({item["vintage_date"] for item in values if isinstance(item.get("vintage_date"), date)})
         latest_change = None
-        if len(values) >= 2 and values[-1].get("base_period") == values[-2].get("base_period"):
-            latest_change = round((float(values[-1]["value"]) / float(values[-2]["value"]) - 1) * 100, 2)
+        latest_delta = None
+        if len(values) >= 2:
+            same_base = values[-1].get("base_period") == values[-2].get("base_period")
+            comparison = definition["comparison"]
+            if comparison == "percent_change" or (
+                comparison == "percent_change_same_base" and same_base
+            ):
+                previous = float(values[-2]["value"])
+                if previous != 0:
+                    latest_change = round(
+                        (float(values[-1]["value"]) / previous - 1) * 100,
+                        2,
+                    )
+            elif comparison == "percentage_point_change":
+                latest_delta = round(float(values[-1]["value"]) - float(values[-2]["value"]), 2)
         series.append(
             {
                 "series_key": key,
-                "label": label,
+                "label": definition["label"],
                 "status": "ready",
                 "frequency": str(values[-1].get("frequency") or "annual"),
                 "observations": len(values),
@@ -2702,6 +2837,8 @@ def build_historical_series_summary(
                 "latest_period": values[-1].get("period_label"),
                 "latest_value": round(float(values[-1]["value"]), 2),
                 "latest_change_pct": latest_change,
+                "latest_delta": latest_delta,
+                "comparison": definition["comparison"],
                 "unit": values[-1].get("unit"),
                 "base_periods": bases,
                 "latest_vintage": vintages[-1].isoformat() if vintages else None,
@@ -2710,22 +2847,33 @@ def build_historical_series_summary(
             }
         )
 
-    sensex_by_period = {
-        str(row.get("period_label")): row
-        for row in sorted(grouped.get("bse_sensex_annual_average", []), key=lambda item: item["date"])
+    by_series_period = {
+        key: {
+            str(row.get("period_label")): row
+            for row in sorted(grouped.get(key, []), key=lambda item: item["date"])
+        }
+        for key in definitions
     }
-    wpi_by_period = {
-        str(row.get("period_label")): row
-        for row in sorted(grouped.get("india_wpi_all_commodities_annual_average", []), key=lambda item: item["date"])
-    }
+    all_periods: dict[str, date] = {}
+    for values in grouped.values():
+        for row in values:
+            all_periods[str(row.get("period_label"))] = row["date"]
     joined_rows: list[dict[str, object]] = []
-    previous_sensex: dict[str, object] | None = None
-    previous_wpi: dict[str, object] | None = None
-    for period, sensex in sensex_by_period.items():
-        wpi = wpi_by_period.get(period)
+    previous_by_key: dict[str, dict[str, object]] = {}
+    for period, observation_date in sorted(all_periods.items(), key=lambda item: item[1]):
+        sensex = by_series_period["bse_sensex_annual_average"].get(period)
+        wpi = by_series_period["india_wpi_all_commodities_annual_average"].get(period)
+        growth = by_series_period["india_real_gdp_growth_pct"].get(period)
+        call_rate = by_series_period["india_call_money_rate_annual"].get(period)
+        usd_inr = by_series_period["inr_usd_annual_average"].get(period)
+        fiscal = by_series_period["central_gross_fiscal_deficit_pct_gdp"].get(period)
+        reserves = by_series_period["india_foreign_exchange_reserves_usd_mn"].get(period)
+        previous_sensex = previous_by_key.get("bse_sensex_annual_average")
+        previous_wpi = previous_by_key.get("india_wpi_all_commodities_annual_average")
+        previous_usd = previous_by_key.get("inr_usd_annual_average")
         sensex_change = (
             round((float(sensex["value"]) / float(previous_sensex["value"]) - 1) * 100, 2)
-            if previous_sensex is not None else None
+            if sensex is not None and previous_sensex is not None else None
         )
         wpi_change = (
             round((float(wpi["value"]) / float(previous_wpi["value"]) - 1) * 100, 2)
@@ -2734,28 +2882,225 @@ def build_historical_series_summary(
             and wpi.get("base_period") == previous_wpi.get("base_period")
             else None
         )
+        usd_change = (
+            round((float(usd_inr["value"]) / float(previous_usd["value"]) - 1) * 100, 2)
+            if usd_inr is not None and previous_usd is not None else None
+        )
         joined_rows.append(
             {
                 "period": period,
-                "date": sensex["date"].isoformat(),
-                "sensex_average": round(float(sensex["value"]), 2),
+                "date": observation_date.isoformat(),
+                "sensex_average": round(float(sensex["value"]), 2) if sensex is not None else None,
                 "sensex_change_pct": sensex_change,
                 "wpi_average": round(float(wpi["value"]), 2) if wpi is not None else None,
                 "wpi_change_pct": wpi_change,
                 "wpi_base_period": wpi.get("base_period") if wpi is not None else None,
+                "real_gdp_growth_pct": round(float(growth["value"]), 2) if growth is not None else None,
+                "real_gdp_base_period": growth.get("base_period") if growth is not None else None,
+                "call_money_rate_pct": round(float(call_rate["value"]), 2) if call_rate is not None else None,
+                "inr_usd_average": round(float(usd_inr["value"]), 4) if usd_inr is not None else None,
+                "inr_usd_change_pct": usd_change,
+                "central_gfd_pct_gdp": round(float(fiscal["value"]), 2) if fiscal is not None else None,
+                "foreign_exchange_reserves_usd_mn": round(float(reserves["value"]), 2) if reserves is not None else None,
             }
         )
-        previous_sensex = sensex
-        if wpi is not None:
-            previous_wpi = wpi
+        for key, row in (
+            ("bse_sensex_annual_average", sensex),
+            ("india_wpi_all_commodities_annual_average", wpi),
+            ("inr_usd_annual_average", usd_inr),
+        ):
+            if row is not None:
+                previous_by_key[key] = row
     ready_count = sum(item["status"] == "ready" for item in series)
     return {
         "status": "ready" if ready_count == len(series) else "partial" if ready_count else "not_imported",
         "series": series,
         "joined_annual_observations": len(joined_rows),
         "timeline": joined_rows,
-        "method": "Latest RBI publication vintage per financial-year observation; no interpolation. WPI changes are withheld across index-base breaks.",
+        "method": "Latest RBI publication vintage per financial-year observation; no interpolation. Growth rates and interest/fiscal ratios remain published rates, reserves remain end-financial-year stocks, and WPI changes are withheld across index-base breaks.",
     }
+
+
+def build_historical_episode_stories(
+    official_history: dict[str, object],
+) -> list[dict[str, object]]:
+    """Build story-first episodes from joined annual evidence and cited anchors."""
+    timeline = official_history.get("timeline")
+    if not isinstance(timeline, list):
+        return []
+
+    def start_year(row: dict[str, object]) -> int:
+        try:
+            return int(str(row.get("period", ""))[:4])
+        except ValueError:
+            return -1
+
+    def evidence_for(start: int, end: int) -> list[dict[str, object]]:
+        window = [row for row in timeline if isinstance(row, dict) and start <= start_year(row) <= end]
+        signals: list[dict[str, object]] = []
+
+        def add_extreme(
+            metric: str,
+            label: str,
+            *,
+            maximum: bool,
+            suffix: str,
+            decimals: int = 2,
+        ) -> None:
+            available = [row for row in window if isinstance(row.get(metric), (int, float))]
+            if not available:
+                return
+            selected = (max if maximum else min)(available, key=lambda row: float(row[metric]))
+            signals.append(
+                {
+                    "label": label,
+                    "period": selected["period"],
+                    "value": round(float(selected[metric]), decimals),
+                    "suffix": suffix,
+                }
+            )
+
+        add_extreme("real_gdp_growth_pct", "Growth low", maximum=False, suffix="%")
+        add_extreme("wpi_change_pct", "WPI inflation high", maximum=True, suffix="%")
+        add_extreme("call_money_rate_pct", "Money-market stress high", maximum=True, suffix="%")
+        add_extreme("inr_usd_change_pct", "Rupee depreciation high", maximum=True, suffix="%")
+        add_extreme("central_gfd_pct_gdp", "Central fiscal deficit high", maximum=True, suffix="% of GDP")
+        add_extreme("sensex_change_pct", "Sensex annual change low", maximum=False, suffix="%")
+        sensex_rows = [row for row in window if isinstance(row.get("sensex_average"), (int, float))]
+        if len(sensex_rows) >= 2:
+            first, last = sensex_rows[0], sensex_rows[-1]
+            path = (float(last["sensex_average"]) / float(first["sensex_average"]) - 1) * 100
+            signals.append(
+                {
+                    "label": "Sensex annual-average path",
+                    "period": f"{first['period']} to {last['period']}",
+                    "value": round(path, 2),
+                    "suffix": "%",
+                }
+            )
+        reserve_rows = [
+            row
+            for row in window
+            if isinstance(row.get("foreign_exchange_reserves_usd_mn"), (int, float))
+        ]
+        if len(reserve_rows) >= 2:
+            first, last = reserve_rows[0], reserve_rows[-1]
+            path = (
+                float(last["foreign_exchange_reserves_usd_mn"])
+                / float(first["foreign_exchange_reserves_usd_mn"])
+                - 1
+            ) * 100
+            signals.append(
+                {
+                    "label": "FX-reserve stock path",
+                    "period": f"{first['period']} to {last['period']}",
+                    "value": round(path, 2),
+                    "suffix": "%",
+                }
+            )
+        return signals
+
+    episodes = [
+        {
+            "key": "growth_inflation_break_1979",
+            "period": "1978-79–1981-82",
+            "title": "Growth break, inflation pressure and recovery",
+            "family": "Contraction and rebound",
+            "start_year": 1978,
+            "end_year": 1981,
+            "what_happened": "The annual record moves from positive growth into a sharp 1979-80 contraction while wholesale-price pressure rises, followed by a strong real-growth rebound.",
+            "how_it_happened": "The evidence layer treats the simultaneous output, inflation and money-market moves as a stress cluster; causal claims remain documentary work rather than being inferred from correlation.",
+            "what_came_out": "The episode establishes an early Indian template in which economic stress and the market benchmark do not share one exact turning date.",
+            "how_markets_came_out": "Recovery is read as a sequence: real growth turns first in the annual data, while prices, funding conditions and the Sensex path are checked separately.",
+            "source_keys": ["rbi_growth", "rbi_wpi", "rbi_rates", "rbi_sensex"],
+        },
+        {
+            "key": "acceleration_fiscal_strain_1984",
+            "period": "1984-85–1989-90",
+            "title": "Acceleration with accumulating fiscal and funding strain",
+            "family": "Expansion and imbalance build-up",
+            "start_year": 1984,
+            "end_year": 1989,
+            "what_happened": "Growth accelerated strongly late in the decade, but the fiscal-deficit and money-market series show that the expansion did not arrive with uniformly easing financial conditions.",
+            "how_it_happened": "RBI's historical account describes expansionary fiscal policy and automatic monetisation during the 1980s; the annual data expose the build-up without assigning a daily market trigger.",
+            "what_came_out": "A strong-growth reading alone would have missed the policy and external vulnerability carried into the next episode.",
+            "how_markets_came_out": "The story remains open until the expansion is joined to higher-frequency market breadth and valuation evidence; annual Sensex averages provide direction, not a precise peak call.",
+            "source_keys": ["rbi_bop_history", "rbi_growth", "rbi_rates", "rbi_fiscal"],
+        },
+        {
+            "key": "bop_crisis_1991",
+            "period": "1990-91–1992-93",
+            "title": "Balance-of-payments crisis, compression and rupee reset",
+            "family": "Macro crisis and reform",
+            "start_year": 1990,
+            "end_year": 1992,
+            "what_happened": "Growth slowed sharply in 1991-92 as money-market rates spiked and the annual-average rupee weakened substantially against the US dollar.",
+            "how_it_happened": "RBI's official history links accumulated domestic imbalances and a deteriorating external setting to the 1991 balance-of-payments crisis, followed by exchange-rate and structural reforms.",
+            "what_came_out": "The rupee regime moved through the 1991 adjustment and the 1992 LERMS transition while fiscal correction and financial-sector reform began.",
+            "how_markets_came_out": "The annual evidence shows growth recovering and funding stress easing after the trough; the market story separates that stabilisation from the contemporaneous securities-market disruption.",
+            "source_keys": ["rbi_bop_history", "rbi_growth", "rbi_rates", "rbi_fx", "rbi_fiscal"],
+        },
+        {
+            "key": "market_repair_1992",
+            "period": "1992-93–1994-95",
+            "title": "Reform rebound and securities-market repair",
+            "family": "Institutional repair and expansion",
+            "start_year": 1992,
+            "end_year": 1994,
+            "what_happened": "Real growth strengthened through 1994-95 while the rupee's annual average stabilised relative to the crisis break and money-market stress retreated from its 1991-92 peak.",
+            "how_it_happened": "Macroeconomic stabilisation overlapped with statutory SEBI powers, removal of administered capital-issue pricing and a programme of settlement and market-infrastructure reform.",
+            "what_came_out": "A more market-based exchange-rate and securities-market framework emerged, improving price discovery while regulation and settlement architecture were rebuilt.",
+            "how_markets_came_out": "The annual record supports a recovery story led by growth normalisation and lower funding stress; it does not claim that every market consequence of the 1992 crisis had ended by 1995.",
+            "source_keys": ["rbi_bop_history", "sebi_reforms_1992_1996", "rbi_growth", "rbi_rates", "rbi_fx"],
+        },
+        {
+            "key": "electronic_market_transition_1995",
+            "period": "1995-96–1997-98",
+            "title": "Electronic trading, dematerialisation and a new market plumbing",
+            "family": "Market-infrastructure transition",
+            "start_year": 1995,
+            "end_year": 1997,
+            "what_happened": "The market entered this period with a weak Sensex annual average and expensive call money even as real growth remained strong, while screen-based trading, the NIFTY 50 and dematerialised settlement became operating infrastructure.",
+            "how_it_happened": "NSE's official milestones and SEBI's 1997-98 record show the migration from geographically fragmented floor trading and paper certificates toward electronic access, clearing guarantees, depositories and shorter settlement cycles.",
+            "what_came_out": "India acquired a more observable and auditable market: prices travelled nationally, counterparty and settlement risks became more explicit, and index-based comparison became practical.",
+            "how_markets_came_out": "This was structural repair rather than a clean price rally. The annual evidence is read alongside institutional milestones because the change in market plumbing altered how later stress and recovery would be transmitted.",
+            "source_keys": ["nse_milestones", "sebi_annual_1997_98", "rbi_sensex", "rbi_growth", "rbi_rates"],
+        },
+        {
+            "key": "asian_crisis_1997",
+            "period": "1997-98–1998-99",
+            "title": "Asian-crisis transmission without a domestic balance-of-payments break",
+            "family": "External shock and currency pressure",
+            "start_year": 1997,
+            "end_year": 1998,
+            "what_happened": "Growth slowed in 1997-98; in 1998-99 the rupee's annual average weakened sharply and the Sensex annual average declined, while the end-year foreign-exchange reserve stock continued to rise.",
+            "how_it_happened": "RBI's historical assessment treats the Asian crisis as an external financial shock. The Indian evidence shows transmission through growth, currency and equity prices, but not a repeat of the reserve depletion that defined 1991.",
+            "what_came_out": "The episode reinforced the value of reserve buffers, managed external exposure and prudential financial regulation while the new electronic market infrastructure was still maturing.",
+            "how_markets_came_out": "The annual sequence shows growth rebounding in 1998-99 and reserves increasing even as the Sensex and rupee absorbed stress. Stabilisation across those measures arrived at different times.",
+            "source_keys": ["rbi_crisis_growth_review", "rbi_reserves", "rbi_growth", "rbi_fx", "rbi_sensex"],
+        },
+        {
+            "key": "technology_boom_bust_1999",
+            "period": "1999-00–2003-04",
+            "title": "Technology boom, market break and settlement-system repair",
+            "family": "Crowding, correction and institutional repair",
+            "start_year": 1999,
+            "end_year": 2003,
+            "what_happened": "The Sensex annual average surged in 1999-00, then fell for three financial years as the global technology cycle reversed and the domestic market experienced exceptional volatility and manipulation concerns in 2000-01.",
+            "how_it_happened": "RBI records the global technology-stock meltdown and weaker world activity, while SEBI's 2001-02 annual report documents its investigation into the March 2001 fall. Concentrated enthusiasm met global repricing and weaknesses in the inherited settlement structure.",
+            "what_came_out": "The response accelerated dematerialisation, rolling settlement, risk-based margining and clearing reform: all securities moved to rolling settlement, followed by T+3 in 2002 and T+2 in 2003.",
+            "how_markets_came_out": "The annual evidence marks the price trough before the 2003-04 rebound, alongside lower money-market rates and a much larger reserve stock. Recovery therefore joined cheaper funding and stronger buffers with repaired trading infrastructure; it was not just a reversal in sentiment.",
+            "source_keys": ["rbi_crisis_growth_review", "sebi_annual_2001_02", "sebi_history", "rbi_reserves", "rbi_sensex", "rbi_rates"],
+        },
+    ]
+    for episode in episodes:
+        episode["evidence"] = evidence_for(int(episode.pop("start_year")), int(episode.pop("end_year")))
+        episode["research_state"] = (
+            "Official annual evidence connected"
+            if len(episode["evidence"]) >= 4
+            else "Additional official series required"
+        )
+    return episodes
 
 
 def calculate_macro_context_summary(rows: list[dict[str, object]]) -> dict[str, object]:
@@ -3428,6 +3773,7 @@ def build_historical_regime_workspace(
     }
     official_history = build_historical_series_summary(official_history_rows or [])
     official_ready = official_history["status"] == "ready"
+    episode_stories = build_historical_episode_stories(official_history)
     coverage_ladder = [
         {
             "period": "1875–1978",
@@ -3444,7 +3790,7 @@ def build_historical_regime_workspace(
             "purpose": "Early benchmark cycles joined to RBI macroeconomic history",
             "rule": "Use the coarsest complete series when daily observations are not consistent.",
             "status": (
-                "Annual Sensex and WPI evidence connected"
+                "Annual market, growth, inflation, rates and currency evidence connected"
                 if official_ready else "Sensex and RBI ingestion queued"
             ),
         },
@@ -3455,7 +3801,7 @@ def build_historical_regime_workspace(
             "purpose": "Liberalisation, crisis and market-structure transition stories",
             "rule": "Prefer weekly closes until daily coverage and definitions are auditable.",
             "status": (
-                "Annual official anchors connected; weekly detail queued"
+                "Annual crisis/reform evidence connected through 2003-04; weekly detail queued"
                 if official_ready else "Official index-history ingestion queued"
             ),
         },
@@ -3569,33 +3915,130 @@ def build_historical_regime_workspace(
     if official_ready:
         for era in story_eras:
             if era["period"] == "1978/79–1991":
-                era["research_state"] = "Official annual Sensex and WPI evidence connected; episode interpretation next"
-            elif era["period"] in {"1991–1995", "1995–2003", "2003–2009", "2009–2020"}:
-                era["research_state"] = "Official annual market and inflation anchors connected; higher-frequency episode joins queued"
+                era["research_state"] = "Official annual market and macro evidence connected; sourced episodes active"
+            elif era["period"] in {"1991–1995", "1995–2003"}:
+                era["research_state"] = "Official annual market and macro evidence connected; sourced episodes active"
+            elif era["period"] in {"2003–2009", "2009–2020"}:
+                era["research_state"] = "Official annual market and macro anchors connected; higher-frequency episode joins queued"
     source_registry = [
         {
+            "key": "sebi_history",
             "name": "SEBI historical perspective",
             "authority": "SEBI",
             "use": "Exchange formation, regulation and structural milestones",
             "url": "https://www.sebi.gov.in/media/speeches/mar-2004/a-historical-perspective-of-the-securities-market-reforms_2882.html",
         },
         {
+            "key": "bse_milestones",
             "name": "BSE milestones",
             "authority": "BSE",
             "use": "Sensex base period, launch and electronic-market milestones",
             "url": "https://www.bseindia.com/downloads1/BSE_Update_Jan_2016.pdf",
         },
         {
+            "key": "nifty_methodology",
             "name": "NIFTY 50 official index page",
             "authority": "NSE Indices",
             "use": "Modern benchmark definitions and methodology",
             "url": "https://www.niftyindices.com/indices/equity/broad-based-indices/NIFTY-50",
         },
         {
+            "key": "rbi_handbook",
             "name": "RBI Handbook and DBIE coverage",
             "authority": "Reserve Bank of India",
             "use": "Growth, inflation, rates, currency, money, credit and financial history",
             "url": "https://www.rbi.org.in/scripts/BS_ViewBulletin.aspx?Id=879",
+        },
+        {
+            "key": "rbi_sensex",
+            "name": "RBI Handbook 2026 Table 85",
+            "authority": "Reserve Bank of India",
+            "use": "BSE Sensex financial-year annual averages",
+            "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=23910",
+        },
+        {
+            "key": "rbi_wpi",
+            "name": "RBI Handbook 2026 Table 33",
+            "authority": "Reserve Bank of India",
+            "use": "All-commodities WPI annual averages and published base periods",
+            "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=23858",
+        },
+        {
+            "key": "rbi_growth",
+            "name": "RBI Handbook 2006 Table 237",
+            "authority": "Reserve Bank of India",
+            "use": "Historical real GDP growth at stated constant-price bases",
+            "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=8787",
+        },
+        {
+            "key": "rbi_rates",
+            "name": "RBI Handbook 2006 Table 74",
+            "authority": "Reserve Bank of India",
+            "use": "Historical call/notice money rates",
+            "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=8624",
+        },
+        {
+            "key": "rbi_fx",
+            "name": "RBI Handbook 2006 Table 154",
+            "authority": "Reserve Bank of India",
+            "use": "Financial-year INR/USD annual averages",
+            "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=8704",
+        },
+        {
+            "key": "rbi_fiscal",
+            "name": "RBI Handbook 2026 Table 237",
+            "authority": "Reserve Bank of India",
+            "use": "Central gross fiscal deficit as percentage of GDP",
+            "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=24062",
+        },
+        {
+            "key": "rbi_bop_history",
+            "name": "RBI history of the 1991 balance-of-payments crisis",
+            "authority": "Reserve Bank of India",
+            "use": "Crisis transmission, exchange-rate transition and external-sector reform",
+            "url": "https://rbi.org.in/scripts/PublicationsView.aspx?Id=18086",
+        },
+        {
+            "key": "sebi_reforms_1992_1996",
+            "name": "SEBI securities-market reforms, 1992–1996",
+            "authority": "SEBI",
+            "use": "Statutory regulation, capital-issue reform, settlement and market infrastructure",
+            "url": "https://www.sebi.gov.in/sebi_data/commondocs/pt01_h.html",
+        },
+        {
+            "key": "nse_milestones",
+            "name": "NSE history and milestones",
+            "authority": "National Stock Exchange of India",
+            "use": "Screen-based trading, NIFTY 50, dematerialised settlement and derivatives milestones",
+            "url": "https://www.nseindia.com/static/national-stock-exchange/history-milestones",
+        },
+        {
+            "key": "sebi_annual_1997_98",
+            "name": "SEBI Annual Report 1997-98",
+            "authority": "SEBI",
+            "use": "Clearing guarantees, dematerialisation and the first T+5 rolling-settlement phase",
+            "url": "https://www.sebi.gov.in/sebi_data/commondocs/1997-98_p.pdf",
+        },
+        {
+            "key": "sebi_annual_2001_02",
+            "name": "SEBI Annual Report 2001-02",
+            "authority": "SEBI",
+            "use": "Official investigation record for the March 2001 market fall and subsequent reforms",
+            "url": "https://www.sebi.gov.in/sebi_data/commondocs/ar01022_p.pdf",
+        },
+        {
+            "key": "rbi_crisis_growth_review",
+            "name": "RBI financial-crisis and growth review",
+            "authority": "Reserve Bank of India",
+            "use": "Asian-crisis and dot-com-bust transmission into Indian output, investment and markets",
+            "url": "https://rbi.org.in/scripts/AnnualReportPublications.aspx?Id=896",
+        },
+        {
+            "key": "rbi_reserves",
+            "name": "RBI Handbook 2024 Table 150",
+            "authority": "Reserve Bank of India",
+            "use": "End-financial-year foreign-exchange reserve stock in US dollars",
+            "url": "https://rbi.org.in/scripts/PublicationsView.aspx?id=22624",
         },
     ]
     return {
@@ -3611,6 +4054,7 @@ def build_historical_regime_workspace(
         },
         "resolution_views": resolution_views,
         "official_history": official_history,
+        "episode_stories": episode_stories,
         "coverage_ladder": coverage_ladder,
         "story_eras": story_eras,
         "story_method": [
@@ -9243,6 +9687,19 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                         vintage_date=source["vintage_date"],
                         value_column=int(source["value_column"]),
                         unit=str(source["unit"]),
+                        aggregation=str(source.get("aggregation", "annual average")),
+                        allow_non_positive=bool(source.get("allow_non_positive", False)),
+                        base_period_override=(
+                            str(source["base_period"])
+                            if source.get("base_period") is not None
+                            else None
+                        ),
+                        maximum_end_year=(
+                            int(source["maximum_end_year"])
+                            if source.get("maximum_end_year") is not None
+                            else None
+                        ),
+                        duplicate_resolution=str(source.get("duplicate_resolution", "last")),
                     )
                 )
             except ValueError:

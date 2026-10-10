@@ -356,6 +356,29 @@ class EODStoreTest(unittest.TestCase):
         with self.assertRaises(HistoricalSeriesConflictError):
             self.store.append_historical_series_observations([changed])
 
+        contraction = dict(
+            base,
+            series_key="india_real_gdp_growth_pct",
+            date=date(1980, 3, 31),
+            period_label="1979-80",
+            value=-5.2,
+            unit="Per cent annual growth",
+            base_period="1993-94",
+            source_title="RBI Handbook 2006 Table 237",
+            source_url="https://rbi.org.in/scripts/PublicationsView.aspx?id=8787",
+            metadata={"aggregation": "published annual growth rate", "allows_non_positive": True},
+        )
+        self.assertEqual(
+            self.store.append_historical_series_observations([contraction]),
+            {"inserted": 1, "duplicates": 0},
+        )
+        self.assertEqual(
+            self.store.load_historical_series_observations(
+                series_key="india_real_gdp_growth_pct"
+            )[0]["value"],
+            -5.2,
+        )
+
     def test_futures_snapshots_are_keyed_by_contract_and_session(self):
         contracts = [
             {

@@ -345,7 +345,7 @@ orders or position sizing.
   sector participation. Rankings average the shares above 20-, 50-, and 200-day
   moving averages and require at least five evaluated stocks plus 60% sector
   coverage, preventing one-stock classifications from dominating the summary.
-- Added `historical-regimes-v3` as a dedicated sidebar workspace. It reads the
+- Added `historical-regimes-v5` as a dedicated sidebar workspace. It reads the
   selected index from the validated local EOD store and publishes 20% bull/bear
   phases, 10–20% corrections, rapid-decline candidates, confirmation lag,
   recovery to the prior peak, duration, and forward paths. The page also freezes
@@ -359,21 +359,32 @@ orders or position sizing.
   fabricated. The server now provides deterministic period-end aggregation,
   period-specific evidence grades, era research states, and an official-source
   registry for SEBI, BSE, NSE Indices, and RBI.
-- Connected the first official long-history evidence spine from RBI Handbook
-  publication pages: 47 financial-year BSE Sensex annual averages from 1979-80
-  through 2025-26 and 46 WPI all-commodities annual averages from 1980-81
-  through 2025-26. Observations retain source vintage and index base; overlapping
-  vintages are preserved and WPI changes are withheld across rebasing breaks.
-  The import is repeat-safe, appears as a dedicated Historical Regimes section,
-  and now runs as one fault-isolated EOD Update stage.
+- Expanded the official RBI spine to seven annual series: Sensex, WPI, real GDP
+  growth, call-money rates, INR/USD annual averages, central gross fiscal
+  deficit/GDP, and end-year foreign-exchange reserves. The joined timeline has
+  75 financial years while preserving each
+  source's real coverage, vintage, unit, base and publication status. WPI changes
+  remain withheld across rebasing breaks, and the repeat import is idempotent.
+- Added four source-linked episode chapters for 1978/79-1995 covering the
+  1979-80 contraction/rebound, late-1980s acceleration and imbalance, the 1991
+  balance-of-payments crisis, and the early reform rebound. The UI now joins the
+  seven-series evidence in a 12-column annual table and puts the narrative
+  before the data.
+- Extended the story through 2003-04 with chapters for electronic-market and
+  dematerialisation infrastructure, the Asian-crisis transmission, and the
+  technology boom/bust plus settlement repair. These use official NSE, SEBI and
+  RBI narrative anchors and display the annual Sensex low, rupee stress, growth,
+  rates, fiscal position and reserve-stock path. All seven chapters report
+  official annual evidence connected.
 
 ## Next work
 
-1. Extend the audited RBI history spine with real growth, rates, currency,
-   credit and fiscal-stress series while preserving releases, revisions, base
-   changes and honest frequency. Then convert the era scaffolds into cited
-   episode stories, beginning with 1978/79-1995, rather than filling missing
-   periods with synthetic daily values.
+1. Continue the cited Historical Regimes story into the 2003-2009 credit boom
+   and global financial crisis. Extend real-GDP
+   coverage beyond the archived 2005-06 series, add official credit and
+   external-balance histories, and connect higher-frequency price paths where
+   genuinely available. Preserve releases, revisions, base changes, and honest
+   frequency; never synthesize missing daily values.
 2. Live-check the first full NIFTY 500 five-year retrieval after reconnecting
    Kite, including year switching, coverage counts, and reverse ranking order.
 3. Begin the queued Portfolio performance and Alpha Opportunities roadmap:

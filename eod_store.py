@@ -1351,7 +1351,14 @@ class EODStore:
                 or not isinstance(value, (int, float))
                 or isinstance(value, bool)
                 or not math.isfinite(float(value))
-                or float(value) <= 0
+                or (
+                    float(value) <= 0
+                    and not (
+                        series_key == "india_real_gdp_growth_pct"
+                        and isinstance(metadata, dict)
+                        and metadata.get("allows_non_positive") is True
+                    )
+                )
                 or not isinstance(unit, str)
                 or not unit.strip()
                 or not isinstance(base_period, str)
