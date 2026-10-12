@@ -89,6 +89,13 @@ AMFI_PORTFOLIO_SCHEMES = (
         "required_terms": ("franklin", "opportunities"),
     },
 )
+MUTUAL_FUND_REVIEWED_CATEGORIES = {
+    "120754": "Debt - Short Duration",
+    "118632": "Equity - Large Cap",
+    "120334": "Hybrid - Multi Asset Allocation",
+    "118989": "Equity - Mid Cap",
+    "118551": "International Equity - Fund of Funds",
+}
 NSE_FII_DII_URL = "https://www.nseindia.com/api/fiidiiTradeReact"
 NSE_FII_DII_SOURCE = "NSE FII/FPI & DII combined-exchange cash-market report"
 NSDL_FPI_MONTHLY_URL = "https://www.fpi.nsdl.co.in/web/Reports/Monthly.aspx"
@@ -104,8 +111,11 @@ FRED_GLOBAL_SERIES = {
 }
 SENTIMENT_EVIDENCE_MODEL_VERSION = "market-sentiment-evidence-v1"
 REGIME_RULE_VERSION = "market-regime-candidate-v1"
-HISTORICAL_REGIME_CONTRACT_VERSION = "historical-regimes-v9"
+HISTORICAL_REGIME_CONTRACT_VERSION = "historical-regimes-v10"
 HISTORICAL_FINGERPRINT_CONTRACT_VERSION = "historical-episode-fingerprint-v1"
+HISTORICAL_ENTRY_VALIDATION_CONTRACT_VERSION = "historical-entry-validation-v1"
+BACKTESTS_CONTRACT_VERSION = "backtests-v2"
+SEASONALITY_BACKTEST_CONTRACT_VERSION = "seasonality-all-indices-backtest-v1"
 HISTORICAL_BULL_BEAR_THRESHOLD_PCT = 20.0
 HISTORICAL_CORRECTION_THRESHOLD_PCT = 10.0
 HISTORICAL_RAPID_BEAR_SESSIONS = 45
@@ -1417,6 +1427,26 @@ def incremental_history_ranges(
     return historical_date_ranges(start, end, chunk_days=chunk_days)
 
 
+def candles_after_last_stored_session(
+    candles: list[dict[str, object]], last_stored: date | None
+) -> list[dict[str, object]]:
+    """Return only provider candles that can be appended to an immutable store.
+
+    Some providers revise older OHLC history. Replaying a broad display window
+    into the append-only store therefore creates a conflict even when the EOD
+    job only needs to persist newly completed sessions. Historical corrections
+    remain deliberately excluded from this helper rather than being silently
+    overwritten.
+    """
+    if last_stored is None:
+        return list(candles)
+    return [
+        candle
+        for candle in candles
+        if isinstance(candle.get("date"), date) and candle["date"] > last_stored
+    ]
+
+
 def completed_history_date(now: datetime) -> date:
     """Return the latest date that may contain a completed daily candle."""
     local_now = now.astimezone(INDIA_TIMEZONE)
@@ -1782,9 +1812,12 @@ def calculate_seasonality_validation(
                 "period": row["period"],
                 "train_count": row["train_count"],
                 "train_excess_pct": round(row["train_excess_pct"], 2) if row["train_excess_pct"] is not None else None,
+                "train_p_value": round(row["train_p_value"], 4) if row["train_p_value"] is not None else None,
+                "train_q_value": round(q_value, 4) if q_value is not None else None,
                 "train_significant": train_significant,
                 "test_count": row["test_count"],
                 "test_excess_pct": round(row["test_excess_pct"], 2) if row["test_excess_pct"] is not None else None,
+                "test_p_value": round(row["test_p_value"], 4) if row["test_p_value"] is not None else None,
                 "same_direction": row["same_direction"],
                 "survived": survived,
             }
@@ -3814,6 +3847,642 @@ def build_historical_episode_fingerprints(
     }
 
 
+def build_historical_entry_snapshot_validation(
+    episode_stories: list[dict[str, object]],
+    index_candles: list[dict[str, object]],
+    *,
+    instrument: str,
+    global_risk_rows: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    """Build outcome-blind episode-entry snapshots and a chronological split.
+
+    Only observations dated on or before an episode's entry date are allowed in
+    its snapshot. Outcomes are calculated in a separate object. Current RBI
+    Handbook vintages remain deliberately unavailable here because the annual
+    summary does not yet retain each release date and subsequent revision.
+    """
+    price_rows = sorted(
+        (
+            (row["date"], float(row["close"]))
+            for row in index_candles
+            if isinstance(row, dict)
+            and isinstance(row.get("date"), date)
+            and isinstance(row.get("close"), (int, float))
+            and not isinstance(row.get("close"), bool)
+            and math.isfinite(float(row["close"]))
+            and float(row["close"]) > 0
+        ),
+        key=lambda item: item[0],
+    )
+    global_by_key: dict[str, list[tuple[date, float]]] = defaultdict(list)
+    for row in global_risk_rows or []:
+        if (
+            isinstance(row, dict)
+            and isinstance(row.get("date"), date)
+            and isinstance(row.get("value"), (int, float))
+            and not isinstance(row.get("value"), bool)
+            and math.isfinite(float(row["value"]))
+        ):
+            global_by_key[str(row.get("metric_key"))].append(
+                (row["date"], float(row["value"]))
+            )
+    for rows in global_by_key.values():
+        rows.sort(key=lambda item: item[0])
+
+    def pct_change(values: list[float], sessions: int) -> float | None:
+        if len(values) <= sessions or values[-sessions - 1] == 0:
+            return None
+        return round((values[-1] / values[-sessions - 1] - 1) * 100, 2)
+
+    def realised_volatility(values: list[float], sessions: int) -> float | None:
+        sample = values[-(sessions + 1):]
+        if len(sample) <= sessions:
+            return None
+        returns = [sample[position] / sample[position - 1] - 1 for position in range(1, len(sample))]
+        return round(pstdev(returns) * math.sqrt(252) * 100, 2) if len(returns) >= 2 else None
+
+    def current_drawdown(values: list[float], sessions: int) -> float | None:
+        sample = values[-sessions:]
+        if len(sample) < sessions or not sample:
+            return None
+        peak = max(sample)
+        return round((sample[-1] / peak - 1) * 100, 2) if peak else None
+
+    def path_return(rows: list[tuple[date, float]], sessions: int) -> float | None:
+        values = [value for _observation_date, value in rows]
+        return pct_change(values, sessions)
+
+    def forward_outcomes(entry_position: int) -> dict[str, object]:
+        windows: dict[str, dict[str, object]] = {}
+        for horizon in (20, 60, 120, 252):
+            if entry_position + horizon >= len(price_rows):
+                windows[str(horizon)] = {
+                    "status": "insufficient_future_history",
+                    "return_pct": None,
+                    "max_drawdown_pct": None,
+                }
+                continue
+            entry_value = price_rows[entry_position][1]
+            future = [value for _row_date, value in price_rows[entry_position:entry_position + horizon + 1]]
+            worst = min((value / entry_value - 1) * 100 for value in future)
+            windows[str(horizon)] = {
+                "status": "ready",
+                "return_pct": round((future[-1] / entry_value - 1) * 100, 2),
+                "max_drawdown_pct": round(worst, 2),
+                "to_date": price_rows[entry_position + horizon][0].isoformat(),
+            }
+        return {
+            "separated_from_entry_snapshot": True,
+            "windows": windows,
+        }
+
+    def factor_card(
+        key: str,
+        label: str,
+        status: str,
+        state: str,
+        observation: str,
+        limitation: str,
+    ) -> dict[str, str]:
+        return {
+            "key": key,
+            "label": label,
+            "status": status,
+            "state": state,
+            "observation": observation,
+            "limitation": limitation,
+        }
+
+    ordered_episodes = sorted(
+        episode_stories,
+        key=lambda episode: int(
+            (episode.get("window") if isinstance(episode.get("window"), dict) else {}).get(
+                "start_financial_year", -1
+            )
+        ),
+    )
+    snapshots: list[dict[str, object]] = []
+
+    for episode in ordered_episodes:
+        window = episode.get("window") if isinstance(episode.get("window"), dict) else {}
+        start_fy = int(window.get("start_financial_year", -1))
+        entry_date = date(start_fy, 4, 1) if start_fy > 0 else date.min
+        available_prices = [row for row in price_rows if row[0] <= entry_date]
+        values = [value for _row_date, value in available_prices]
+        as_of_date = available_prices[-1][0] if available_prices else None
+        as_of_position = price_rows.index(available_prices[-1]) if available_prices else None
+        return_20 = pct_change(values, 20)
+        return_60 = pct_change(values, 60)
+        return_200 = pct_change(values, 200)
+        ma_50 = round(sum(values[-50:]) / 50, 4) if len(values) >= 50 else None
+        ma_200 = round(sum(values[-200:]) / 200, 4) if len(values) >= 200 else None
+        volatility_60 = realised_volatility(values, 60)
+        drawdown_252 = current_drawdown(values, 252)
+        last_close = values[-1] if values else None
+        entry_traits: list[dict[str, str]] = []
+
+        def add_trait(key: str, label: str, evidence: str) -> None:
+            entry_traits.append({"key": key, "label": label, "evidence": evidence})
+
+        factors: list[dict[str, str]] = []
+        if last_close is not None and ma_200 is not None and return_60 is not None:
+            trend_state = (
+                "uptrend"
+                if last_close >= ma_200 and return_60 >= 5
+                else "downtrend"
+                if last_close < ma_200 and return_60 <= -5
+                else "mixed"
+            )
+            factors.append(
+                factor_card(
+                    "trend_momentum",
+                    "Trend and momentum",
+                    "ready",
+                    trend_state,
+                    f"{instrument} was {((last_close / ma_200) - 1) * 100:+.2f}% from its 200-session average; 60-session return {return_60:+.2f}%.",
+                    "Uses only completed closes available by the snapshot date.",
+                )
+            )
+            if last_close < ma_200:
+                add_trait("below_200_session_average", "Below 200-session average", f"close {((last_close / ma_200) - 1) * 100:+.2f}% from average")
+            if return_60 >= 10:
+                add_trait("positive_60_session_momentum", "Strong positive 60-session momentum", f"60-session return {return_60:+.2f}%")
+            elif return_60 <= -10:
+                add_trait("negative_60_session_momentum", "Strong negative 60-session momentum", f"60-session return {return_60:+.2f}%")
+        else:
+            factors.append(
+                factor_card(
+                    "trend_momentum",
+                    "Trend and momentum",
+                    "unavailable",
+                    "not_observed",
+                    "Fewer than 200 completed prior sessions are connected.",
+                    "No shorter series is promoted to the long-trend state.",
+                )
+            )
+
+        if volatility_60 is not None:
+            stress_state = (
+                "high_stress"
+                if volatility_60 >= 25 or (drawdown_252 is not None and drawdown_252 <= -15)
+                else "elevated"
+                if volatility_60 >= 18 or (drawdown_252 is not None and drawdown_252 <= -10)
+                else "contained"
+            )
+            factors.append(
+                factor_card(
+                    "volatility_stress",
+                    "Volatility and stress",
+                    "ready",
+                    stress_state,
+                    f"Trailing 60-session realised volatility {volatility_60:.2f}%"
+                    + (f"; current drawdown from the trailing 252-session high {drawdown_252:.2f}%." if drawdown_252 is not None else "."),
+                    "The snapshot excludes every observation after the entry date.",
+                )
+            )
+            if volatility_60 >= 25:
+                add_trait("high_realised_volatility", "High realised volatility", f"60-session annualised volatility {volatility_60:.2f}%")
+            if drawdown_252 is not None and drawdown_252 <= -10:
+                add_trait("drawdown_at_entry", "Already in a material drawdown", f"entry drawdown {drawdown_252:.2f}%")
+        else:
+            factors.append(factor_card("volatility_stress", "Volatility and stress", "unavailable", "not_observed", "Fewer than 60 completed prior sessions are connected.", "Annual evidence cannot reconstruct entry-date realised volatility."))
+
+        entry_global: dict[str, list[tuple[date, float]]] = {
+            key: [row for row in rows if row[0] <= entry_date]
+            for key, rows in global_by_key.items()
+        }
+        recent_vix = entry_global.get("us_vix", [])[-20:]
+        sp500_return = path_return(entry_global.get("sp500", []), 60)
+        brent_return = path_return(entry_global.get("brent_crude", []), 60)
+        vix_latest = recent_vix[-1][1] if recent_vix else None
+        vix_high = max((value for _row_date, value in recent_vix), default=None)
+        if vix_latest is not None or sp500_return is not None or brent_return is not None:
+            global_state = (
+                "risk_off"
+                if (vix_high is not None and vix_high >= 30) or (sp500_return is not None and sp500_return <= -10)
+                else "mixed"
+                if (vix_high is not None and vix_high >= 20) or (brent_return is not None and abs(brent_return) >= 15)
+                else "risk_on"
+            )
+            observations = []
+            if vix_latest is not None:
+                observations.append(f"VIX latest {vix_latest:.2f}, 20-observation high {vix_high:.2f}")
+            if sp500_return is not None:
+                observations.append(f"S&P 500 60-session return {sp500_return:+.2f}%")
+            if brent_return is not None:
+                observations.append(f"Brent 60-session return {brent_return:+.2f}%")
+            factors.append(factor_card("global_risk", "Global risk backdrop", "ready", global_state, "; ".join(observations) + ".", "Market observations are point-in-time dated, but the stored FRED series reflects its current published vintage."))
+            if global_state == "risk_off":
+                add_trait("global_risk_off", "Global risk-off backdrop", "; ".join(observations))
+        else:
+            factors.append(factor_card("global_risk", "Global risk backdrop", "unavailable", "not_observed", "No aligned global observations are available by the entry date.", "Narrative descriptions are not substituted for dated market evidence."))
+
+        for key, label, observation, limitation in (
+            ("breadth_participation", "Breadth and participation", "Effective-dated constituent breadth is not connected.", "Today's constituents are never backfilled into a historical snapshot."),
+            ("leadership_concentration", "Leadership and concentration", "Effective-dated sector membership and weights are not connected.", "Later winners and current weights cannot enter the entry information set."),
+            ("institutional_flows_liquidity", "Institutional flows and liquidity", "Comparable dated flow history is not connected for the entry date.", "Later flow records and narrative descriptions are excluded."),
+            ("rates_currency_credit", "Rates, currency, and credit", "Release-dated, unrevised credit and external-balance observations are not connected.", "Current RBI Handbook vintages are retrospective and therefore excluded."),
+            ("derivatives_positioning", "Derivatives positioning", "Comparable price/OI history is not connected for the entry date.", "Modern derivatives evidence is not projected into earlier market structures."),
+            ("earnings_valuation", "Earnings and valuation", "Point-in-time estimates and valuations are not connected.", "Later reported earnings are excluded."),
+            ("macro_growth_inflation", "Macro growth and inflation", "Release dates and historical revisions are not yet preserved for the annual macro spine.", "Retrospective annual actuals remain visible in the full-window story but cannot enter this snapshot."),
+        ):
+            factors.append(factor_card(key, label, "unavailable", "not_observed", observation, limitation))
+
+        snapshot_status = "ready" if sum(item["status"] == "ready" for item in factors) >= 2 else "partial" if as_of_date is not None else "unavailable"
+        outcome = forward_outcomes(as_of_position) if as_of_position is not None else {
+            "separated_from_entry_snapshot": True,
+            "windows": {str(horizon): {"status": "entry_history_unavailable", "return_pct": None, "max_drawdown_pct": None} for horizon in (20, 60, 120, 252)},
+        }
+        snapshot = {
+            "episode_key": str(episode.get("key") or ""),
+            "episode_title": str(episode.get("title") or ""),
+            "episode_period": str(episode.get("period") or ""),
+            "split": "pending_eligibility",
+            "entry_date": entry_date.isoformat() if entry_date != date.min else None,
+            "snapshot_as_of": as_of_date.isoformat() if as_of_date is not None else None,
+            "status": snapshot_status,
+            "prior_sessions": len(available_prices),
+            "price_metrics": {
+                "close": round(last_close, 4) if last_close is not None else None,
+                "return_20_pct": return_20,
+                "return_60_pct": return_60,
+                "return_200_pct": return_200,
+                "ma_50": ma_50,
+                "ma_200": ma_200,
+                "realised_volatility_60_pct": volatility_60,
+                "drawdown_from_252_session_high_pct": drawdown_252,
+            },
+            "factors": factors,
+            "traits": entry_traits,
+            "outcome": outcome,
+            "information_boundary": "Every input is dated on or before the snapshot; forward outcomes are stored separately and never used to construct the entry traits.",
+        }
+        episode["entry_snapshot"] = snapshot
+        snapshots.append(snapshot)
+
+    eligible_snapshots = [snapshot for snapshot in snapshots if snapshot["status"] == "ready"]
+    holdout_count = max(1, math.ceil(len(eligible_snapshots) * 0.30)) if eligible_snapshots else 0
+    discovery_count = max(0, len(eligible_snapshots) - holdout_count)
+    for eligible_position, snapshot in enumerate(eligible_snapshots):
+        snapshot["split"] = "discovery" if eligible_position < discovery_count else "held_out"
+    for snapshot in snapshots:
+        if snapshot["split"] == "pending_eligibility":
+            snapshot["split"] = "insufficient_point_in_time_evidence"
+
+    trait_labels: dict[str, str] = {}
+    trait_samples: dict[str, dict[str, list[tuple[float, float | None, str]]]] = defaultdict(lambda: {"discovery": [], "held_out": []})
+    for snapshot in snapshots:
+        outcome_252 = snapshot.get("outcome", {}).get("windows", {}).get("252", {})
+        if outcome_252.get("status") != "ready":
+            continue
+        for trait in snapshot.get("traits", []):
+            trait_key = str(trait.get("key") or "")
+            if not trait_key:
+                continue
+            trait_labels[trait_key] = str(trait.get("label") or trait_key)
+            trait_samples[trait_key][str(snapshot["split"])].append(
+                (
+                    float(outcome_252["return_pct"]),
+                    float(outcome_252["max_drawdown_pct"]) if outcome_252.get("max_drawdown_pct") is not None else None,
+                    str(snapshot["episode_title"]),
+                )
+            )
+
+    def sample_summary(samples: list[tuple[float, float | None, str]]) -> dict[str, object]:
+        returns = [sample[0] for sample in samples]
+        drawdowns = [sample[1] for sample in samples if sample[1] is not None]
+        return {
+            "episodes": len(samples),
+            "median_252_return_pct": round(median(returns), 2) if returns else None,
+            "positive_frequency_pct": round(sum(value > 0 for value in returns) / len(returns) * 100, 1) if returns else None,
+            "median_252_max_drawdown_pct": round(median(drawdowns), 2) if drawdowns else None,
+            "episode_titles": [sample[2] for sample in samples],
+        }
+
+    trait_validation: list[dict[str, object]] = []
+    for trait_key, split_samples in trait_samples.items():
+        discovery = sample_summary(split_samples["discovery"])
+        held_out = sample_summary(split_samples["held_out"])
+        if int(discovery["episodes"]) < 2:
+            continue
+        discovery_median = discovery["median_252_return_pct"]
+        heldout_median = held_out["median_252_return_pct"]
+        direction_consistent = (
+            heldout_median is not None
+            and discovery_median is not None
+            and (float(discovery_median) >= 0) == (float(heldout_median) >= 0)
+        )
+        trait_validation.append(
+            {
+                "key": trait_key,
+                "label": trait_labels.get(trait_key, trait_key),
+                "discovery": discovery,
+                "held_out": held_out,
+                "direction_consistent": direction_consistent if int(held_out["episodes"]) else None,
+                "admission": "blocked",
+                "reason": (
+                    "Held-out observations are shown, but at least three held-out matches plus multiplicity and stability checks are required."
+                    if int(held_out["episodes"])
+                    else "No held-out episode with a complete 252-session outcome matches this discovery trait."
+                ),
+            }
+        )
+    trait_validation.sort(key=lambda item: (-int(item["discovery"]["episodes"]), str(item["label"])))
+
+    return {
+        "contract_version": HISTORICAL_ENTRY_VALIDATION_CONTRACT_VERSION,
+        "instrument": instrument,
+        "snapshots": snapshots,
+        "split": {
+            "method": "Episodes with ready point-in-time snapshots are ordered by entry date; the earliest 70% form discovery and the latest 30% are held out. Earlier documentary-only episodes remain outside the validation sample.",
+            "discovery_episodes": discovery_count,
+            "held_out_episodes": holdout_count,
+            "excluded_episodes": len(snapshots) - len(eligible_snapshots),
+            "boundary_episode": eligible_snapshots[discovery_count]["episode_title"] if eligible_snapshots and discovery_count < len(eligible_snapshots) else None,
+            "outcome_horizon_sessions": 252,
+        },
+        "readiness": {
+            "ready_snapshots": sum(snapshot["status"] == "ready" for snapshot in snapshots),
+            "partial_snapshots": sum(snapshot["status"] == "partial" for snapshot in snapshots),
+            "unavailable_snapshots": sum(snapshot["status"] == "unavailable" for snapshot in snapshots),
+            "discovery_outcomes_ready": sum(snapshot["split"] == "discovery" and snapshot["outcome"]["windows"]["252"]["status"] == "ready" for snapshot in snapshots),
+            "held_out_outcomes_ready": sum(snapshot["split"] == "held_out" and snapshot["outcome"]["windows"]["252"]["status"] == "ready" for snapshot in snapshots),
+            "candidate_traits": len(trait_validation),
+        },
+        "trait_validation": trait_validation,
+        "classifier_admission": "blocked",
+        "classifier_admission_reason": "Entry snapshots remove outcome leakage, but sparse point-in-time categories and small held-out samples do not yet support admission to the live classifier.",
+        "method": "Entry factors use only dated observations available by each episode start. Forward outcomes are calculated separately, discovery rules are formed only from earlier episodes, and later episodes remain held out.",
+    }
+
+
+def build_seasonality_backtest_workspace(
+    index_histories: dict[str, list[dict[str, object]]],
+    *,
+    today: date,
+    supported_indices: tuple[str, ...] = SEASONALITY_INDICES,
+) -> dict[str, object]:
+    """Validate month effects across every supported index as one test family."""
+    index_rows: list[dict[str, object]] = []
+    candidate_rows: list[dict[str, object]] = []
+    unavailable: list[dict[str, str]] = []
+    for instrument in supported_indices:
+        candles = index_histories.get(instrument, [])
+        try:
+            validation = calculate_seasonality_validation(candles, today=today)
+        except ValueError as error:
+            unavailable.append({"instrument": instrument, "reason": str(error)})
+            continue
+        held_out_rows = validation.get("held_out_rows")
+        if not isinstance(held_out_rows, list):
+            unavailable.append({"instrument": instrument, "reason": "seasonality_validation_unavailable"})
+            continue
+        row = {
+            "instrument": instrument,
+            "from_date": candles[0]["date"].isoformat(),
+            "as_of_date": candles[-1]["date"].isoformat(),
+            "sessions": len(candles),
+            "split_date": validation.get("holdout_split_date"),
+            "tests_evaluated": len(held_out_rows),
+            "discovery_candidates": 0,
+            "same_direction": 0,
+            "survived": 0,
+        }
+        index_rows.append(row)
+        for month in held_out_rows:
+            if not isinstance(month, dict):
+                continue
+            candidate_rows.append(
+                {
+                    "instrument": instrument,
+                    "period": month.get("period"),
+                    "train_count": int(month.get("train_count") or 0),
+                    "train_excess_pct": month.get("train_excess_pct"),
+                    "train_p_value": month.get("train_p_value"),
+                    "test_count": int(month.get("test_count") or 0),
+                    "test_excess_pct": month.get("test_excess_pct"),
+                    "test_p_value": month.get("test_p_value"),
+                    "same_direction": bool(month.get("same_direction")),
+                }
+            )
+
+    family_q_values = _benjamini_hochberg(
+        [
+            float(row["train_p_value"])
+            if isinstance(row.get("train_p_value"), (int, float)) else None
+            for row in candidate_rows
+        ]
+    )
+    index_by_name = {str(row["instrument"]): row for row in index_rows}
+    for row, q_value in zip(candidate_rows, family_q_values):
+        discovery_significant = q_value is not None and q_value < 0.10
+        held_out_significant = (
+            isinstance(row.get("test_p_value"), (int, float))
+            and float(row["test_p_value"]) < 0.05
+        )
+        survived = discovery_significant and bool(row["same_direction"]) and held_out_significant
+        row["family_q_value"] = round(q_value, 4) if q_value is not None else None
+        row["discovery_significant"] = discovery_significant
+        row["held_out_significant"] = held_out_significant
+        row["survived"] = survived
+        index_row = index_by_name[str(row["instrument"])]
+        index_row["discovery_candidates"] = int(index_row["discovery_candidates"]) + int(discovery_significant)
+        index_row["same_direction"] = int(index_row["same_direction"]) + int(bool(row["same_direction"]))
+        index_row["survived"] = int(index_row["survived"]) + int(survived)
+
+    candidate_rows.sort(
+        key=lambda row: (
+            not bool(row["survived"]),
+            not bool(row["discovery_significant"]),
+            float(row["family_q_value"]) if row["family_q_value"] is not None else math.inf,
+            str(row["instrument"]),
+            str(row["period"]),
+        )
+    )
+    survived_count = sum(int(bool(row["survived"])) for row in candidate_rows)
+    discovery_count = sum(int(bool(row["discovery_significant"])) for row in candidate_rows)
+    return {
+        "ok": True,
+        "contract_version": SEASONALITY_BACKTEST_CONTRACT_VERSION,
+        "scope": "all_supported_indices",
+        "summary": {
+            "supported_indices": len(supported_indices),
+            "indices_tested": len(index_rows),
+            "indices_unavailable": len(unavailable),
+            "month_tests_evaluated": len(candidate_rows),
+            "discovery_candidates": discovery_count,
+            "same_direction": sum(int(bool(row["same_direction"])) for row in candidate_rows),
+            "survived": survived_count,
+            "approved_for_decision_support": 0,
+        },
+        "indices": index_rows,
+        "candidates": candidate_rows,
+        "unavailable": unavailable,
+        "registry_contract": {
+            "test_id": "all-index-month-seasonality-v1",
+            "name": "All-index month seasonality",
+            "hypothesis_version": "month-effect-half-split-v1",
+            "hypothesis": "A month-of-year excess return discovered in the first chronological half may retain its direction and significance in the later half across supported indices.",
+            "universe": f"All {len(supported_indices)} supported indices; {len(index_rows)} with sufficient local history",
+            "discovery_period": {"from": min((row["from_date"] for row in index_rows), default=None), "to": min((row["split_date"] for row in index_rows if row.get("split_date")), default=None)},
+            "held_out_period": {"from": min((row["split_date"] for row in index_rows if row.get("split_date")), default=None), "to": max((row["as_of_date"] for row in index_rows), default=None)},
+            "discovery_episodes": len(candidate_rows),
+            "held_out_episodes": len(candidate_rows),
+            "costs_included": "Not included — statistical effect validation, not an executable monthly portfolio",
+            "status": "blocked",
+            "status_label": "Research-only · global multiple-testing and held-out gates applied",
+        },
+        "method": "Each index is split chronologically in half. Month excess returns are discovered in the first half; Benjamini-Hochberg correction is applied across the entire index-by-month family; the later half must retain direction and p < 0.05.",
+        "limitations": [
+            "The test covers every supported index with sufficient stored history; unavailable indices remain visible.",
+            "Overlapping sector indices are not independent observations.",
+            "No investable portfolio, rebalance rule, turnover or transaction-cost path is simulated.",
+            "A surviving statistical effect would remain supporting evidence rather than a forecast or trade recommendation.",
+        ],
+    }
+
+
+def build_backtests_workspace(
+    entry_validation: dict[str, object],
+    *,
+    seasonality_backtest: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Register the first auditable, research-only chronological test.
+
+    This is an episode classification study rather than an executable trading
+    strategy. It deliberately reuses the outcome-blind Historical Regimes
+    entry snapshots so the Backtests page cannot introduce a second set of
+    factor definitions or validation splits.
+    """
+    snapshots = entry_validation.get("snapshots")
+    split = entry_validation.get("split")
+    trait_validation = entry_validation.get("trait_validation")
+    if not isinstance(snapshots, list) or not isinstance(split, dict) or not isinstance(trait_validation, list):
+        raise ValueError("backtest_entry_validation_unavailable")
+
+    def eligible_rows(split_name: str) -> list[dict[str, object]]:
+        rows: list[dict[str, object]] = []
+        for snapshot in snapshots:
+            if not isinstance(snapshot, dict) or snapshot.get("split") != split_name:
+                continue
+            outcome = snapshot.get("outcome")
+            windows = outcome.get("windows") if isinstance(outcome, dict) else None
+            outcome_252 = windows.get("252") if isinstance(windows, dict) else None
+            if isinstance(outcome_252, dict) and outcome_252.get("status") == "ready":
+                rows.append(snapshot)
+        return rows
+
+    discovery_rows = eligible_rows("discovery")
+    held_out_rows = eligible_rows("held_out")
+
+    def date_range(rows: list[dict[str, object]]) -> dict[str, str | None]:
+        dates = sorted(
+            str(row.get("snapshot_as_of"))
+            for row in rows
+            if isinstance(row.get("snapshot_as_of"), str) and row.get("snapshot_as_of")
+        )
+        return {"from": dates[0] if dates else None, "to": dates[-1] if dates else None}
+
+    trait_rows: list[dict[str, object]] = []
+    admitted_traits = 0
+    direction_matches = 0
+    for item in trait_validation:
+        if not isinstance(item, dict):
+            continue
+        discovery = item.get("discovery") if isinstance(item.get("discovery"), dict) else {}
+        held_out = item.get("held_out") if isinstance(item.get("held_out"), dict) else {}
+        held_out_episodes = int(held_out.get("episodes") or 0)
+        consistent = item.get("direction_consistent") is True
+        direction_matches += int(consistent)
+        passed = consistent and held_out_episodes >= 3
+        admitted_traits += int(passed)
+        trait_rows.append(
+            {
+                "key": item.get("key"),
+                "label": item.get("label"),
+                "discovery": discovery,
+                "held_out": held_out,
+                "direction_consistent": item.get("direction_consistent"),
+                "held_out_gate_passed": passed,
+                "status": "held_out_gate_passed" if passed else "blocked",
+                "reason": (
+                    "Direction persisted across at least three held-out episodes. Further stability and multiplicity checks are still required."
+                    if passed
+                    else str(item.get("reason") or "The held-out evidence gate was not met.")
+                ),
+            }
+        )
+
+    test_completed = bool(discovery_rows and held_out_rows and trait_rows)
+    instrument = str(entry_validation.get("instrument") or "Selected index")
+    discovery_range = date_range(discovery_rows)
+    held_out_range = date_range(held_out_rows)
+    registry = [
+        {
+            "test_id": "historical-regime-entry-traits-v1",
+            "name": "Historical-regime entry traits",
+            "hypothesis_version": "entry-traits-252d-v1",
+            "hypothesis": "Traits frozen at an episode entry date may separate materially different subsequent 252-session return and drawdown paths.",
+            "universe": f"{instrument} sourced historical episodes with ready point-in-time entry snapshots",
+            "discovery_period": discovery_range,
+            "held_out_period": held_out_range,
+            "discovery_episodes": len(discovery_rows),
+            "held_out_episodes": len(held_out_rows),
+            "outcome_horizon_sessions": int(split.get("outcome_horizon_sessions") or 252),
+            "costs_included": "Not applicable — episode classification study; no portfolio or trade simulation",
+            "status": "blocked" if admitted_traits == 0 else "research_gate_partial",
+            "status_label": (
+                "Exploratory · held-out sample gate not met"
+                if admitted_traits == 0
+                else "Exploratory · sample gate met; stability checks pending"
+            ),
+        }
+    ]
+    seasonality_payload = seasonality_backtest if isinstance(seasonality_backtest, dict) else None
+    seasonality_summary = (
+        seasonality_payload.get("summary")
+        if seasonality_payload and isinstance(seasonality_payload.get("summary"), dict)
+        else {}
+    )
+    seasonality_contract = seasonality_payload.get("registry_contract") if seasonality_payload else None
+    if isinstance(seasonality_contract, dict):
+        registry.append(seasonality_contract)
+    seasonality_completed = int(bool(seasonality_summary.get("indices_tested")))
+    seasonality_survived = int(seasonality_summary.get("survived") or 0)
+    return {
+        "ok": True,
+        "contract_version": BACKTESTS_CONTRACT_VERSION,
+        "source_contract_version": entry_validation.get("contract_version"),
+        "instrument": instrument,
+        "summary": {
+            "registered_contracts": len(registry),
+            "chronological_tests_completed": int(test_completed) + seasonality_completed,
+            "held_out_tests_passed": admitted_traits + seasonality_survived,
+            "approved_for_decision_support": 0,
+            "direction_consistent_traits": direction_matches,
+        },
+        "validation_split": {
+            **split,
+            "discovery_outcomes_ready": len(discovery_rows),
+            "held_out_outcomes_ready": len(held_out_rows),
+            "discovery_period": discovery_range,
+            "held_out_period": held_out_range,
+        },
+        "registry": registry,
+        "trait_results": trait_rows,
+        "seasonality": seasonality_payload,
+        "admission": "blocked",
+        "admission_reason": "No test is approved for decision support. Entry-date leakage is controlled, but the held-out sample is small and point-in-time breadth, membership, macro, flow, derivatives, earnings and valuation coverage remains incomplete.",
+        "limitations": [
+            "This is an episode-level classification study, not an investable portfolio backtest.",
+            "The same fixed 252-session outcome horizon is used for discovery and held-out episodes.",
+            "Direction consistency alone is not statistical significance and does not correct for multiple testing.",
+            "Transaction costs are not applicable because no trade path is simulated.",
+            "Failed and unmatched traits remain visible rather than being removed after outcomes are known.",
+        ],
+    }
+
+
 def calculate_macro_context_summary(rows: list[dict[str, object]]) -> dict[str, object]:
     metric_labels = {
         "usd_inr": "USD/INR",
@@ -4493,6 +5162,12 @@ def build_historical_regime_workspace(
         instrument=instrument,
         global_risk_rows=global_risk_rows,
     )
+    entry_snapshot_validation = build_historical_entry_snapshot_validation(
+        episode_stories,
+        index_candles,
+        instrument=instrument,
+        global_risk_rows=global_risk_rows,
+    )
     coverage_ladder = [
         {
             "period": "1875–1978",
@@ -4891,6 +5566,7 @@ def build_historical_regime_workspace(
         "official_history": official_history,
         "episode_stories": episode_stories,
         "episode_fingerprint_comparison": episode_fingerprint_comparison,
+        "entry_snapshot_validation": entry_snapshot_validation,
         "coverage_ladder": coverage_ladder,
         "story_eras": story_eras,
         "story_method": [
@@ -8675,6 +9351,461 @@ def resolve_portfolio_amfi_scheme(company_name: str) -> dict[str, object] | None
     return None
 
 
+def _mutual_fund_headers_and_rows(
+    raw_rows: list[list[object]],
+) -> tuple[list[str], list[dict[str, object]]]:
+    """Read a fund-list or underlying-holdings table from a worksheet matrix."""
+    def key(value: object) -> str:
+        return re.sub(r"[^a-z0-9]", "", str(value).lower())
+
+    def score(row: list[object]) -> int:
+        keys = [key(cell) for cell in row if str(cell).strip()]
+        scheme = any(any(token in item for token in ("scheme", "fundname", "mutualfund")) for item in keys)
+        security = any(any(token in item for token in ("security", "holding", "stock", "company")) for item in keys)
+        measure = any(any(token in item for token in ("weight", "allocation", "currentvalue", "marketvalue", "invested")) for item in keys)
+        return (12 if scheme else 0) + (4 if security else 0) + (10 if measure else 0)
+
+    candidates = [(score(row), index) for index, row in enumerate(raw_rows[:25])]
+    best_score, first = max(candidates, default=(0, -1))
+    if first < 0 or best_score < 22:
+        raise ValueError("mutual_fund_columns_not_recognized")
+    headers = [str(cell).strip() for cell in raw_rows[first]]
+    while headers and not headers[-1]:
+        headers.pop()
+    normalized = [key(header) for header in headers]
+    if (
+        not headers
+        or len(headers) > MAX_PORTFOLIO_COLUMNS
+        or any(not header for header in headers)
+        or len(set(normalized)) != len(normalized)
+    ):
+        raise ValueError("invalid_mutual_fund_headers")
+    rows: list[dict[str, object]] = []
+    for raw in raw_rows[first + 1:]:
+        values = list(raw[:len(headers)])
+        values.extend([""] * (len(headers) - len(values)))
+        if not any(str(value).strip() for value in values):
+            continue
+        rows.append({header: value for header, value in zip(headers, values)})
+        if len(rows) > MAX_PORTFOLIO_ROWS:
+            raise ValueError("mutual_fund_file_too_many_rows")
+    if not rows:
+        raise ValueError("mutual_fund_file_empty")
+    return headers, rows
+
+
+def _xlsx_sheet_matrices(payload: bytes) -> list[tuple[str, list[list[object]]]]:
+    """Return bounded worksheet matrices without executing workbook formulas or macros."""
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(payload))
+    except (zipfile.BadZipFile, OSError) as error:
+        raise ValueError("invalid_mutual_fund_xlsx") from error
+    with archive:
+        members = archive.infolist()
+        if len(members) > 500 or sum(item.file_size for item in members) > 50 * 1024 * 1024:
+            raise ValueError("mutual_fund_xlsx_too_large")
+        names = {item.filename for item in members}
+        try:
+            workbook = ET.fromstring(archive.read("xl/workbook.xml"))
+            relationships = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+        except (ET.ParseError, KeyError) as error:
+            raise ValueError("invalid_mutual_fund_xlsx") from error
+        relationship_targets = {
+            item.attrib.get("Id", ""): item.attrib.get("Target", "")
+            for item in relationships
+        }
+        shared_strings: list[str] = []
+        if "xl/sharedStrings.xml" in names:
+            try:
+                shared_root = ET.fromstring(archive.read("xl/sharedStrings.xml"))
+                shared_strings = ["".join(node.itertext()) for node in shared_root.findall(".//{*}si")]
+            except ET.ParseError as error:
+                raise ValueError("invalid_mutual_fund_xlsx") from error
+        result: list[tuple[str, list[list[object]]]] = []
+        for sheet in workbook.findall(".//{*}sheet"):
+            relationship_id = sheet.attrib.get(
+                "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id", ""
+            )
+            target = relationship_targets.get(relationship_id, "").lstrip("/")
+            sheet_path = target if target.startswith("xl/") else f"xl/{target}"
+            if ".." in Path(sheet_path).parts or sheet_path not in names:
+                raise ValueError("invalid_mutual_fund_xlsx")
+            try:
+                worksheet = ET.fromstring(archive.read(sheet_path))
+            except (ET.ParseError, KeyError) as error:
+                raise ValueError("invalid_mutual_fund_xlsx") from error
+            matrix: list[list[object]] = []
+            for row_node in worksheet.findall(".//{*}sheetData/{*}row"):
+                row: list[object] = []
+                for cell in row_node.findall("{*}c"):
+                    column = _excel_column_index(cell.attrib.get("r", ""))
+                    if column >= MAX_PORTFOLIO_COLUMNS:
+                        raise ValueError("mutual_fund_file_too_many_columns")
+                    row.extend([""] * (column + 1 - len(row)))
+                    cell_type = cell.attrib.get("t", "")
+                    value_node = cell.find("{*}v")
+                    if cell_type == "inlineStr":
+                        inline = cell.find("{*}is")
+                        value: object = "" if inline is None else "".join(inline.itertext())
+                    else:
+                        raw_value = "" if value_node is None else (value_node.text or "")
+                        if cell_type == "s":
+                            try:
+                                value = shared_strings[int(raw_value)]
+                            except (ValueError, IndexError) as error:
+                                raise ValueError("invalid_mutual_fund_xlsx") from error
+                        elif cell_type in {"str", "b", "e"}:
+                            value = raw_value
+                        else:
+                            try:
+                                number = float(raw_value)
+                                value = int(number) if number.is_integer() else number
+                            except ValueError:
+                                value = raw_value
+                    row[column] = value
+                matrix.append(row)
+                if len(matrix) > MAX_PORTFOLIO_ROWS + 25:
+                    raise ValueError("mutual_fund_file_too_many_rows")
+            result.append((sheet.attrib.get("name") or f"Sheet {len(result) + 1}", matrix))
+        if not result:
+            raise ValueError("invalid_mutual_fund_xlsx")
+        return result
+
+
+def _infer_mutual_fund_mapping(headers: list[str], *, underlying: bool = False) -> dict[str, str | None]:
+    normalized = {header: re.sub(r"[^a-z0-9]", "", header.lower()) for header in headers}
+    aliases = {
+        "scheme": ("scheme", "schemename", "fund", "fundname", "mutualfund", "instrument", "securityname"),
+        "category": ("category", "fundcategory", "schemecategory", "assetclass", "classification"),
+        "weight": ("weight", "weightpct", "weightpercentage", "allocation", "allocationpct", "portfolioallocation"),
+        "current_value": ("currentvalue", "marketvalue", "presentvalue", "curvalue", "valuation"),
+        "invested_value": ("investedamount", "investedvalue", "investmentamount", "costvalue", "buyvalue"),
+        "security": ("security", "securityname", "holding", "holdingname", "stock", "stockname", "company", "companyname", "issuer"),
+    }
+
+    def match(field: str) -> str | None:
+        exact = next((header for header, item in normalized.items() if item in aliases[field]), None)
+        if exact:
+            return exact
+        return next(
+            (
+                header for header, item in normalized.items()
+                if any(len(alias) >= 5 and (item.startswith(alias) or item.endswith(alias)) for alias in aliases[field])
+            ),
+            None,
+        )
+
+    mapping = {field: match(field) for field in aliases}
+    if not mapping["scheme"]:
+        raise ValueError("mutual_fund_scheme_column_required")
+    if underlying:
+        if not mapping["security"] or not mapping["weight"]:
+            raise ValueError("mutual_fund_underlying_columns_required")
+    elif not any(mapping[field] for field in ("weight", "current_value", "invested_value")):
+        raise ValueError("mutual_fund_weight_or_value_required")
+    return mapping
+
+
+def parse_mutual_fund_file(file_name: str, payload: bytes) -> dict[str, object]:
+    """Parse a fund list and optional look-through holdings sheet without persistence."""
+    if not payload or len(payload) > MAX_PORTFOLIO_FILE_BYTES:
+        raise ValueError("invalid_mutual_fund_file_size")
+    suffix = Path(file_name).suffix.lower()
+    if suffix == ".csv":
+        try:
+            text = payload.decode("utf-8-sig")
+        except UnicodeDecodeError as error:
+            raise ValueError("mutual_fund_csv_not_utf8") from error
+        try:
+            dialect = csv.Sniffer().sniff(text[:4096], delimiters=",\t;")
+        except csv.Error:
+            dialect = csv.excel
+        headers, rows = _mutual_fund_headers_and_rows(
+            [list(row) for row in csv.reader(io.StringIO(text), dialect)]
+        )
+        mapping = _infer_mutual_fund_mapping(headers)
+        underlying_rows: list[dict[str, object]] = []
+        underlying_mapping: dict[str, str | None] | None = None
+        sheet_name = None
+        underlying_sheet_name = None
+    elif suffix == ".xlsx":
+        parsed_sheets: list[tuple[str, list[str], list[dict[str, object]], dict[str, str | None]]] = []
+        for name, matrix in _xlsx_sheet_matrices(payload):
+            try:
+                headers, candidate_rows = _mutual_fund_headers_and_rows(matrix)
+                candidate_mapping = _infer_mutual_fund_mapping(headers)
+            except ValueError:
+                continue
+            parsed_sheets.append((name, headers, candidate_rows, candidate_mapping))
+        if not parsed_sheets:
+            raise ValueError("mutual_fund_columns_not_recognized")
+        fund_sheet = next(
+            (item for item in parsed_sheets if not item[3].get("security") or not item[3].get("weight")),
+            parsed_sheets[0],
+        )
+        sheet_name, headers, rows, mapping = fund_sheet
+        underlying_rows = []
+        underlying_mapping = None
+        underlying_sheet_name = None
+        for name, candidate_headers, candidate_rows, _candidate_mapping in parsed_sheets:
+            if name == sheet_name:
+                continue
+            try:
+                candidate_underlying_mapping = _infer_mutual_fund_mapping(candidate_headers, underlying=True)
+            except ValueError:
+                continue
+            underlying_rows = candidate_rows
+            underlying_mapping = candidate_underlying_mapping
+            underlying_sheet_name = name
+            break
+    else:
+        raise ValueError("unsupported_mutual_fund_file")
+    return {
+        "file_name": file_name,
+        "sheet_name": sheet_name,
+        "headers": headers,
+        "rows": rows,
+        "mapping": mapping,
+        "underlying_sheet_name": underlying_sheet_name,
+        "underlying_rows": underlying_rows,
+        "underlying_mapping": underlying_mapping,
+    }
+
+
+def _infer_mutual_fund_category(scheme_name: str) -> tuple[str, str]:
+    reviewed = resolve_portfolio_amfi_scheme(scheme_name)
+    if reviewed is not None:
+        category = MUTUAL_FUND_REVIEWED_CATEGORIES.get(str(reviewed["scheme_code"]))
+        if category:
+            return category, "reviewed_exact_scheme"
+    text = re.sub(r"[^a-z0-9]+", " ", scheme_name.lower()).strip()
+    rules = (
+        (("gold", "silver", "commodity"), "Commodity"),
+        (("multi asset",), "Hybrid - Multi Asset Allocation"),
+        (("balanced advantage", "dynamic asset allocation"), "Hybrid - Dynamic Asset Allocation"),
+        (("aggressive hybrid", "conservative hybrid", "equity savings", "hybrid"), "Hybrid"),
+        (("short term", "short duration"), "Debt - Short Duration"),
+        (("liquid", "overnight", "money market"), "Debt - Liquid / Money Market"),
+        (("gilt", "government securities", "government bond"), "Debt - Government Securities"),
+        (("corporate bond", "credit risk", "debt", "bond"), "Debt"),
+        (("large cap", "largecap", "bluechip"), "Equity - Large Cap"),
+        (("mid cap", "midcap"), "Equity - Mid Cap"),
+        (("small cap", "smallcap"), "Equity - Small Cap"),
+        (("flexi cap", "flexicap"), "Equity - Flexi Cap"),
+        (("multi cap", "multicap"), "Equity - Multi Cap"),
+        (("elss", "tax saver"), "Equity - ELSS"),
+        (("index fund", "index"), "Equity - Index"),
+        (("international", "global", "u s ", "usa", "overseas", "fund of funds", "fof"), "International Equity"),
+        (("equity", "opportunities", "focused", "value", "contra"), "Equity"),
+    )
+    for terms, category in rules:
+        if any(term in text for term in terms):
+            return category, "name_inferred"
+    return "Unclassified", "unavailable"
+
+
+def build_mutual_fund_holdings_analysis(
+    rows: list[dict[str, object]],
+    mapping: dict[str, object],
+    *,
+    underlying_rows: list[dict[str, object]] | None = None,
+    underlying_mapping: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Build category, concentration and optional look-through overlap analysis."""
+    if not rows or len(rows) > MAX_PORTFOLIO_ROWS:
+        raise ValueError("invalid_mutual_fund_rows")
+    scheme_column = mapping.get("scheme")
+    if not isinstance(scheme_column, str):
+        raise ValueError("mutual_fund_scheme_mapping_required")
+    basis_candidates = [
+        field for field in ("current_value", "invested_value", "weight")
+        if isinstance(mapping.get(field), str)
+    ]
+    basis_field = max(
+        basis_candidates,
+        key=lambda field: sum(
+            (_portfolio_number(row.get(str(mapping[field]))) or 0) > 0
+            for row in rows
+        ),
+        default=None,
+    )
+    if basis_field is None:
+        raise ValueError("mutual_fund_weight_or_value_required")
+    basis_column = str(mapping[basis_field])
+    category_column = mapping.get("category") if isinstance(mapping.get("category"), str) else None
+    prepared_by_key: dict[str, dict[str, object]] = {}
+    issues: list[dict[str, object]] = []
+    raw_values: list[float] = []
+    source_rows: list[tuple[int, str, str, float, str, str]] = []
+    for row_number, row in enumerate(rows, start=2):
+        scheme = str(row.get(scheme_column) or "").strip()
+        value = _portfolio_number(row.get(basis_column))
+        if not scheme:
+            issues.append({"row_number": row_number, "scheme": "", "reason": "missing_scheme"})
+            continue
+        if value is None or value <= 0:
+            issues.append({"row_number": row_number, "scheme": scheme, "reason": "invalid_weight_or_value"})
+            continue
+        uploaded_category = str(row.get(str(category_column)) or "").strip() if category_column else ""
+        if uploaded_category:
+            category, category_source = uploaded_category, "uploaded"
+        else:
+            category, category_source = _infer_mutual_fund_category(scheme)
+        key = re.sub(r"[^a-z0-9]", "", scheme.lower())
+        raw_values.append(value)
+        source_rows.append((row_number, key, scheme, value, category, category_source))
+    if not source_rows:
+        raise ValueError("no_valid_mutual_fund_rows")
+    weight_scale = 100.0 if basis_field == "weight" and sum(raw_values) <= 1.5 else 1.0
+    scaled_total = sum(value * weight_scale for value in raw_values)
+    if scaled_total <= 0:
+        raise ValueError("invalid_mutual_fund_total")
+    for _row_number, key, scheme, value, category, category_source in source_rows:
+        normalized_weight = (value * weight_scale / scaled_total) * 100.0
+        existing = prepared_by_key.get(key)
+        if existing:
+            existing["weight_pct"] = float(existing["weight_pct"]) + normalized_weight
+            existing["source_rows"] = int(existing["source_rows"]) + 1
+            if existing["category"] != category:
+                issues.append({"row_number": _row_number, "scheme": scheme, "reason": "duplicate_scheme_category_conflict"})
+            continue
+        prepared_by_key[key] = {
+            "scheme": scheme,
+            "scheme_key": key,
+            "category": category,
+            "category_source": category_source,
+            "weight_pct": normalized_weight,
+            "source_rows": 1,
+        }
+    funds = sorted(prepared_by_key.values(), key=lambda item: (-float(item["weight_pct"]), str(item["scheme"])))
+    category_totals: dict[str, float] = defaultdict(float)
+    for fund in funds:
+        category_totals[str(fund["category"])] += float(fund["weight_pct"])
+    categories = [
+        {"category": category, "weight_pct": round(weight, 2), "funds": sum(fund["category"] == category for fund in funds)}
+        for category, weight in sorted(category_totals.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+    underlying_by_fund: dict[str, dict[str, float]] = defaultdict(dict)
+    underlying_labels: dict[str, str] = {}
+    underlying_coverage: dict[str, float] = defaultdict(float)
+    if underlying_rows and underlying_mapping:
+        underlying_scheme_column = underlying_mapping.get("scheme")
+        security_column = underlying_mapping.get("security")
+        underlying_weight_column = underlying_mapping.get("weight")
+        if all(isinstance(item, str) for item in (underlying_scheme_column, security_column, underlying_weight_column)):
+            parsed_underlying: list[tuple[int, str, str, float]] = []
+            by_fund_totals: dict[str, float] = defaultdict(float)
+            for row_number, row in enumerate(underlying_rows, start=2):
+                scheme = str(row.get(str(underlying_scheme_column)) or "").strip()
+                security = str(row.get(str(security_column)) or "").strip()
+                weight = _portfolio_number(row.get(str(underlying_weight_column)))
+                fund_key = re.sub(r"[^a-z0-9]", "", scheme.lower())
+                security_key = re.sub(r"[^a-z0-9]", "", security.lower())
+                if not fund_key or fund_key not in prepared_by_key:
+                    issues.append({"row_number": row_number, "scheme": scheme, "reason": "underlying_scheme_not_in_fund_list"})
+                    continue
+                if not security_key or weight is None or weight <= 0:
+                    issues.append({"row_number": row_number, "scheme": scheme, "reason": "invalid_underlying_holding"})
+                    continue
+                parsed_underlying.append((row_number, fund_key, security_key, weight))
+                underlying_labels[security_key] = security
+                by_fund_totals[fund_key] += weight
+            scales = {key: (100.0 if total <= 1.5 else 1.0) for key, total in by_fund_totals.items()}
+            for row_number, fund_key, security_key, weight in parsed_underlying:
+                scaled = weight * scales[fund_key]
+                if underlying_coverage[fund_key] + scaled > 105.0:
+                    issues.append({"row_number": row_number, "scheme": prepared_by_key[fund_key]["scheme"], "reason": "underlying_weights_exceed_100_pct"})
+                    continue
+                underlying_by_fund[fund_key][security_key] = underlying_by_fund[fund_key].get(security_key, 0.0) + scaled
+                underlying_coverage[fund_key] += scaled
+
+    overlaps: list[dict[str, object]] = []
+    fund_keys_with_holdings = [fund["scheme_key"] for fund in funds if underlying_by_fund.get(str(fund["scheme_key"]))]
+    for left_index, left_key in enumerate(fund_keys_with_holdings):
+        for right_key in fund_keys_with_holdings[left_index + 1:]:
+            left = underlying_by_fund[left_key]
+            right = underlying_by_fund[right_key]
+            common = set(left).intersection(right)
+            overlap = sum(min(left[item], right[item]) for item in common)
+            overlaps.append({
+                "fund_a": prepared_by_key[left_key]["scheme"],
+                "fund_b": prepared_by_key[right_key]["scheme"],
+                "overlap_pct": round(overlap, 2),
+                "common_holdings": len(common),
+                "coverage_a_pct": round(underlying_coverage[left_key], 2),
+                "coverage_b_pct": round(underlying_coverage[right_key], 2),
+                "status": "complete" if min(underlying_coverage[left_key], underlying_coverage[right_key]) >= 95 else "partial_lower_bound",
+            })
+    overlaps.sort(key=lambda item: (-float(item["overlap_pct"]), str(item["fund_a"]), str(item["fund_b"])))
+
+    lookthrough: dict[str, float] = defaultdict(float)
+    for fund in funds:
+        fund_key = str(fund["scheme_key"])
+        for security_key, security_weight in underlying_by_fund.get(fund_key, {}).items():
+            lookthrough[security_key] += float(fund["weight_pct"]) * security_weight / 100.0
+    top_underlying = [
+        {"security": underlying_labels.get(key, key), "portfolio_weight_pct": round(weight, 2)}
+        for key, weight in sorted(lookthrough.items(), key=lambda item: (-item[1], item[0]))[:20]
+    ]
+
+    fund_hhi = sum((float(fund["weight_pct"]) / 100.0) ** 2 for fund in funds)
+    category_hhi = sum((weight / 100.0) ** 2 for weight in category_totals.values())
+    largest_fund = max((float(fund["weight_pct"]) for fund in funds), default=0.0)
+    largest_category = max(category_totals.values(), default=0.0)
+    maximum_overlap = max((float(item["overlap_pct"]) for item in overlaps), default=None)
+    suggestions: list[dict[str, str]] = []
+    if largest_fund > 40:
+        suggestions.append({"priority": "Review", "title": "Single-fund concentration", "detail": f"The largest fund is {largest_fund:.2f}% of the portfolio. Check whether that concentration is intentional and consistent with the fund's mandate."})
+    if largest_category > 70:
+        suggestions.append({"priority": "Review", "title": "Category concentration", "detail": f"The largest category is {largest_category:.2f}% of the portfolio. Consider whether another asset class is needed for the intended risk profile."})
+    if maximum_overlap is not None and maximum_overlap >= 50:
+        suggestions.append({"priority": "Review", "title": "High holdings overlap", "detail": f"The highest observed pair overlap is {maximum_overlap:.2f}%. Review whether both funds add distinct exposure after fees and mandate differences."})
+    if len(category_totals) <= 1:
+        suggestions.append({"priority": "Review", "title": "Limited category diversification", "detail": "All classified weight sits in one category. Confirm that this matches the portfolio's time horizon and risk capacity."})
+    if any(fund["category"] == "Unclassified" for fund in funds):
+        suggestions.append({"priority": "Data", "title": "Complete missing categories", "detail": "One or more schemes could not be classified confidently. Add a Category column before relying on category diversification."})
+    if not overlaps:
+        suggestions.append({"priority": "Data", "title": "Add underlying holdings", "detail": "Pairwise overlap is unavailable. Add an Underlying Holdings sheet with Scheme, Security and Weight % columns."})
+    if len(funds) > 8:
+        suggestions.append({"priority": "Review", "title": "Portfolio complexity", "detail": f"The portfolio contains {len(funds)} funds. Review whether every fund has a distinct role and whether overlap makes the structure harder to monitor."})
+    if not suggestions:
+        suggestions.append({"priority": "Monitor", "title": "No rule-based concentration flag", "detail": "No configured concentration or overlap threshold was crossed. Continue reviewing mandate, costs, taxes and changes in underlying holdings."})
+
+    for fund in funds:
+        fund["weight_pct"] = round(float(fund["weight_pct"]), 2)
+        key = str(fund.pop("scheme_key"))
+        fund["underlying_coverage_pct"] = round(underlying_coverage.get(key, 0.0), 2) if key in underlying_coverage else None
+    return {
+        "ok": True,
+        "contract_version": "mutual-fund-holdings-analysis-v1",
+        "weight_basis": basis_field,
+        "funds": funds,
+        "categories": categories,
+        "overlaps": overlaps,
+        "top_underlying_holdings": top_underlying,
+        "diversification": {
+            "fund_count": len(funds),
+            "category_count": len(category_totals),
+            "largest_fund_weight_pct": round(largest_fund, 2),
+            "largest_category_weight_pct": round(largest_category, 2),
+            "fund_hhi": round(fund_hhi, 4),
+            "effective_fund_count": round(1.0 / fund_hhi, 2) if fund_hhi else None,
+            "category_hhi": round(category_hhi, 4),
+            "maximum_overlap_pct": round(maximum_overlap, 2) if maximum_overlap is not None else None,
+            "funds_with_underlying_holdings": len(fund_keys_with_holdings),
+        },
+        "suggestions": suggestions,
+        "issues": issues,
+        "limitations": [
+            "Category labels supplied in the upload take precedence; otherwise only reviewed exact mappings and transparent name rules are used.",
+            "Overlap is calculated only from uploaded underlying security weights and is a lower bound when either fund has less than 95% holdings coverage.",
+            "The analysis does not include expense ratios, exit loads, taxes, investment horizon, risk capacity or transaction-level cash flows.",
+            "Improvement suggestions are deterministic review prompts, not personalized investment recommendations or buy/sell instructions.",
+        ],
+    }
+
+
 def parse_amfi_nav_history_text(
     text: str,
     requested_scheme_codes: set[str],
@@ -10128,6 +11259,9 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         if path == "/api/historical-regimes":
             self._send_historical_regimes(urllib.parse.urlsplit(self.path).query)
             return
+        if path == "/api/backtests":
+            self._send_backtests(urllib.parse.urlsplit(self.path).query)
+            return
         super().do_GET()
 
     def _send_domestic_sentiment_core(self) -> None:
@@ -10487,6 +11621,43 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                     instrument=instrument,
                     official_history_rows=store.load_historical_series_observations(),
                     global_risk_rows=store.load_global_risk_observations(),
+                ),
+            )
+        except ValueError as error:
+            self._send_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"ok": False, "reason": str(error)},
+            )
+
+    def _send_backtests(self, query: str) -> None:
+        try:
+            parameters = urllib.parse.parse_qs(query, keep_blank_values=True)
+            instrument = parameters.get("index", ["Nifty 50"])[0]
+            if instrument not in SEASONALITY_INDICES:
+                self._send_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"ok": False, "reason": "invalid_backtest_selection"},
+                )
+                return
+            store = _get_eod_store()
+            historical_workspace = build_historical_regime_workspace(
+                store.load_candles(kind="index", display_name=instrument),
+                instrument=instrument,
+                official_history_rows=store.load_historical_series_observations(),
+                global_risk_rows=store.load_global_risk_observations(),
+            )
+            seasonality_backtest = build_seasonality_backtest_workspace(
+                {
+                    index_name: store.load_candles(kind="index", display_name=index_name)
+                    for index_name in SEASONALITY_INDICES
+                },
+                today=datetime.now(INDIA_TIMEZONE).date(),
+            )
+            self._send_json(
+                HTTPStatus.OK,
+                build_backtests_workspace(
+                    historical_workspace["entry_snapshot_validation"],
+                    seasonality_backtest=seasonality_backtest,
                 ),
             )
         except ValueError as error:
@@ -11319,16 +12490,20 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 )
                 history = [(row["date"], float(row["close"])) for row in candles]
                 if display_name == "India VIX":
+                    coverage = store.coverage(kind="index", display_name=display_name)
+                    new_candles = candles_after_last_stored_session(
+                        candles, coverage["last_session"]
+                    )
                     try:
                         store.append_candles(
                             kind="index",
                             display_name=display_name,
                             provider_token=tokens[display_name],
-                            candles=candles,
+                            candles=new_candles,
                             retrieved_at=datetime.now(timezone.utc).isoformat(),
                         )
                     except CandleConflictError as error:
-                        raise ValueError("stored_candle_conflict") from error
+                        raise ValueError(str(error)) from error
                 rows.append(calculate_index_ytd(display_name, history))
         except ValueError as error:
             reason = str(error)
@@ -12440,6 +13615,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         )
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler name
+        if self.path == "/api/mutual-funds/analyze":
+            payload = self._read_json_payload(MAX_PORTFOLIO_IMPORT_BYTES)
+            if payload is not None:
+                self._send_mutual_fund_analysis(payload)
+            return
+
         if self.path == "/api/portfolio/preview":
             payload = self._read_json_payload(MAX_PORTFOLIO_IMPORT_BYTES)
             if payload is not None:
@@ -12861,6 +14042,40 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": reason})
             return
         self._send_json(HTTPStatus.OK, preview)
+
+    def _send_mutual_fund_analysis(self, payload: dict[str, object]) -> None:
+        file_name = payload.get("file_name")
+        encoded = payload.get("content_base64")
+        if (
+            not isinstance(file_name, str)
+            or not re.fullmatch(r"[A-Za-z0-9._ ()&-]{1,128}\.(?:csv|xlsx)", file_name, re.IGNORECASE)
+            or not isinstance(encoded, str)
+        ):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_mutual_fund_file"})
+            return
+        try:
+            raw = base64.b64decode(encoded, validate=True)
+            parsed = parse_mutual_fund_file(file_name, raw)
+            result = build_mutual_fund_holdings_analysis(
+                parsed["rows"],
+                parsed["mapping"],
+                underlying_rows=parsed["underlying_rows"],
+                underlying_mapping=parsed["underlying_mapping"],
+            )
+        except (ValueError, binascii.Error) as error:
+            reason = str(error) if isinstance(error, ValueError) else "invalid_mutual_fund_file"
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": reason})
+            return
+        self._send_json(
+            HTTPStatus.OK,
+            {
+                **result,
+                "file_name": parsed["file_name"],
+                "sheet_name": parsed["sheet_name"],
+                "underlying_sheet_name": parsed["underlying_sheet_name"],
+                "persistence": "browser_memory_only",
+            },
+        )
 
     def _send_portfolio_analysis(self, payload: dict[str, object]) -> None:
         rows = payload.get("rows")

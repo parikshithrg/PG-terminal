@@ -634,6 +634,18 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   retrospective full-window descriptors and are explicitly blocked from the
   current-regime classifier until entry-date snapshots and held-out validation
   exist.
+- `historical-regimes-v10` creates the first outcome-blind entry information
+  set for every sourced episode. Price trend and volatility plus aligned global
+  market observations use only dates available by the episode start; forward
+  20/60/120/252-session outcomes are stored separately. The episode sequence is
+  split chronologically into the earliest 70% of eligible entry snapshots for
+  discovery and the latest 30% for held-out testing; documentary-only episodes
+  stay outside the validation sample. Repeated discovery traits are compared with later matches, but
+  classifier admission stays blocked until there are at least three held-out
+  matches, multiplicity/stability checks, effective-dated membership, and
+  release-dated unrevised macro, credit, flow, derivatives, earnings and
+  valuation histories. Current RBI Handbook vintages continue to support the
+  retrospective story only and never enter an entry snapshot.
 - Market cycles and economic cycles are deliberately separate. Recession and
   depression sections remain visibly unclassified until a versioned definition
   and authoritative point-in-time macro history are available; an equity
@@ -643,11 +655,100 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   held-out outcome/analogue testing. Human emotion is represented only through
   measurable hypotheses such as participation, crowding, volatility, flows,
   leadership and recovery—not asserted as directly observed fact.
-- Next, add official credit and fuller balance-of-payments histories, create
-  entry-date snapshots that use only evidence available at each episode start,
-  and split the episode sequence chronologically into discovery and held-out
-  validation sets. Only traits that survive coverage gates and later unseen
-  regimes may be proposed for the current classifier.
+- Next, add official credit and fuller balance-of-payments histories with their
+  original release dates and revisions, populate effective-dated membership,
+  and expand the held-out sample. Only traits that survive coverage gates,
+  multiplicity/stability checks and later unseen regimes may be proposed for
+  the current classifier.
+
+### Backtests workspace foundation — complete
+
+- Added a dedicated **Backtests** sidebar workspace and research registry.
+- The page freezes the intended contract: pre-declared hypothesis, point-in-time
+  information set, implementation frictions, chronological validation, and a
+  result narrative that includes failures and regime dependence.
+- The initial queue covers historical-regime transitions, breadth/relative
+  strength, all-index seasonality, earnings/event reactions, and portfolio
+  overlays. Every family remains visibly blocked until its source and validation
+  contract is auditable; no strategy result or approval is implied.
+- The registry starts empty by design. Discovery and held-out results, costs,
+  failed variants, multiple-testing controls and benchmark choice must be
+  reviewable before a test can move beyond exploration.
+
+### Backtests v1 · historical-regime entry traits — complete
+
+- Registered the first research contract using the existing
+  `historical-entry-validation-v1` information set; the Backtests page does not
+  redefine entry factors, episode boundaries or the chronological 70/30 split.
+- The test compares repeated traits formed only from entry-date evidence with
+  separately stored 252-session return and drawdown outcomes. Discovery and
+  held-out periods, episode counts and unmatched or failed traits remain
+  visible.
+- A trait needs the same directional outcome across at least three held-out
+  episode matches before its sample gate can pass. Even a passed sample gate
+  remains research-only until stability and multiple-testing checks plus fuller
+  point-in-time factor coverage exist.
+- The registry explicitly marks transaction costs as not applicable because
+  this is an episode-classification study, not a simulated portfolio or trade
+  strategy. No test is approved for decision support.
+
+### Backtests v2 · all-index month seasonality — complete
+
+- Registered a second research contract covering month-of-year effects across
+  every supported index with sufficient stored history; unavailable indices
+  remain visible instead of silently shrinking the universe.
+- Every index history is split chronologically in half. Discovery-month excess
+  returns are tested against the other months, then Benjamini-Hochberg
+  correction is applied across the complete index-by-month family—not one
+  index at a time.
+- The later half is not used to select a month. A corrected discovery candidate
+  survives only when the held-out excess retains its direction and independently
+  has p < 0.05. Failed directions and failed held-out significance remain in the
+  payload and the interface reports a valid negative result when nothing
+  survives.
+- This is statistical effect validation, not a monthly trading simulation.
+  Overlapping sector indices are not independent; no turnover, costs or
+  investable portfolio are claimed, and no result is approved for decision
+  support. Weekday and turn-of-month families remain future contracts.
+
+### Mutual Funds Comparer foundation — complete
+
+- Added a dedicated **Mutual Funds Comparer** workspace to the sidebar.
+- The page freezes an exact-scheme contract: AMC, plan, option and AMFI scheme
+  code must match; a regular plan, IDCW option or similarly named scheme is
+  never substituted for the requested Direct-Growth series.
+- The five reviewed AMFI mappings already used by Portfolio Analysis are shown
+  as the audited starting set, with their portfolio-only readiness clearly
+  separated from comparison, ranking or recommendation.
+- The planned report covers aligned trailing/CAGR returns, volatility, maximum
+  drawdown, Sharpe, Sortino and benchmark excess. Category-appropriate
+  benchmarks are required, and unlike fund categories will not be placed on one
+  leaderboard.
+- Broad AMFI catalogue discovery, category metadata and benchmark mapping are
+  intentionally still pending. NAV history alone does not establish expense
+  history, historical holdings, exit loads, taxes or investor cash flows.
+
+### Mutual-fund holdings analysis v1 — complete
+
+- Added one-step local CSV/XLSX upload to the Mutual Funds Comparer. The first
+  table needs a fund or scheme name plus current value, invested amount or
+  portfolio weight; weights are normalized across valid rows.
+- Category allocation uses an uploaded category first, then the five reviewed
+  exact AMFI scheme mappings, then transparent name-based broad-category rules.
+  Unresolved schemes remain visibly unclassified.
+- XLSX files may include an optional `Underlying Holdings` sheet with Scheme,
+  Security and Weight %. Pairwise overlap is calculated only from these actual
+  uploaded security weights. Results with less than 95% coverage on either fund
+  are labelled as partial lower bounds.
+- Added fund allocation, category allocation, concentration HHI, effective fund
+  count, largest fund/category weights, pairwise overlap and portfolio
+  look-through exposure. Validation issues remain visible.
+- Added deterministic review prompts for single-fund/category concentration,
+  high overlap, missing classifications, absent holdings detail and excessive
+  fund count. These prompts are not product recommendations or buy/sell advice.
+- Uploads remain in request/browser memory and are not written to the database.
+  Expense ratios, exit loads, taxes, investor risk capacity and transaction
+  cash flows are outside this slice.
 
 ## Validation work for observed seasonality
 

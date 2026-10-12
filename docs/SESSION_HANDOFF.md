@@ -1,6 +1,6 @@
 # Session handoff
 
-Updated: 2026-10-06
+Updated: 2026-10-12
 
 ## Linux migration checkpoint — 2026-10-05
 
@@ -407,14 +407,55 @@ orders or position sizing.
   two episode windows. The contract marks every fingerprint as a retrospective
   full-window descriptor and blocks it from the live classifier until entry-date
   snapshots and held-out validation exist.
+- Added outcome-blind entry snapshots in `historical-regimes-v10`. Each sourced
+  episode freezes trailing price and aligned global-market evidence at its
+  entry date, keeps later 20/60/120/252-session outcomes in a separate record,
+  and exposes all unavailable categories instead of backfilling current
+  constituents or revised macro actuals. The earliest 70% of eligible entry
+  snapshots form discovery and the latest 30% remain held out; documentary-only
+  episodes stay outside the validation sample. Repeated discovery traits
+  can now be compared with later matches, but every trait remains blocked from
+  the live classifier pending larger held-out samples, stability/multiplicity
+  checks and fuller point-in-time source coverage.
+- Added a dedicated Backtests workspace to the sidebar. Its initial research
+  registry is intentionally empty and records the required hypothesis,
+  point-in-time data, friction, chronological validation and reporting
+  contracts. Historical-regime, breadth/relative-strength, seasonality,
+  earnings/event and portfolio-overlay families are queued but not presented as
+  completed or approved strategies.
+- Added `backtests-v1`, the first registered chronological research test. It
+  reuses Historical Regimes v10 entry snapshots and their fixed 70/30 split,
+  compares repeated discovery traits with later 252-session outcomes, and
+  exposes discovery/held-out periods, sample counts and blocked evidence gates
+  on the Backtests page. It is an episode-classification study rather than a
+  trade simulation; costs are therefore marked not applicable and no result is
+  approved for decision support.
+- Added `backtests-v2` for month seasonality across all supported indices. Each
+  history uses a chronological half split; discovery p-values are corrected
+  across the full index-by-month family before the held-out half is checked for
+  matching direction and independent significance. The page shows coverage,
+  per-index counts, corrected candidates and valid negative results. It remains
+  a statistical research contract rather than an executable portfolio test.
+- Added a Mutual Funds Comparer workspace foundation. It exposes the five exact
+  Direct-Growth AMFI mappings already reviewed for Portfolio Analysis, defines
+  aligned return/risk/benchmark comparison rules, and keeps broad scheme
+  discovery, category metadata and benchmark mapping visibly pending. It does
+  not rank unlike categories or present recommendations.
+- Extended Mutual Funds Comparer with local CSV/XLSX holdings upload. It now
+  reports fund categories, normalized allocation, concentration HHI, effective
+  fund count and rule-based portfolio review prompts. An optional `Underlying
+  Holdings` sheet (Scheme, Security, Weight %) enables pairwise overlap and
+  look-through exposure; overlap remains unavailable rather than inferred when
+  those security weights are absent. Uploaded data is not persisted.
 
 ## Next work
 
-1. Build entry-date, point-in-time Historical Regimes snapshots and a
-   chronological discovery/held-out validation split. Add official credit and
-   external-balance histories, and connect higher-frequency price paths where
-   genuinely available. Preserve releases, revisions, base changes, and honest
-   frequency; never synthesize missing daily values.
+1. Expand the Historical Regimes entry-date validation and Backtests contracts with
+   official credit and external-balance histories that retain release dates and
+   revisions, effective-dated membership, and higher-frequency price paths
+   where genuinely available. Preserve base changes and honest frequency;
+   never synthesize missing daily values or use revised actuals in an earlier
+   information set.
 2. Live-check the first full NIFTY 500 five-year retrieval after reconnecting
    Kite, including year switching, coverage counts, and reverse ranking order.
 3. Begin the queued Portfolio performance and Alpha Opportunities roadmap:

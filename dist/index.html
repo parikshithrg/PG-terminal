@@ -1413,9 +1413,11 @@
           <li><button class="nav-button" data-page="Seasonality Analysis" style="--item-color:#60a625"><span class="nav-icon"></span><span>Seasonality Analysis</span></button></li>
           <li><button class="nav-button" data-page="Earnings Analysis" style="--item-color:#c52d78"><span class="nav-icon"></span><span>Earnings Analysis</span></button></li>
           <li><button class="nav-button" data-page="Portfolio Analysis" style="--item-color:#8f3bd1"><span class="nav-icon"></span><span>Portfolio Analysis</span></button></li>
+          <li><button class="nav-button" data-page="Mutual Funds Comparer" style="--item-color:#6b57b8"><span class="nav-icon"></span><span>Mutual Funds Comparer</span></button></li>
           <li><button class="nav-button" data-page="Events Calendar" style="--item-color:#e6980b"><span class="nav-icon"></span><span>Events Calendar</span></button></li>
           <li><button class="nav-button" data-page="Stock Data YTD" style="--item-color:#0c94b7"><span class="nav-icon"></span><span>Stock Data YTD</span></button></li>
           <li><button class="nav-button" data-page="Historical Regimes" style="--item-color:#8b6f47"><span class="nav-icon"></span><span>Historical regimes</span></button></li>
+          <li><button class="nav-button" data-page="Backtests" style="--item-color:#405b78"><span class="nav-icon"></span><span>Backtests</span></button></li>
         </ul>
       </nav>
       <details class="sidebar-footer">
@@ -1819,7 +1821,7 @@
               <summary>Workspace status</summary>
               <div class="panel-list">
                 <div class="panel-row"><span>Interface</span><span>Frame ready</span></div>
-                <div class="panel-row"><span>Navigation</span><span>10 sections</span></div>
+                <div class="panel-row"><span>Navigation</span><span>11 sections</span></div>
                 <div class="panel-row"><span>External actions</span><span>Disabled</span></div>
               </div>
             </details>
@@ -2821,6 +2823,92 @@
           </div>
         </section>
 
+        <section id="mutualFundsComparerView" hidden aria-labelledby="mutualFundsComparerTitle">
+          <div class="page-tabs" aria-label="Mutual fund comparer views">
+            <div class="page-tab active">Holdings analysis</div>
+          </div>
+
+          <div class="analysis-intro">
+            <div>
+              <h1 id="mutualFundsComparerTitle">Mutual Funds Comparer</h1>
+              <p class="analysis-caption">Upload your mutual-fund list to review category allocation, concentration, diversification and holdings overlap</p>
+            </div>
+            <div class="analysis-status" id="mutualFundsStatus">Choose a CSV or XLSX file</div>
+          </div>
+
+          <div class="universe-controls" aria-label="Mutual fund upload controls">
+            <div class="selector-field">
+              <label for="mutualFundsFileInput">Mutual fund holdings file</label>
+              <input id="mutualFundsFileInput" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+            </div>
+            <div class="universe-action-row">
+              <button class="panel-button" id="clearMutualFundsButton" type="button">Clear analysis</button>
+              <span class="universe-action-status" id="mutualFundsUploadStatus">Choose a file and analysis will start automatically.</span>
+            </div>
+            <p class="universe-source">First sheet: Scheme or Fund Name plus Current Value, Invested Amount or Weight %. Optional sheet named <strong>Underlying Holdings</strong>: Scheme, Security and Weight %. Data stays in local server and browser memory.</p>
+          </div>
+
+          <section class="summary-grid" aria-label="Mutual fund holdings summary">
+            <article class="summary-card"><div class="summary-value" id="mutualFundsCountValue">—</div><div class="summary-meta">Funds analyzed</div></article>
+            <article class="summary-card"><div class="summary-value" id="mutualFundsCategoryCountValue">—</div><div class="summary-meta">Fund categories</div></article>
+            <article class="summary-card"><div class="summary-value" id="mutualFundsLargestWeightValue">—</div><div class="summary-meta">Largest fund weight</div></article>
+            <article class="summary-card"><div class="summary-value" id="mutualFundsMaxOverlapValue">—</div><div class="summary-meta">Highest observed overlap</div></article>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Fund category and portfolio allocation</h2>
+            <p class="section-note" id="mutualFundsBasisNote">Upload a file to calculate normalized portfolio weights.</p>
+            <div class="table-guide"><strong>How to read:</strong> Uploaded categories take precedence. Otherwise, the analyser uses reviewed exact scheme mappings and transparent name-based rules. “Unclassified” means the evidence was insufficient and is not silently guessed.</div>
+            <div class="table-wrap"><table><thead><tr><th>Category</th><th>Portfolio weight</th><th>Funds</th></tr></thead><tbody id="mutualFundsCategoryBody"><tr><td colspan="3">No fund list has been analyzed.</td></tr></tbody></table></div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Portfolio analysis</h2>
+            <div class="table-guide"><strong>How to read:</strong> Weight is normalized across valid uploaded rows. Category source shows whether classification came from the file, a reviewed exact scheme, a name rule, or remains unavailable. Underlying coverage is shown only when the optional look-through sheet is supplied.</div>
+            <div class="table-wrap"><table><thead><tr><th>Fund / scheme</th><th>Category</th><th>Category source</th><th>Portfolio weight</th><th>Underlying coverage</th></tr></thead><tbody id="mutualFundsPortfolioBody"><tr><td colspan="5">No fund list has been analyzed.</td></tr></tbody></table></div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Holdings overlap</h2>
+            <p class="section-note" id="mutualFundsOverlapNote">Add an Underlying Holdings sheet to calculate pairwise overlap.</p>
+            <div class="table-guide"><strong>How to read:</strong> Overlap is the sum of the smaller security weight shared by each pair of funds. It is a lower bound when either uploaded holdings list covers less than 95% of the fund.</div>
+            <div class="table-wrap"><table><thead><tr><th>Fund A</th><th>Fund B</th><th>Overlap</th><th>Common holdings</th><th>Coverage A / B</th><th>Status</th></tr></thead><tbody id="mutualFundsOverlapBody"><tr><td colspan="6">No underlying holdings were supplied.</td></tr></tbody></table></div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Look-through portfolio exposure</h2>
+            <p class="section-note">This combines each fund's portfolio weight with its uploaded security weights. Missing fund holdings remain missing rather than being estimated.</p>
+            <div class="table-wrap"><table><thead><tr><th>Underlying security</th><th>Known portfolio weight</th></tr></thead><tbody id="mutualFundsLookthroughBody"><tr><td colspan="2">No look-through holdings were supplied.</td></tr></tbody></table></div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Diversification analysis</h2>
+            <div class="summary-grid" aria-label="Mutual fund diversification metrics">
+              <article class="summary-card"><div class="summary-value" id="mutualFundsEffectiveCountValue">—</div><div class="summary-meta">Effective fund count</div></article>
+              <article class="summary-card"><div class="summary-value" id="mutualFundsHhiValue">—</div><div class="summary-meta">Fund concentration HHI</div></article>
+              <article class="summary-card"><div class="summary-value" id="mutualFundsLargestCategoryValue">—</div><div class="summary-meta">Largest category weight</div></article>
+              <article class="summary-card"><div class="summary-value" id="mutualFundsHoldingsCoverageValue">—</div><div class="summary-meta">Funds with holdings data</div></article>
+            </div>
+            <div class="analysis-note" id="mutualFundsDiversificationNote">Upload a file to calculate concentration and effective fund count.</div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Portfolio improvement suggestions</h2>
+            <p class="section-note">These are rule-based review prompts. They identify concentration, overlap, missing data and avoidable complexity; they do not recommend a product or trade.</p>
+            <div class="table-wrap"><table><thead><tr><th>Priority</th><th>Review item</th><th>Why it matters</th></tr></thead><tbody id="mutualFundsSuggestionsBody"><tr><td colspan="3">No analysis has been run.</td></tr></tbody></table></div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Validation issues</h2>
+            <div class="table-wrap"><table><thead><tr><th>Source row</th><th>Scheme</th><th>Issue</th></tr></thead><tbody id="mutualFundsIssuesBody"><tr><td colspan="3">No validation run yet.</td></tr></tbody></table></div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Contract and limitations</h2>
+            <div class="analysis-note" id="mutualFundsContractNote">The mutual-fund holdings analysis contract has not been loaded.</div>
+          </section>
+        </section>
+
         <section id="stockYtdView" hidden aria-labelledby="stockYtdTitle">
           <div class="page-tabs" aria-label="Stock data views">
             <div class="page-tab active">Calendar-year ranking</div>
@@ -2962,6 +3050,22 @@
           </section>
 
           <section class="analysis-section">
+            <h2>Entry-date snapshots and held-out validation</h2>
+            <p class="section-note" id="historicalEntryValidationNote">Entry snapshots have not been calculated yet. The contract will keep evidence known at the start separate from what happened afterwards.</p>
+            <div class="summary-grid" id="historicalEntryValidationGrid">
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Entry snapshots ready</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Discovery episodes</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Held-out episodes</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Discovery traits tested</div></article>
+            </div>
+            <div class="table-guide"><strong>How to read:</strong> “Entry factors” use only observations dated on or before the episode start. Forward 252-session return and drawdown sit in a separate outcome record. Early episodes form discovery; later episodes stay held out. A match is research evidence, not classifier approval.</div>
+            <div class="table-wrap"><table><thead><tr><th>Episode</th><th>Split</th><th>Entry snapshot</th><th>Point-in-time traits</th><th>252-session return</th><th>252-session drawdown</th><th>Coverage</th></tr></thead><tbody id="historicalEntryValidationBody"><tr><td colspan="7">Entry-date validation has not been calculated.</td></tr></tbody></table></div>
+            <div class="historical-fingerprint-grid" id="historicalEntryTraitGrid">
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting split</div><h3>No held-out trait comparison</h3><p>Discovery and held-out episodes have not been separated yet.</p></article>
+            </div>
+          </section>
+
+          <section class="analysis-section">
             <h2>Recurring episode traits</h2>
             <p class="section-note" id="historicalFingerprintNote">Episode fingerprints have not been calculated yet. Missing categories will remain visible rather than being inferred.</p>
             <div class="historical-fingerprint-grid" id="historicalTraitGrid">
@@ -3062,6 +3166,112 @@
           </section>
         </section>
 
+        <section id="backtestsView" hidden aria-labelledby="backtestsTitle">
+          <div class="page-tabs" aria-label="Backtest views">
+            <div class="page-tab active">Research registry</div>
+          </div>
+
+          <div class="analysis-intro">
+            <div>
+              <h1 id="backtestsTitle">Backtests</h1>
+              <p class="analysis-caption">A controlled research workspace for testing market hypotheses with point-in-time inputs, chronological validation, explicit costs and visible failure states</p>
+            </div>
+            <div class="analysis-status" id="backtestsStatus">Foundation ready · no approved strategies</div>
+          </div>
+
+          <div class="universe-controls" aria-label="Backtest controls">
+            <div class="selector-field">
+              <label for="backtestsIndexSelect">Historical index</label>
+              <select id="backtestsIndexSelect">
+                <option>Nifty 50</option><option>Nifty Auto</option><option>Nifty Bank</option>
+                <option>Nifty Chemicals</option><option>Nifty Consumer Durables</option><option>Nifty Energy</option>
+                <option>Nifty Financial Services</option><option>Nifty FMCG</option><option>Nifty Healthcare</option>
+                <option>Nifty IT</option><option>Nifty Media</option><option>Nifty Metal</option>
+                <option>Nifty Oil and Gas</option><option>Nifty Pharma</option><option>Nifty Private Bank</option>
+                <option>Nifty PSU Bank</option><option>Nifty Realty</option>
+                <option>Nifty MidSmall Financial Services</option><option>Nifty MidSmall IT &amp; Telecom</option>
+              </select>
+            </div>
+            <div class="universe-action-row">
+              <button class="panel-button primary" id="loadBacktestsButton" type="button">Run registered tests</button>
+              <span class="universe-action-status" id="backtestsCoverage">Uses the Historical Regimes entry-date information set and chronological split.</span>
+            </div>
+            <p class="universe-source">The first test is an episode-level classification study. It does not simulate trades or claim an investable return.</p>
+          </div>
+
+          <section class="summary-grid" aria-label="Backtest research summary">
+            <article class="summary-card"><div class="summary-value" id="backtestsRegisteredValue">—</div><div class="summary-meta">Registered research contracts</div></article>
+            <article class="summary-card"><div class="summary-value" id="backtestsCompletedValue">—</div><div class="summary-meta">Chronological tests completed</div></article>
+            <article class="summary-card"><div class="summary-value" id="backtestsHeldOutValue">—</div><div class="summary-meta">Held-out evidence gates passed</div></article>
+            <article class="summary-card"><div class="summary-value" id="backtestsApprovedValue">—</div><div class="summary-meta">Approved for decision support</div></article>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Backtest contract</h2>
+            <p class="section-note">A result appears here only after its rules, information set, universe, execution assumptions and validation split are frozen. Attractive charts cannot override a failed contract.</p>
+            <div class="historical-architecture-grid">
+              <article class="historical-architecture-card"><div class="historical-step">Step 1</div><h3>Freeze the hypothesis</h3><p>Specify the signal, eligible universe, rebalance timing, holding period and expected mechanism before examining outcomes.</p></article>
+              <article class="historical-architecture-card"><div class="historical-step">Step 2</div><h3>Rebuild the information set</h3><p>Use only prices, membership, releases and revisions genuinely available at each historical decision date.</p></article>
+              <article class="historical-architecture-card"><div class="historical-step">Step 3</div><h3>Model implementation</h3><p>Apply turnover, transaction costs, slippage, liquidity, delistings and unavailable-data rules consistently.</p></article>
+              <article class="historical-architecture-card"><div class="historical-step">Step 4</div><h3>Validate chronologically</h3><p>Separate discovery, tuning and held-out periods; correct for repeated testing and compare with a relevant benchmark.</p></article>
+              <article class="historical-architecture-card"><div class="historical-step">Step 5</div><h3>Explain the result</h3><p>Show return, drawdown, volatility, hit rate, turnover, regime dependence and the conditions under which the result failed.</p></article>
+            </div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Historical-regime entry-trait test</h2>
+            <p class="section-note" id="backtestsValidationNote">Run the registered tests to compare traits formed only from entry-date evidence with later 252-session outcomes.</p>
+            <div class="summary-grid" id="backtestsValidationGrid">
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Discovery outcomes ready</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Held-out outcomes ready</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Traits compared</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Direction-consistent traits</div></article>
+            </div>
+            <div class="table-guide"><strong>How to read:</strong> Discovery episodes establish the candidate relationship; later held-out episodes test its direction without changing the rule. A direction match remains blocked unless at least three held-out episodes match, and even then still needs stability and multiple-testing checks.</div>
+            <div class="historical-fingerprint-grid" id="backtestsTraitGrid">
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting test</div><h3>No held-out comparison loaded</h3><p>Run the registered tests to populate this evidence.</p></article>
+            </div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>All-index month seasonality test</h2>
+            <p class="section-note" id="backtestsSeasonalityNote">Every supported index is tested as one index-by-month family. The discovery half is corrected for multiple testing before the held-out half is examined.</p>
+            <div class="summary-grid" id="backtestsSeasonalityGrid">
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Supported indices tested</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Index-month tests</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Discovery candidates</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Held-out survivors</div></article>
+            </div>
+            <div class="table-guide"><strong>How to read:</strong> Discovery significance uses a Benjamini-Hochberg correction across every supported index and month. A candidate survives only if the later half keeps the same direction and independently has p &lt; 0.05. Overlapping sector indices are not independent, so even a survivor remains research-only.</div>
+            <div class="table-wrap"><table><thead><tr><th>Index</th><th>History</th><th>Split date</th><th>Month tests</th><th>Discovery candidates</th><th>Same direction</th><th>Held-out survivors</th></tr></thead><tbody id="backtestsSeasonalityIndexBody"><tr><td colspan="7">All-index seasonality has not been tested.</td></tr></tbody></table></div>
+            <h3>Discovery candidates after global correction</h3>
+            <div class="table-wrap"><table><thead><tr><th>Index</th><th>Month</th><th>Discovery excess</th><th>Family q-value</th><th>Held-out excess</th><th>Held-out p-value</th><th>Result</th></tr></thead><tbody id="backtestsSeasonalityCandidateBody"><tr><td colspan="7">No corrected discovery candidates have been loaded.</td></tr></tbody></table></div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Research queue</h2>
+            <p class="section-note">These are candidate test families, not active strategies. Each remains blocked until its point-in-time data contract is auditable.</p>
+            <div class="historical-fingerprint-grid">
+              <article class="historical-fingerprint-card partial"><div class="historical-step">Foundation available</div><h3>Historical-regime transitions</h3><p>Test whether entry-date trend, volatility and later point-in-time factors separate materially different forward return and drawdown paths.</p><div class="fingerprint-limitation">Needs a larger held-out sample and fuller release-dated evidence.</div></article>
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Data pending</div><h3>Breadth and relative strength</h3><p>Test broad participation, sector leadership and index-relative strength without using today’s constituents in older periods.</p><div class="fingerprint-limitation">Requires authoritative effective-dated membership and sector classifications.</div></article>
+              <article class="historical-fingerprint-card ready"><div class="historical-step">Month-effect contract active</div><h3>Seasonality</h3><p>Month effects are now tested across all supported indices with chronological holdouts and global multiple-testing controls.</p><div class="fingerprint-limitation">Weekday and turn-of-month families remain queued; statistical survivors would still not be executable strategy evidence.</div></article>
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Data pending</div><h3>Earnings and event reactions</h3><p>Test post-result and macro-event paths using release timestamps, expectations and survivorship-safe universes.</p><div class="fingerprint-limitation">Uploaded results and reviewed calendars do not yet form a historical point-in-time panel.</div></article>
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Foundation pending</div><h3>Portfolio overlays</h3><p>Measure whether validated signals improve portfolio drawdown, concentration and benchmark-relative outcomes after costs.</p><div class="fingerprint-limitation">Requires transaction history and complete permitted holding-price histories.</div></article>
+            </div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Test registry</h2>
+            <div class="table-guide"><strong>How to read:</strong> “Blocked” is a valid research outcome. A test must show discovery and held-out results separately, retain failed variants, and disclose every material assumption before it can move beyond exploration.</div>
+            <div class="table-wrap"><table><thead><tr><th>Test</th><th>Hypothesis version</th><th>Universe</th><th>Discovery period</th><th>Held-out period</th><th>Costs included</th><th>Status</th></tr></thead><tbody id="backtestsRegistryBody"><tr><td colspan="7">No backtest contract has been loaded.</td></tr></tbody></table></div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Guardrails</h2>
+            <div class="analysis-note" id="backtestsContractNote">Research-only foundation. No result on this page is a recommendation, execution instruction or promise of future performance. The engine will reject look-ahead data, current-constituent backfills, silent interpolation, outcome-driven rule changes and cost-free performance claims.</div>
+          </section>
+        </section>
+
         <section id="emptyView" hidden aria-live="polite">
           <h1 id="emptyPageTitle"></h1>
         </section>
@@ -3119,6 +3329,15 @@
     const earningsSearchInput = document.getElementById('earningsSearchInput');
     const earningsBody = document.getElementById('earningsBody');
     const portfolioView = document.getElementById('portfolioView');
+    const mutualFundsComparerView = document.getElementById('mutualFundsComparerView');
+    const mutualFundsFileInput = document.getElementById('mutualFundsFileInput');
+    const clearMutualFundsButton = document.getElementById('clearMutualFundsButton');
+    const mutualFundsCategoryBody = document.getElementById('mutualFundsCategoryBody');
+    const mutualFundsPortfolioBody = document.getElementById('mutualFundsPortfolioBody');
+    const mutualFundsOverlapBody = document.getElementById('mutualFundsOverlapBody');
+    const mutualFundsLookthroughBody = document.getElementById('mutualFundsLookthroughBody');
+    const mutualFundsSuggestionsBody = document.getElementById('mutualFundsSuggestionsBody');
+    const mutualFundsIssuesBody = document.getElementById('mutualFundsIssuesBody');
     const portfolioFileInput = document.getElementById('portfolioFileInput');
     const portfolioGoogleFinanceInput = document.getElementById('portfolioGoogleFinanceInput');
     const clearPortfolioButton = document.getElementById('clearPortfolioButton');
@@ -3153,6 +3372,11 @@
     const historicalBullBody = document.getElementById('historicalBullBody');
     const historicalBearBody = document.getElementById('historicalBearBody');
     const historicalCorrectionBody = document.getElementById('historicalCorrectionBody');
+    const backtestsView = document.getElementById('backtestsView');
+    const backtestsStatus = document.getElementById('backtestsStatus');
+    const backtestsIndexSelect = document.getElementById('backtestsIndexSelect');
+    const loadBacktestsButton = document.getElementById('loadBacktestsButton');
+    const backtestsRegistryBody = document.getElementById('backtestsRegistryBody');
     const seasonalityIndexSelect = document.getElementById('seasonalityIndexSelect');
     const seasonalityStockSelect = document.getElementById('seasonalityStockSelect');
     const seasonalityInstrumentLabel = document.getElementById('seasonalityInstrumentLabel');
@@ -3229,6 +3453,7 @@
     let stockYtdRows = [];
     let stockYtdPayload = null;
     let historicalRegimesPayload = null;
+    let backtestsPayload = null;
     let earningsRows = [];
     let earningsPayload = null;
     let portfolioPreview = null;
@@ -5906,6 +6131,123 @@
       });
     }
 
+    function renderMutualFundAnalysis(result) {
+      const funds = Array.isArray(result.funds) ? result.funds : [];
+      const categories = Array.isArray(result.categories) ? result.categories : [];
+      const overlaps = Array.isArray(result.overlaps) ? result.overlaps : [];
+      const lookthrough = Array.isArray(result.top_underlying_holdings) ? result.top_underlying_holdings : [];
+      const suggestions = Array.isArray(result.suggestions) ? result.suggestions : [];
+      const issues = Array.isArray(result.issues) ? result.issues : [];
+      const diversification = result.diversification || {};
+      const percentage = (value) => value === null || value === undefined ? '—' : `${Number(value).toFixed(2)}%`;
+
+      document.getElementById('mutualFundsCountValue').textContent = Number(diversification.fund_count || 0).toLocaleString('en-IN');
+      document.getElementById('mutualFundsCategoryCountValue').textContent = Number(diversification.category_count || 0).toLocaleString('en-IN');
+      document.getElementById('mutualFundsLargestWeightValue').textContent = percentage(diversification.largest_fund_weight_pct);
+      document.getElementById('mutualFundsMaxOverlapValue').textContent = percentage(diversification.maximum_overlap_pct);
+      document.getElementById('mutualFundsEffectiveCountValue').textContent = diversification.effective_fund_count === null || diversification.effective_fund_count === undefined ? '—' : Number(diversification.effective_fund_count).toFixed(2);
+      document.getElementById('mutualFundsHhiValue').textContent = diversification.fund_hhi === null || diversification.fund_hhi === undefined ? '—' : Number(diversification.fund_hhi).toFixed(4);
+      document.getElementById('mutualFundsLargestCategoryValue').textContent = percentage(diversification.largest_category_weight_pct);
+      document.getElementById('mutualFundsHoldingsCoverageValue').textContent = `${Number(diversification.funds_with_underlying_holdings || 0).toLocaleString('en-IN')} / ${Number(diversification.fund_count || 0).toLocaleString('en-IN')}`;
+
+      mutualFundsCategoryBody.innerHTML = categories.length ? categories.map((row) => `<tr>
+        <td>${escapeHtml(row.category || 'Unclassified')}</td>
+        <td>${percentage(row.weight_pct)}</td>
+        <td>${Number(row.funds || 0).toLocaleString('en-IN')}</td>
+      </tr>`).join('') : '<tr><td colspan="3">No category allocation is available.</td></tr>';
+      mutualFundsPortfolioBody.innerHTML = funds.length ? funds.map((row) => `<tr>
+        <td>${escapeHtml(row.scheme || '—')}</td>
+        <td>${escapeHtml(row.category || 'Unclassified')}</td>
+        <td>${escapeHtml(String(row.category_source || 'unavailable').replaceAll('_', ' '))}</td>
+        <td>${percentage(row.weight_pct)}</td>
+        <td>${percentage(row.underlying_coverage_pct)}</td>
+      </tr>`).join('') : '<tr><td colspan="5">No valid mutual-fund rows were found.</td></tr>';
+      mutualFundsOverlapBody.innerHTML = overlaps.length ? overlaps.map((row) => `<tr>
+        <td>${escapeHtml(row.fund_a || '—')}</td><td>${escapeHtml(row.fund_b || '—')}</td>
+        <td>${percentage(row.overlap_pct)}</td><td>${Number(row.common_holdings || 0).toLocaleString('en-IN')}</td>
+        <td>${percentage(row.coverage_a_pct)} / ${percentage(row.coverage_b_pct)}</td>
+        <td>${escapeHtml(String(row.status || '').replaceAll('_', ' '))}</td>
+      </tr>`).join('') : '<tr><td colspan="6">No pairwise overlap is available. Add at least two funds to the Underlying Holdings sheet.</td></tr>';
+      mutualFundsLookthroughBody.innerHTML = lookthrough.length ? lookthrough.map((row) => `<tr>
+        <td>${escapeHtml(row.security || '—')}</td><td>${percentage(row.portfolio_weight_pct)}</td>
+      </tr>`).join('') : '<tr><td colspan="2">No look-through holdings were supplied.</td></tr>';
+      mutualFundsSuggestionsBody.innerHTML = suggestions.length ? suggestions.map((row) => `<tr>
+        <td>${escapeHtml(row.priority || 'Review')}</td><td>${escapeHtml(row.title || 'Review item')}</td><td>${escapeHtml(row.detail || '')}</td>
+      </tr>`).join('') : '<tr><td colspan="3">No review prompts were generated.</td></tr>';
+      mutualFundsIssuesBody.innerHTML = issues.length ? issues.map((row) => `<tr>
+        <td>${Number(row.row_number || 0).toLocaleString('en-IN')}</td><td>${escapeHtml(row.scheme || '—')}</td><td>${escapeHtml(String(row.reason || '').replaceAll('_', ' '))}</td>
+      </tr>`).join('') : '<tr><td colspan="3">No validation issues were found.</td></tr>';
+
+      const basisLabel = String(result.weight_basis || '').replaceAll('_', ' ');
+      document.getElementById('mutualFundsBasisNote').textContent = `Weights are normalized from ${basisLabel || 'the uploaded allocation'} across ${funds.length.toLocaleString('en-IN')} valid funds.`;
+      document.getElementById('mutualFundsOverlapNote').textContent = overlaps.length
+        ? `${overlaps.length.toLocaleString('en-IN')} fund pairs evaluated from the uploaded underlying holdings sheet.`
+        : 'Pairwise overlap is unavailable until underlying security weights are supplied for at least two uploaded funds.';
+      document.getElementById('mutualFundsDiversificationNote').textContent = `Effective fund count is ${diversification.effective_fund_count ?? 'unavailable'} after accounting for unequal weights. HHI is the sum of squared fund weights: lower values indicate more even allocation, not necessarily better economic diversification.`;
+      document.getElementById('mutualFundsContractNote').textContent = `${result.contract_version || 'mutual-fund-holdings-analysis-v1'}. ${(result.limitations || []).join(' ')}`;
+      document.getElementById('mutualFundsStatus').textContent = `${funds.length.toLocaleString('en-IN')} funds analyzed · ${categories.length.toLocaleString('en-IN')} categories`;
+      const underlyingSheet = result.underlying_sheet_name ? ` · overlap source: ${result.underlying_sheet_name}` : ' · no underlying holdings sheet';
+      document.getElementById('mutualFundsUploadStatus').textContent = `${result.file_name || 'Uploaded file'}${result.sheet_name ? ` · fund sheet: ${result.sheet_name}` : ''}${underlyingSheet} · data remains in memory only.`;
+    }
+
+    async function analyzeMutualFundFile() {
+      const file = mutualFundsFileInput.files && mutualFundsFileInput.files[0];
+      if (!file) {
+        showNotice('Choose a CSV or XLSX mutual-fund holdings file first.');
+        return false;
+      }
+      if (file.size > 8 * 1024 * 1024) {
+        showNotice('The mutual-fund holdings file exceeds the 8 MB local limit.');
+        return false;
+      }
+      document.getElementById('mutualFundsStatus').textContent = 'Reading and validating holdings…';
+      document.getElementById('mutualFundsUploadStatus').textContent = 'Parsing the file and calculating category, overlap and diversification analysis.';
+      try {
+        const response = await fetch('/api/mutual-funds/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_name: file.name, content_base64: await portfolioFileBase64(file) }),
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          const reason = String(result.reason || 'invalid file').replaceAll('_', ' ');
+          document.getElementById('mutualFundsStatus').textContent = 'File could not be analyzed';
+          document.getElementById('mutualFundsUploadStatus').textContent = `Upload rejected: ${reason}.`;
+          mutualFundsFileInput.value = '';
+          showNotice(`Mutual-fund analysis rejected: ${reason}.`);
+          return false;
+        }
+        renderMutualFundAnalysis(result);
+        showNotice('Mutual-fund holdings analysis complete.');
+        return true;
+      } catch (_error) {
+        document.getElementById('mutualFundsStatus').textContent = 'Analysis service unavailable';
+        document.getElementById('mutualFundsUploadStatus').textContent = 'The local mutual-fund analysis service could not read the file.';
+        showNotice('The local mutual-fund analysis service is unavailable.');
+        return false;
+      }
+    }
+
+    function clearMutualFundAnalysis() {
+      mutualFundsFileInput.value = '';
+      document.getElementById('mutualFundsStatus').textContent = 'Choose a CSV or XLSX file';
+      document.getElementById('mutualFundsUploadStatus').textContent = 'Choose a file and analysis will start automatically.';
+      ['mutualFundsCountValue', 'mutualFundsCategoryCountValue', 'mutualFundsLargestWeightValue', 'mutualFundsMaxOverlapValue', 'mutualFundsEffectiveCountValue', 'mutualFundsHhiValue', 'mutualFundsLargestCategoryValue', 'mutualFundsHoldingsCoverageValue'].forEach((id) => {
+        document.getElementById(id).textContent = '—';
+      });
+      mutualFundsCategoryBody.innerHTML = '<tr><td colspan="3">No fund list has been analyzed.</td></tr>';
+      mutualFundsPortfolioBody.innerHTML = '<tr><td colspan="5">No fund list has been analyzed.</td></tr>';
+      mutualFundsOverlapBody.innerHTML = '<tr><td colspan="6">No underlying holdings were supplied.</td></tr>';
+      mutualFundsLookthroughBody.innerHTML = '<tr><td colspan="2">No look-through holdings were supplied.</td></tr>';
+      mutualFundsSuggestionsBody.innerHTML = '<tr><td colspan="3">No analysis has been run.</td></tr>';
+      mutualFundsIssuesBody.innerHTML = '<tr><td colspan="3">No validation run yet.</td></tr>';
+      document.getElementById('mutualFundsBasisNote').textContent = 'Upload a file to calculate normalized portfolio weights.';
+      document.getElementById('mutualFundsOverlapNote').textContent = 'Add an Underlying Holdings sheet to calculate pairwise overlap.';
+      document.getElementById('mutualFundsDiversificationNote').textContent = 'Upload a file to calculate concentration and effective fund count.';
+      document.getElementById('mutualFundsContractNote').textContent = 'The mutual-fund holdings analysis contract has not been loaded.';
+      showNotice('Mutual-fund analysis cleared from browser memory.');
+    }
+
     function renderPortfolioPreview(result) {
       const headers = Array.isArray(result.headers) ? result.headers : [];
       const rows = Array.isArray(result.sample_rows) ? result.sample_rows : [];
@@ -6430,6 +6772,11 @@
       const officialTimeline = Array.isArray(officialHistory.timeline) ? officialHistory.timeline : [];
       const fingerprintComparison = result.episode_fingerprint_comparison || {};
       const recurringTraits = Array.isArray(fingerprintComparison.recurring_traits) ? fingerprintComparison.recurring_traits : [];
+      const entryValidation = result.entry_snapshot_validation || {};
+      const entrySnapshots = Array.isArray(entryValidation.snapshots) ? entryValidation.snapshots : [];
+      const entryReadiness = entryValidation.readiness || {};
+      const entrySplit = entryValidation.split || {};
+      const entryTraitValidation = Array.isArray(entryValidation.trait_validation) ? entryValidation.trait_validation : [];
 
       document.getElementById('historicalStoryMethodGrid').innerHTML = storyMethod.length
         ? storyMethod.map((row) => `<article class="historical-story-method">
@@ -6494,6 +6841,50 @@
             <td>${escapeHtml(row.wpi_base_period || '—')}</td>
           </tr>`).join('')
         : '<tr><td colspan="12">Official annual history has not been imported.</td></tr>';
+
+      document.getElementById('historicalEntryValidationNote').textContent = entryValidation.contract_version
+        ? `${entryValidation.method} Classifier admission: ${entryValidation.classifier_admission}. ${entryValidation.classifier_admission_reason}`
+        : 'Entry snapshots have not been calculated yet. The contract will keep evidence known at the start separate from what happened afterwards.';
+      document.getElementById('historicalEntryValidationGrid').innerHTML = entryValidation.contract_version
+        ? `<article class="summary-card"><div class="summary-value">${Number(entryReadiness.ready_snapshots || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Entry snapshots ready</div></article>
+           <article class="summary-card"><div class="summary-value">${Number(entrySplit.discovery_episodes || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Discovery episodes · ${Number(entryReadiness.discovery_outcomes_ready || 0)} with 252-session outcomes</div></article>
+           <article class="summary-card"><div class="summary-value">${Number(entrySplit.held_out_episodes || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Held-out episodes · ${Number(entryReadiness.held_out_outcomes_ready || 0)} with 252-session outcomes</div></article>
+           <article class="summary-card"><div class="summary-value">${Number(entryReadiness.candidate_traits || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Discovery traits compared · none admitted</div></article>`
+        : '<article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Entry validation unavailable</div></article>';
+      document.getElementById('historicalEntryValidationBody').innerHTML = entrySnapshots.length
+        ? entrySnapshots.map((snapshot) => {
+            const outcome = snapshot.outcome && snapshot.outcome.windows ? snapshot.outcome.windows['252'] || {} : {};
+            const factors = Array.isArray(snapshot.factors) ? snapshot.factors : [];
+            const traits = Array.isArray(snapshot.traits) ? snapshot.traits : [];
+            const coverage = `${factors.filter((factor) => factor.status === 'ready').length}/${factors.length} factors ready`;
+            const traitText = traits.length ? traits.map((trait) => trait.label).join(' · ') : 'No threshold trait observed';
+            return `<tr>
+              <td><strong>${escapeHtml(snapshot.episode_title)}</strong><br><span class="status">${escapeHtml(snapshot.episode_period)}</span></td>
+              <td>${escapeHtml(String(snapshot.split || '').replaceAll('_', ' '))}</td>
+              <td>${formatDisplayDate(snapshot.snapshot_as_of)}<br><span class="status">target ${formatDisplayDate(snapshot.entry_date)}</span></td>
+              <td>${escapeHtml(traitText)}</td>
+              <td class="${Number(outcome.return_pct) >= 0 ? 'positive' : 'negative'}">${outcome.status === 'ready' ? signedPercentage(outcome.return_pct) : '—'}</td>
+              <td class="${Number(outcome.max_drawdown_pct) < 0 ? 'negative' : ''}">${outcome.status === 'ready' ? signedPercentage(outcome.max_drawdown_pct) : '—'}</td>
+              <td>${escapeHtml(snapshot.status)} · ${escapeHtml(coverage)}</td>
+            </tr>`;
+          }).join('')
+        : '<tr><td colspan="7">Entry-date validation has not been calculated.</td></tr>';
+      document.getElementById('historicalEntryTraitGrid').innerHTML = entryTraitValidation.length
+        ? entryTraitValidation.map((trait) => {
+            const discovery = trait.discovery || {};
+            const heldOut = trait.held_out || {};
+            const heldOutText = Number(heldOut.episodes || 0)
+              ? `${Number(heldOut.episodes)} held-out · median ${signedPercentage(heldOut.median_252_return_pct)} · ${trait.direction_consistent ? 'same direction' : 'different direction'}`
+              : 'No complete held-out match';
+            return `<article class="historical-fingerprint-card ${trait.direction_consistent ? 'ready' : 'partial'}">
+              <div class="historical-step">${Number(discovery.episodes || 0)} discovery · admission ${escapeHtml(trait.admission)}</div>
+              <h3>${escapeHtml(trait.label)}</h3>
+              <p>Discovery median 252-session return ${signedPercentage(discovery.median_252_return_pct)}; positive ${Number(discovery.positive_frequency_pct || 0).toFixed(1)}%.</p>
+              <div class="historical-trait-episodes">${escapeHtml(heldOutText)}</div>
+              <div class="fingerprint-limitation">${escapeHtml(trait.reason)}</div>
+            </article>`;
+          }).join('')
+        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">No eligible discovery rule</div><h3>Held-out comparison pending</h3><p>At least two discovery episodes with the same entry trait and complete 252-session outcomes are required.</p></article>';
 
       document.getElementById('historicalFingerprintNote').textContent = fingerprintComparison.contract_version
         ? `${fingerprintComparison.method} Classifier admission: ${fingerprintComparison.classifier_admission}. ${fingerprintComparison.classifier_admission_reason}`
@@ -6664,6 +7055,125 @@
       }
     }
 
+    function backtestPeriodLabel(period) {
+      if (!period || !period.from || !period.to) return 'Insufficient eligible episodes';
+      return `${formatDisplayDate(period.from)} to ${formatDisplayDate(period.to)}`;
+    }
+
+    function renderBacktests(result) {
+      backtestsPayload = result;
+      const summary = result.summary || {};
+      const validation = result.validation_split || {};
+      const registry = Array.isArray(result.registry) ? result.registry : [];
+      const traits = Array.isArray(result.trait_results) ? result.trait_results : [];
+      const limitations = Array.isArray(result.limitations) ? result.limitations : [];
+
+      document.getElementById('backtestsRegisteredValue').textContent = Number(summary.registered_contracts || 0).toLocaleString('en-IN');
+      document.getElementById('backtestsCompletedValue').textContent = Number(summary.chronological_tests_completed || 0).toLocaleString('en-IN');
+      document.getElementById('backtestsHeldOutValue').textContent = Number(summary.held_out_tests_passed || 0).toLocaleString('en-IN');
+      document.getElementById('backtestsApprovedValue').textContent = Number(summary.approved_for_decision_support || 0).toLocaleString('en-IN');
+      document.getElementById('backtestsValidationGrid').innerHTML = `
+        <article class="summary-card"><div class="summary-value">${Number(validation.discovery_outcomes_ready || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Discovery outcomes ready</div></article>
+        <article class="summary-card"><div class="summary-value">${Number(validation.held_out_outcomes_ready || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Held-out outcomes ready</div></article>
+        <article class="summary-card"><div class="summary-value">${traits.length.toLocaleString('en-IN')}</div><div class="summary-meta">Traits compared</div></article>
+        <article class="summary-card"><div class="summary-value">${Number(summary.direction_consistent_traits || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Direction-consistent traits</div></article>`;
+      document.getElementById('backtestsValidationNote').textContent =
+        `${result.instrument} · discovery ${backtestPeriodLabel(validation.discovery_period)} · held out ${backtestPeriodLabel(validation.held_out_period)}. ${result.admission_reason}`;
+      document.getElementById('backtestsTraitGrid').innerHTML = traits.length
+        ? traits.map((trait) => {
+            const discovery = trait.discovery || {};
+            const heldOut = trait.held_out || {};
+            const direction = trait.direction_consistent === true
+              ? 'same direction'
+              : trait.direction_consistent === false ? 'different direction' : 'no held-out match';
+            return `<article class="historical-fingerprint-card ${trait.held_out_gate_passed ? 'ready' : 'partial'}">
+              <div class="historical-step">${Number(discovery.episodes || 0)} discovery · ${Number(heldOut.episodes || 0)} held out · ${escapeHtml(direction)}</div>
+              <h3>${escapeHtml(trait.label)}</h3>
+              <p>Discovery median ${signedPercentage(discovery.median_252_return_pct)}; held-out median ${signedPercentage(heldOut.median_252_return_pct)}.</p>
+              <div class="historical-trait-episodes">Held-out gate ${trait.held_out_gate_passed ? 'passed' : 'blocked'}</div>
+              <div class="fingerprint-limitation">${escapeHtml(trait.reason)}</div>
+            </article>`;
+          }).join('')
+        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">No eligible repeated trait</div><h3>Held-out comparison unavailable</h3><p>The discovery sample did not produce a repeated entry trait with complete outcomes.</p></article>';
+      const seasonality = result.seasonality || {};
+      const seasonalitySummary = seasonality.summary || {};
+      const seasonalityIndices = Array.isArray(seasonality.indices) ? seasonality.indices : [];
+      const seasonalityCandidates = Array.isArray(seasonality.candidates) ? seasonality.candidates : [];
+      const correctedCandidates = seasonalityCandidates.filter((row) => row.discovery_significant);
+      document.getElementById('backtestsSeasonalityGrid').innerHTML = `
+        <article class="summary-card"><div class="summary-value">${Number(seasonalitySummary.indices_tested || 0).toLocaleString('en-IN')}/${Number(seasonalitySummary.supported_indices || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Supported indices tested</div></article>
+        <article class="summary-card"><div class="summary-value">${Number(seasonalitySummary.month_tests_evaluated || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Index-month tests</div></article>
+        <article class="summary-card"><div class="summary-value">${Number(seasonalitySummary.discovery_candidates || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Discovery candidates after correction</div></article>
+        <article class="summary-card"><div class="summary-value">${Number(seasonalitySummary.survived || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Held-out survivors</div></article>`;
+      document.getElementById('backtestsSeasonalityNote').textContent = seasonality.method
+        ? `${seasonality.method} ${Number(seasonalitySummary.indices_unavailable || 0)} supported indices were unavailable.`
+        : 'All-index month seasonality validation is unavailable.';
+      document.getElementById('backtestsSeasonalityIndexBody').innerHTML = seasonalityIndices.length
+        ? seasonalityIndices.map((row) => `<tr>
+            <td>${escapeHtml(row.instrument)}</td>
+            <td>${formatDisplayDate(row.from_date)} to ${formatDisplayDate(row.as_of_date)}<br><span class="status">${Number(row.sessions || 0).toLocaleString('en-IN')} sessions</span></td>
+            <td>${formatDisplayDate(row.split_date)}</td>
+            <td>${Number(row.tests_evaluated || 0).toLocaleString('en-IN')}</td>
+            <td>${Number(row.discovery_candidates || 0).toLocaleString('en-IN')}</td>
+            <td>${Number(row.same_direction || 0).toLocaleString('en-IN')}</td>
+            <td>${Number(row.survived || 0).toLocaleString('en-IN')}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="7">No supported index had enough stored history for the test.</td></tr>';
+      document.getElementById('backtestsSeasonalityCandidateBody').innerHTML = correctedCandidates.length
+        ? correctedCandidates.map((row) => `<tr>
+            <td>${escapeHtml(row.instrument)}</td>
+            <td>${escapeHtml(row.period)}</td>
+            <td class="${Number(row.train_excess_pct) >= 0 ? 'positive' : 'negative'}">${signedPercentage(row.train_excess_pct)}</td>
+            <td>${row.family_q_value == null ? '—' : Number(row.family_q_value).toFixed(4)}</td>
+            <td class="${Number(row.test_excess_pct) >= 0 ? 'positive' : 'negative'}">${signedPercentage(row.test_excess_pct)}</td>
+            <td>${row.test_p_value == null ? '—' : Number(row.test_p_value).toFixed(4)}</td>
+            <td>${row.survived ? 'Held-out survivor · research-only' : row.same_direction ? 'Same direction · held-out significance failed' : 'Direction failed'}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="7">No month effect survived the global discovery correction. This is a valid negative result.</td></tr>';
+      backtestsRegistryBody.innerHTML = registry.length
+        ? registry.map((test) => `<tr>
+            <td><strong>${escapeHtml(test.name)}</strong><br><span class="status">${escapeHtml(test.hypothesis)}</span></td>
+            <td>${escapeHtml(test.hypothesis_version)}</td>
+            <td>${escapeHtml(test.universe)}</td>
+            <td>${backtestPeriodLabel(test.discovery_period)}<br><span class="status">${Number(test.discovery_episodes || 0)} episodes</span></td>
+            <td>${backtestPeriodLabel(test.held_out_period)}<br><span class="status">${Number(test.held_out_episodes || 0)} episodes</span></td>
+            <td>${escapeHtml(test.costs_included)}</td>
+            <td>${escapeHtml(test.status_label)}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="7">No registered test was returned.</td></tr>';
+      document.getElementById('backtestsContractNote').textContent =
+        `${result.contract_version}. Source contract ${result.source_contract_version || 'unavailable'}. ${limitations.join(' ')}`;
+      document.getElementById('backtestsCoverage').textContent =
+        `${result.instrument} · ${Number(validation.discovery_outcomes_ready || 0)} discovery and ${Number(validation.held_out_outcomes_ready || 0)} held-out outcomes ready.`;
+      backtestsStatus.textContent = Number(summary.approved_for_decision_support || 0)
+        ? 'Research gate partial · nothing approved'
+        : 'Chronological test ready · decision support blocked';
+    }
+
+    async function loadBacktests(showSuccess = false) {
+      loadBacktestsButton.disabled = true;
+      loadBacktestsButton.textContent = 'Running test…';
+      backtestsStatus.textContent = 'Building outcome-blind validation set…';
+      try {
+        const response = await fetch(`/api/backtests?index=${encodeURIComponent(backtestsIndexSelect.value)}`, { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          backtestsStatus.textContent = 'Registered test unavailable';
+          if (showSuccess) showNotice(kiteFailureMessage(result.reason));
+          return false;
+        }
+        renderBacktests(result);
+        if (showSuccess) showNotice(`${result.instrument} chronological historical-regime test completed.`);
+        return true;
+      } catch (_error) {
+        backtestsStatus.textContent = 'The local backtest service is unavailable';
+        return false;
+      } finally {
+        loadBacktestsButton.disabled = false;
+        loadBacktestsButton.textContent = 'Run registered tests';
+      }
+    }
+
     async function refreshHistoricalOfficialHistory(showSuccess = false) {
       refreshHistoricalOfficialHistoryButton.disabled = true;
       refreshHistoricalOfficialHistoryButton.textContent = 'Updating RBI history…';
@@ -6708,6 +7218,7 @@
         loadMacroEventsCalendar(false),
         loadEarnings(false),
         loadHistoricalRegimes(false),
+        loadBacktests(false),
       ];
       workspaceTasks.push((async () => {
         const universeUpdated = await loadRegimeValidationUniverse();
@@ -6915,6 +7426,8 @@
         invalid_history_range: 'The requested historical date range was not accepted.',
         invalid_monthly_leader_request: 'The current-month F&O universe was not accepted.',
         invalid_historical_month_leader_request: 'The historical F&O universe was not accepted.',
+        invalid_backtest_selection: 'The selected index is not available for the registered backtest.',
+        backtest_entry_validation_unavailable: 'The Historical Regimes entry-date validation set is not available for this test.',
         historical_rank_refresh_in_progress: 'The full historical ranking is already running.',
         historical_month_data_unavailable: 'No completed historical observations were available for the current calendar month.',
         monthly_stock_data_not_ready: 'Run EOD update first so current-month stock returns can be calculated.',
@@ -6926,8 +7439,17 @@
         futures_eod_not_due: 'Futures price and open interest can be stored after the market closes.',
         futures_eod_data_unavailable: 'Kite did not return completed futures price and open-interest snapshots.',
         invalid_futures_quote_response: 'Kite returned an unexpected futures quote response.',
+        stored_candle_conflict: 'A newly completed candle conflicted with a stored observation. The existing validated value was preserved.',
         stored_futures_snapshot_conflict: 'A stored futures EOD observation conflicted with a later response.'
       };
+      if (String(reason || '').startsWith('stored_candle_conflict:')) {
+        const details = String(reason).slice('stored_candle_conflict:'.length);
+        const sessionSeparator = details.lastIndexOf(':');
+        const identity = sessionSeparator >= 0 ? details.slice(0, sessionSeparator) : details;
+        const session = sessionSeparator >= 0 ? details.slice(sessionSeparator + 1) : 'unknown session';
+        const instrument = identity.includes(':') ? identity.slice(identity.indexOf(':') + 1) : identity;
+        return `A newly completed candle conflicted with the stored ${instrument} observation for ${session}. The existing validated value was preserved.`;
+      }
       return messages[reason] || `The data request failed with local reason: ${reason || 'unknown_error'}.`;
     }
 
@@ -7089,6 +7611,8 @@
     earningsBasisSelect.addEventListener('change', renderEarningsTable);
     earningsSectorSelect.addEventListener('change', renderEarningsTable);
     earningsSearchInput.addEventListener('input', renderEarningsTable);
+    mutualFundsFileInput.addEventListener('change', analyzeMutualFundFile);
+    clearMutualFundsButton.addEventListener('click', clearMutualFundAnalysis);
     portfolioFileInput.addEventListener('change', previewPortfolioFile);
     portfolioGoogleFinanceInput.addEventListener('change', () => {
       if (portfolioPreview && Array.isArray(portfolioPreview.rows)) analyzePortfolio();
@@ -7104,6 +7628,8 @@
     stockYtdSearchInput.addEventListener('input', renderStockYtdTable);
     loadHistoricalRegimesButton.addEventListener('click', () => loadHistoricalRegimes(true));
     historicalRegimesIndexSelect.addEventListener('change', () => loadHistoricalRegimes(false));
+    loadBacktestsButton.addEventListener('click', () => loadBacktests(true));
+    backtestsIndexSelect.addEventListener('change', () => loadBacktests(false));
     regimeValidationIndexSelect.addEventListener('change', () => updateRegimeValidationSelection(true));
     regimeValidationBenchmarkSelect.addEventListener('change', () => {
       const benchmark = regimeValidationBenchmarkSelect.value === 'none' ? 'No relative benchmark' : 'Nifty 50 benchmark';
@@ -7154,6 +7680,7 @@
       button.addEventListener('click', () => {
         document.querySelectorAll('.nav-button').forEach((item) => item.classList.remove('active'));
         button.classList.add('active');
+        window.scrollTo(0, 0);
         const isDashboard = button.dataset.page === 'Dashboard';
         const isMarketSentiment = button.dataset.page === 'Market Sentiment';
         const isFno = button.dataset.page === 'F&O';
@@ -7162,8 +7689,10 @@
         const isNewsEvents = button.dataset.page === 'Events Calendar';
         const isStockYtd = button.dataset.page === 'Stock Data YTD';
         const isHistoricalRegimes = button.dataset.page === 'Historical Regimes';
+        const isBacktests = button.dataset.page === 'Backtests';
         const isEarnings = button.dataset.page === 'Earnings Analysis';
         const isPortfolio = button.dataset.page === 'Portfolio Analysis';
+        const isMutualFundsComparer = button.dataset.page === 'Mutual Funds Comparer';
         dashboardView.hidden = !isDashboard;
         marketSentimentView.hidden = !isMarketSentiment;
         fnoView.hidden = !isFno;
@@ -7172,10 +7701,12 @@
         newsEventsView.hidden = !isNewsEvents;
         stockYtdView.hidden = !isStockYtd;
         historicalRegimesView.hidden = !isHistoricalRegimes;
+        backtestsView.hidden = !isBacktests;
         earningsView.hidden = !isEarnings;
         portfolioView.hidden = !isPortfolio;
-        emptyView.hidden = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isEarnings || isPortfolio;
-        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isEarnings || isPortfolio ? '' : button.dataset.page;
+        mutualFundsComparerView.hidden = !isMutualFundsComparer;
+        emptyView.hidden = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isEarnings || isPortfolio || isMutualFundsComparer;
+        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isEarnings || isPortfolio || isMutualFundsComparer ? '' : button.dataset.page;
         if (isDashboard) {
           renderDashboardPortfolioSummary(portfolioAnalysis);
           renderDashboardStoryPortfolio(portfolioAnalysis, dashboardMarketStory);
@@ -7206,6 +7737,8 @@
           loadStockYtd(false);
         } else if (isHistoricalRegimes && !historicalRegimesPayload) {
           loadHistoricalRegimes(false);
+        } else if (isBacktests && !backtestsPayload) {
+          loadBacktests(false);
         } else if (isEarnings && !earningsPayload) {
           loadEarnings(false);
         }

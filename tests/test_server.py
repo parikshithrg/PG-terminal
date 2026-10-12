@@ -11,6 +11,7 @@ from server import (
     NIFTY_INDICES_PUBLIC_USER_AGENT,
     OFFICIAL_SECTORAL_INDICES,
     build_checksum,
+    candles_after_last_stored_session,
     calculate_seasonality,
     calculate_seasonality_validation,
     calculate_stock_screener,
@@ -39,6 +40,9 @@ from server import (
     build_historical_series_summary,
     build_historical_episode_stories,
     build_historical_episode_fingerprints,
+    build_historical_entry_snapshot_validation,
+    build_backtests_workspace,
+    build_seasonality_backtest_workspace,
     aggregate_historical_closes,
     apply_recovering_market_state,
     build_regime_validation_universe,
@@ -79,10 +83,12 @@ from server import (
     parse_nse_announcement_csv,
     parse_earnings_csv,
     parse_portfolio_file,
+    parse_mutual_fund_file,
     parse_home_loan_tracker_xlsx,
     parse_google_finance_quote_html,
     infer_portfolio_mapping,
     build_portfolio_analysis,
+    build_mutual_fund_holdings_analysis,
     parse_seasonality_index_tokens,
     rank_historical_month_averages,
 )
@@ -149,7 +155,7 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
 
         result = build_historical_regime_workspace(candles)
 
-        self.assertEqual(result["contract_version"], "historical-regimes-v9")
+        self.assertEqual(result["contract_version"], "historical-regimes-v10")
         self.assertGreaterEqual(result["summary"]["bull_markets"]["count"], 2)
         self.assertGreaterEqual(result["summary"]["bear_markets"]["count"], 1)
         self.assertGreaterEqual(result["summary"]["corrections"]["count"], 1)
@@ -638,6 +644,126 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         recurring = {item["key"]: item for item in comparison["recurring_traits"]}
         self.assertEqual(recurring["fiscal_expansion"]["episode_count"], 2)
         self.assertEqual(episodes[0]["fingerprint"]["classification_role"], "retrospective_episode_descriptor_only")
+
+    def test_historical_entry_snapshots_separate_prior_evidence_from_forward_outcomes(self):
+        episodes = [
+            {"key": f"episode-{year}", "title": f"Episode {year}", "period": str(year), "window": {"start_financial_year": year, "end_financial_year": year}}
+            for year in (2019, 2020, 2021, 2022)
+        ]
+        start = date(2017, 1, 1)
+        candles = [
+            {"date": start + timedelta(days=index), "close": 100.0 + index * 0.05}
+            for index in range(2400)
+        ]
+        comparison = build_historical_entry_snapshot_validation(
+            episodes,
+            candles,
+            instrument="Nifty 50",
+        )
+
+        self.assertEqual(comparison["contract_version"], "historical-entry-validation-v1")
+        self.assertEqual(comparison["classifier_admission"], "blocked")
+        self.assertEqual([row["split"] for row in comparison["snapshots"]], ["discovery", "discovery", "held_out", "held_out"])
+        first = comparison["snapshots"][0]
+        self.assertEqual(first["status"], "ready")
+        self.assertTrue(first["outcome"]["separated_from_entry_snapshot"])
+        self.assertEqual(len(first["factors"]), 10)
+        self.assertEqual(
+            next(item for item in first["factors"] if item["key"] == "macro_growth_inflation")["status"],
+            "unavailable",
+        )
+
+        changed = [dict(row) for row in candles]
+        for row in changed:
+            if row["date"] > date(2019, 4, 1):
+                row["close"] *= 4
+        changed_episodes = [
+            {"key": f"episode-{year}", "title": f"Episode {year}", "period": str(year), "window": {"start_financial_year": year, "end_financial_year": year}}
+            for year in (2019, 2020, 2021, 2022)
+        ]
+        changed_comparison = build_historical_entry_snapshot_validation(
+            changed_episodes,
+            changed,
+            instrument="Nifty 50",
+        )
+        self.assertEqual(first["price_metrics"], changed_comparison["snapshots"][0]["price_metrics"])
+        self.assertNotEqual(
+            first["outcome"]["windows"]["252"]["return_pct"],
+            changed_comparison["snapshots"][0]["outcome"]["windows"]["252"]["return_pct"],
+        )
+
+    def test_backtests_workspace_reuses_chronological_entry_validation(self):
+        entry_validation = {
+            "contract_version": "historical-entry-validation-v1",
+            "instrument": "Nifty 50",
+            "split": {
+                "method": "chronological 70/30 split",
+                "discovery_episodes": 2,
+                "held_out_episodes": 1,
+                "excluded_episodes": 0,
+                "boundary_episode": "Held-out episode",
+                "outcome_horizon_sessions": 252,
+            },
+            "snapshots": [
+                {
+                    "snapshot_as_of": "2018-04-01",
+                    "split": "discovery",
+                    "outcome": {"windows": {"252": {"status": "ready"}}},
+                },
+                {
+                    "snapshot_as_of": "2020-04-01",
+                    "split": "discovery",
+                    "outcome": {"windows": {"252": {"status": "ready"}}},
+                },
+                {
+                    "snapshot_as_of": "2022-04-01",
+                    "split": "held_out",
+                    "outcome": {"windows": {"252": {"status": "ready"}}},
+                },
+            ],
+            "trait_validation": [
+                {
+                    "key": "global_risk_off",
+                    "label": "Global risk-off backdrop",
+                    "discovery": {"episodes": 2, "median_252_return_pct": 8.0},
+                    "held_out": {"episodes": 1, "median_252_return_pct": 5.0},
+                    "direction_consistent": True,
+                    "reason": "At least three held-out matches are required.",
+                }
+            ],
+        }
+        workspace = build_backtests_workspace(entry_validation)
+        self.assertEqual(workspace["contract_version"], "backtests-v2")
+        self.assertEqual(workspace["summary"]["registered_contracts"], 1)
+        self.assertEqual(workspace["summary"]["chronological_tests_completed"], 1)
+        self.assertEqual(workspace["summary"]["held_out_tests_passed"], 0)
+        self.assertEqual(workspace["registry"][0]["status"], "blocked")
+        self.assertFalse(workspace["trait_results"][0]["held_out_gate_passed"])
+        self.assertEqual(workspace["validation_split"]["held_out_period"]["from"], "2022-04-01")
+
+    def test_all_index_seasonality_backtest_keeps_unavailable_indices_visible(self):
+        def history(offset: float) -> list[dict[str, object]]:
+            rows = []
+            close = 100.0 + offset
+            for year in range(2015, 2025):
+                for month in range(1, 13):
+                    monthly_return = 0.025 if month == 4 else (((year + month) % 5) - 2) / 1000
+                    close *= 1 + monthly_return
+                    rows.append({"date": date(year, month, 20), "close": close})
+            return rows
+
+        workspace = build_seasonality_backtest_workspace(
+            {"Nifty 50": history(0), "Nifty IT": history(10)},
+            today=date(2026, 10, 12),
+            supported_indices=("Nifty 50", "Nifty IT", "Nifty Missing"),
+        )
+        self.assertEqual(workspace["contract_version"], "seasonality-all-indices-backtest-v1")
+        self.assertEqual(workspace["summary"]["supported_indices"], 3)
+        self.assertEqual(workspace["summary"]["indices_tested"], 2)
+        self.assertEqual(workspace["summary"]["indices_unavailable"], 1)
+        self.assertEqual(workspace["summary"]["month_tests_evaluated"], 24)
+        self.assertIn("family_q_value", workspace["candidates"][0])
+        self.assertEqual(workspace["unavailable"][0]["instrument"], "Nifty Missing")
 
     def test_historical_close_aggregation_uses_period_end_without_interpolation(self):
         observations = [
@@ -2078,6 +2204,19 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
             [],
         )
 
+    def test_dashboard_eod_store_filters_replayed_provider_history(self):
+        candles = [
+            {"date": date(2026, 9, 26), "close": 101.0},
+            {"date": date(2026, 9, 28), "close": 102.0},
+            {"date": date(2026, 9, 29), "close": 103.0},
+            {"date": date(2026, 9, 30), "close": 104.0},
+        ]
+        self.assertEqual(
+            candles_after_last_stored_session(candles, date(2026, 9, 28)),
+            candles[2:],
+        )
+        self.assertEqual(candles_after_last_stored_session(candles, None), candles)
+
     def test_seasonality_uses_close_returns_and_high_low_ranges(self):
         candles = [
             {"date": date(2024, 12, 31), "open": 98.0, "high": 101.0, "low": 97.0, "close": 100.0},
@@ -2571,6 +2710,75 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(preview["detected_mapping"]["symbol"], "Trading Symbol")
         self.assertEqual(preview["detected_mapping"]["quantity"], "Total Qty")
         self.assertEqual(preview["detected_mapping"]["current_value"], "Closing Value")
+
+    def test_mutual_fund_csv_builds_categories_and_concentration(self):
+        parsed = parse_mutual_fund_file(
+            "funds.csv",
+            b"Fund Name,Current Value\nNippon India Large Cap Fund - Direct Plan - Growth,600000\nICICI Prudential Short Term Fund - Direct Plan - Growth,400000\n",
+        )
+        result = build_mutual_fund_holdings_analysis(parsed["rows"], parsed["mapping"])
+        self.assertEqual(result["diversification"]["fund_count"], 2)
+        self.assertEqual(result["categories"][0]["category"], "Equity - Large Cap")
+        self.assertEqual(result["categories"][0]["weight_pct"], 60.0)
+        self.assertEqual(result["funds"][1]["category"], "Debt - Short Duration")
+        self.assertEqual(result["diversification"]["effective_fund_count"], 1.92)
+        self.assertTrue(any(item["title"] == "Add underlying holdings" for item in result["suggestions"]))
+
+    def test_mutual_fund_analysis_calculates_pair_overlap_from_uploaded_holdings(self):
+        result = build_mutual_fund_holdings_analysis(
+            [
+                {"Scheme": "Alpha Large Cap Fund", "Weight %": 50, "Category": "Equity - Large Cap"},
+                {"Scheme": "Beta Flexi Cap Fund", "Weight %": 50, "Category": "Equity - Flexi Cap"},
+            ],
+            {"scheme": "Scheme", "weight": "Weight %", "current_value": None, "invested_value": None, "category": "Category"},
+            underlying_rows=[
+                {"Scheme": "Alpha Large Cap Fund", "Security": "Reliance", "Weight %": 40},
+                {"Scheme": "Alpha Large Cap Fund", "Security": "Infosys", "Weight %": 60},
+                {"Scheme": "Beta Flexi Cap Fund", "Security": "Reliance", "Weight %": 30},
+                {"Scheme": "Beta Flexi Cap Fund", "Security": "HDFC Bank", "Weight %": 70},
+            ],
+            underlying_mapping={"scheme": "Scheme", "security": "Security", "weight": "Weight %"},
+        )
+        self.assertEqual(result["overlaps"][0]["overlap_pct"], 30.0)
+        self.assertEqual(result["overlaps"][0]["common_holdings"], 1)
+        self.assertEqual(result["overlaps"][0]["status"], "complete")
+        reliance = next(item for item in result["top_underlying_holdings"] if item["security"] == "Reliance")
+        self.assertEqual(reliance["portfolio_weight_pct"], 35.0)
+
+    def test_mutual_fund_analysis_uses_the_most_complete_available_weight_basis(self):
+        result = build_mutual_fund_holdings_analysis(
+            [
+                {"Scheme": "Alpha Equity Fund", "Current Value": "", "Weight %": 70},
+                {"Scheme": "Beta Debt Fund", "Current Value": 30000, "Weight %": 30},
+            ],
+            {"scheme": "Scheme", "current_value": "Current Value", "invested_value": None, "weight": "Weight %", "category": None},
+        )
+        self.assertEqual(result["weight_basis"], "weight")
+        self.assertEqual([fund["weight_pct"] for fund in result["funds"]], [70.0, 30.0])
+
+    def test_mutual_fund_xlsx_reads_optional_underlying_holdings_sheet(self):
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr(
+                "xl/workbook.xml",
+                '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Funds" sheetId="1" r:id="rId1"/><sheet name="Underlying Holdings" sheetId="2" r:id="rId2"/></sheets></workbook>',
+            )
+            archive.writestr(
+                "xl/_rels/workbook.xml.rels",
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/><Relationship Id="rId2" Target="worksheets/sheet2.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/></Relationships>',
+            )
+            archive.writestr(
+                "xl/worksheets/sheet1.xml",
+                '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Scheme</t></is></c><c r="B1" t="inlineStr"><is><t>Current Value</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>Alpha Fund</t></is></c><c r="B2"><v>100000</v></c></row></sheetData></worksheet>',
+            )
+            archive.writestr(
+                "xl/worksheets/sheet2.xml",
+                '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Scheme</t></is></c><c r="B1" t="inlineStr"><is><t>Security</t></is></c><c r="C1" t="inlineStr"><is><t>Weight %</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>Alpha Fund</t></is></c><c r="B2" t="inlineStr"><is><t>Infosys</t></is></c><c r="C2"><v>8.5</v></c></row></sheetData></worksheet>',
+            )
+        parsed = parse_mutual_fund_file("funds.xlsx", payload.getvalue())
+        self.assertEqual(parsed["sheet_name"], "Funds")
+        self.assertEqual(parsed["underlying_sheet_name"], "Underlying Holdings")
+        self.assertEqual(parsed["underlying_rows"][0]["Security"], "Infosys")
 
     def test_portfolio_xlsx_preview_reads_first_sheet_without_dependency(self):
         payload = io.BytesIO()
