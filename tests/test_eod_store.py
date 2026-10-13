@@ -379,6 +379,29 @@ class EODStoreTest(unittest.TestCase):
             -5.2,
         )
 
+        current_account_deficit = dict(
+            base,
+            series_key="india_current_account_balance_usd_mn",
+            date=date(2023, 9, 30),
+            period_label="Q2 2023-24",
+            frequency="quarterly",
+            value=-8300.0,
+            unit="US dollar million",
+            base_period="Not applicable",
+            source_title="RBI BoP Q2 2023-24",
+            source_url="https://rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=56991",
+            vintage_date=date(2023, 12, 26),
+            metadata={
+                "release_date": "2023-12-26",
+                "revision_status": "preliminary",
+                "allows_non_positive": True,
+            },
+        )
+        self.assertEqual(
+            self.store.append_historical_series_observations([current_account_deficit]),
+            {"inserted": 1, "duplicates": 0},
+        )
+
     def test_futures_snapshots_are_keyed_by_contract_and_session(self):
         contracts = [
             {

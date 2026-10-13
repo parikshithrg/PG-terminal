@@ -1,6 +1,6 @@
 # Session handoff
 
-Updated: 2026-10-12
+Updated: 2026-10-13
 
 ## Linux migration checkpoint — 2026-10-05
 
@@ -447,14 +447,50 @@ orders or position sizing.
   Holdings` sheet (Scheme, Security, Weight %) enables pairwise overlap and
   look-through exposure; overlap remains unavailable rather than inferred when
   those security weights are absent. Uploaded data is not persisted.
+- Added `mutual-fund-performance-comparison-v1`. Reviewed exact Direct-Growth
+  schemes from the uploaded file now request official AMFI NAV history and are
+  compared on one common, capped 253-observation window. The interface reports
+  aligned and annualized return, volatility, maximum drawdown, Sharpe and
+  Sortino with an explicit 0% risk-free assumption. Unreviewed scheme names and
+  unavailable histories remain visible; no similarly named plan is substituted
+  and no fund rank or recommendation is produced. AMFI retrieval loads in a
+  separate background request with a bounded source timeout, so source latency
+  cannot block the uploaded allocation analysis.
+- Added `amfi-direct-growth-catalogue-v1` with category schema
+  `amfi-category-map-v1`. The Mutual Funds Comparer now filters AMFI's current
+  complete NAV report to current Direct Plan Growth rows, matches reviewed codes
+  first and otherwise requires one exact normalized name, rejects explicit
+  Regular/IDCW/dividend inputs, and exposes ambiguous or unmatched labels rather
+  than substituting a similar plan. The UI retains official scheme, AMC, code,
+  latest NAV/date, mapped category and the raw AMFI category heading for audit.
+- Logged the Mutual Funds Comparer as **held pending user-file validation**.
+  Its upload, exact AMFI catalogue matching and common-window performance
+  foundations are complete; category benchmarks and longer windows are paused
+  until representative files are available.
+- Added `historical-regimes-v11` and
+  `historical-point-in-time-readiness-v1`. Historical macro, credit,
+  external-balance and membership evidence is now audited for publication
+  dates, revision states and effective dates. Revised retrospective Handbook
+  rows remain usable for stories but are explicitly excluded from entry-date
+  snapshots.
+- Added `backtests-v3`. The Backtests registry now includes a release-aware
+  factor admission gate and shows ready, partial and blocked evidence families
+  before any new regime-factor test can run.
+- Added `historical-regimes-v12`, `backtests-v4` and
+  `rbi-release-vintage-import-v1`. Five explicitly registered RBI balance-of-
+  payments and external-debt releases now preserve observation date, release
+  date, revision state and source identity. Current-account deficits remain
+  signed, and only releases available by an episode start can enter its factor
+  snapshot. Sparse release coverage appears as partial evidence and does not
+  create a trait or unblock decision support.
 
 ## Next work
 
-1. Expand the Historical Regimes entry-date validation and Backtests contracts with
-   official credit and external-balance histories that retain release dates and
-   revisions, effective-dated membership, and higher-frequency price paths
-   where genuinely available. Preserve base changes and honest frequency;
-   never synthesize missing daily values or use revised actuals in an earlier
+1. Expand the audited RBI release registry into continuous balance-of-payments,
+   external-debt, credit and macro vintages while retaining every original
+   publication date and revision state, then add authoritative effective-dated
+   index membership. Preserve base changes and honest frequency; never
+   synthesize missing daily values or use revised actuals in an earlier
    information set.
 2. Live-check the first full NIFTY 500 five-year retrieval after reconnecting
    Kite, including year switching, coverage counts, and reverse ranking order.

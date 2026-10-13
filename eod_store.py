@@ -1354,8 +1354,7 @@ class EODStore:
                 or (
                     float(value) <= 0
                     and not (
-                        series_key == "india_real_gdp_growth_pct"
-                        and isinstance(metadata, dict)
+                        isinstance(metadata, dict)
                         and metadata.get("allows_non_positive") is True
                     )
                 )

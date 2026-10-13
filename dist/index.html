@@ -2869,6 +2869,34 @@
           </section>
 
           <section class="analysis-section">
+            <h2>Official AMFI scheme catalogue</h2>
+            <p class="section-note" id="mutualFundsCatalogueNote">Upload a fund list to resolve current Direct-Growth schemes against AMFI's complete NAV report.</p>
+            <div class="summary-grid" aria-label="AMFI scheme catalogue coverage">
+              <article class="summary-card"><div class="summary-value" id="mutualFundsCatalogueMatchedValue">—</div><div class="summary-meta">Uploaded funds matched</div></article>
+              <article class="summary-card"><div class="summary-value" id="mutualFundsCatalogueSizeValue">—</div><div class="summary-meta">Current Direct-Growth schemes</div></article>
+              <article class="summary-card"><div class="summary-value" id="mutualFundsCatalogueDateValue">—</div><div class="summary-meta">Catalogue as of</div></article>
+              <article class="summary-card"><div class="summary-value" id="mutualFundsCatalogueVersionValue">—</div><div class="summary-meta">Category schema</div></article>
+            </div>
+            <div class="table-guide"><strong>How to read:</strong> Matching is restricted to current Direct Plan Growth rows. Reviewed scheme codes take precedence; other labels need one exact normalized scheme-name match. Regular, IDCW and dividend inputs are rejected, while ambiguous names remain unresolved. The raw AMFI category heading is retained beside the versioned local category.</div>
+            <div class="table-wrap"><table><thead><tr><th>Uploaded fund</th><th>Official Direct-Growth scheme</th><th>AMFI code</th><th>AMC</th><th>Mapped category</th><th>AMFI category heading</th><th>Latest NAV / date</th><th>Match status</th></tr></thead><tbody id="mutualFundsCatalogueBody"><tr><td colspan="8">No catalogue match has been run.</td></tr></tbody></table></div>
+            <div class="analysis-note" id="mutualFundsCatalogueContract">The AMFI catalogue contract has not been loaded.</div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Official NAV performance comparison</h2>
+            <p class="section-note" id="mutualFundsPerformanceNote">Upload a fund list to request aligned official AMFI NAV history for reviewed exact schemes.</p>
+            <div class="summary-grid" aria-label="Mutual fund performance coverage">
+              <article class="summary-card"><div class="summary-value" id="mutualFundsPerformanceMatchedValue">—</div><div class="summary-meta">Funds with aligned NAV history</div></article>
+              <article class="summary-card"><div class="summary-value" id="mutualFundsPerformanceSessionsValue">—</div><div class="summary-meta">Common NAV observations</div></article>
+              <article class="summary-card"><div class="summary-value" id="mutualFundsPerformanceStartValue">—</div><div class="summary-meta">Common window start</div></article>
+              <article class="summary-card"><div class="summary-value" id="mutualFundsPerformanceEndValue">—</div><div class="summary-meta">Common window end</div></article>
+            </div>
+            <div class="table-guide"><strong>How to read:</strong> Every measured fund uses the same AMFI NAV dates. Aligned return is the total return across that common window; annualized return scales that observed window to 252 sessions. Volatility, drawdown, Sharpe and Sortino describe different aspects of risk and should not be read as a recommendation.</div>
+            <div class="table-wrap"><table><thead><tr><th>Fund / scheme</th><th>Category</th><th>AMFI code</th><th>Latest NAV / date</th><th>Aligned return</th><th>Annualized return</th><th>Annualized volatility</th><th>Maximum drawdown</th><th>Sharpe</th><th>Sortino</th><th>Status</th></tr></thead><tbody id="mutualFundsPerformanceBody"><tr><td colspan="11">No performance comparison has been run.</td></tr></tbody></table></div>
+            <div class="analysis-note" id="mutualFundsPerformanceContract">The official NAV comparison contract has not been loaded.</div>
+          </section>
+
+          <section class="analysis-section">
             <h2>Holdings overlap</h2>
             <p class="section-note" id="mutualFundsOverlapNote">Add an Underlying Holdings sheet to calculate pairwise overlap.</p>
             <div class="table-guide"><strong>How to read:</strong> Overlap is the sum of the smaller security weight shared by each pair of funds. It is a lower bound when either uploaded holdings list covers less than 95% of the fund.</div>
@@ -3050,6 +3078,19 @@
           </section>
 
           <section class="analysis-section">
+            <h2>Point-in-time evidence readiness</h2>
+            <p class="section-note" id="historicalPointInTimeNote">The release-date and revision audit has not been loaded. Retrospective official history can describe an episode but cannot automatically enter its historical information set.</p>
+            <div class="summary-grid" id="historicalPointInTimeGrid">
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Release-dated observations</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Retrospective-only observations</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Evidence families ready</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Entry-snapshot admission</div></article>
+            </div>
+            <div class="table-guide"><strong>How to read:</strong> Observation date tells us which period a value describes; release date tells us when an investor could first have known it. A family remains blocked until publication dates, revision states and effective dates are preserved.</div>
+            <div class="table-wrap"><table><thead><tr><th>Evidence family</th><th>Status</th><th>Release-dated</th><th>Retrospective only</th><th>Series ready</th><th>Frequency / coverage</th><th>Next requirement</th></tr></thead><tbody id="historicalPointInTimeBody"><tr><td colspan="7">Point-in-time readiness has not been audited.</td></tr></tbody></table></div>
+          </section>
+
+          <section class="analysis-section">
             <h2>Entry-date snapshots and held-out validation</h2>
             <p class="section-note" id="historicalEntryValidationNote">Entry snapshots have not been calculated yet. The contract will keep evidence known at the start separate from what happened afterwards.</p>
             <div class="summary-grid" id="historicalEntryValidationGrid">
@@ -3219,6 +3260,20 @@
           </section>
 
           <section class="analysis-section">
+            <h2>Entry-evidence admission gate</h2>
+            <p class="section-note" id="backtestsEvidenceNote">Run the registered tests to audit which historical evidence can enter a decision-date snapshot without hindsight.</p>
+            <div class="summary-grid" id="backtestsEvidenceGrid">
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Evidence families</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Families ready</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Release-dated observations</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Admission state</div></article>
+            </div>
+            <div class="historical-fingerprint-grid" id="backtestsEvidenceGridDetail">
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting audit</div><h3>No evidence gate loaded</h3><p>Backtests must distinguish historical release vintages from revised retrospective facts.</p></article>
+            </div>
+          </section>
+
+          <section class="analysis-section">
             <h2>Historical-regime entry-trait test</h2>
             <p class="section-note" id="backtestsValidationNote">Run the registered tests to compare traits formed only from entry-date evidence with later 252-session outcomes.</p>
             <div class="summary-grid" id="backtestsValidationGrid">
@@ -3334,10 +3389,13 @@
     const clearMutualFundsButton = document.getElementById('clearMutualFundsButton');
     const mutualFundsCategoryBody = document.getElementById('mutualFundsCategoryBody');
     const mutualFundsPortfolioBody = document.getElementById('mutualFundsPortfolioBody');
+    const mutualFundsCatalogueBody = document.getElementById('mutualFundsCatalogueBody');
+    const mutualFundsPerformanceBody = document.getElementById('mutualFundsPerformanceBody');
     const mutualFundsOverlapBody = document.getElementById('mutualFundsOverlapBody');
     const mutualFundsLookthroughBody = document.getElementById('mutualFundsLookthroughBody');
     const mutualFundsSuggestionsBody = document.getElementById('mutualFundsSuggestionsBody');
     const mutualFundsIssuesBody = document.getElementById('mutualFundsIssuesBody');
+    let mutualFundsAnalysisSequence = 0;
     const portfolioFileInput = document.getElementById('portfolioFileInput');
     const portfolioGoogleFinanceInput = document.getElementById('portfolioGoogleFinanceInput');
     const clearPortfolioButton = document.getElementById('clearPortfolioButton');
@@ -6131,6 +6189,93 @@
       });
     }
 
+    function renderMutualFundCatalogue(classification) {
+      const result = classification && typeof classification === 'object' ? classification : {};
+      const rows = Array.isArray(result.rows) ? result.rows : [];
+      document.getElementById('mutualFundsCatalogueMatchedValue').textContent = Number(result.matched_funds || 0).toLocaleString('en-IN');
+      document.getElementById('mutualFundsCatalogueSizeValue').textContent = Number(result.catalogue_schemes || 0).toLocaleString('en-IN');
+      document.getElementById('mutualFundsCatalogueDateValue').textContent = formatDisplayDate(result.catalogue_as_of);
+      document.getElementById('mutualFundsCatalogueVersionValue').textContent = result.category_schema_version || '—';
+      mutualFundsCatalogueBody.innerHTML = rows.length ? rows.map((row) => `<tr>
+        <td>${escapeHtml(row.scheme || '—')}</td>
+        <td>${escapeHtml(row.official_name || '—')}</td>
+        <td>${escapeHtml(row.scheme_code || '—')}</td>
+        <td>${escapeHtml(row.amc_name || '—')}</td>
+        <td>${escapeHtml(row.amfi_category || '—')}</td>
+        <td>${escapeHtml(row.amfi_category_raw || '—')}</td>
+        <td>${row.nav === null || row.nav === undefined ? '—' : `${Number(row.nav).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}${row.nav_date ? `<span class="portfolio-price-date">${escapeHtml(formatDisplayDate(row.nav_date))}</span>` : ''}`}</td>
+        <td>${escapeHtml(String(row.status || 'unavailable').replaceAll('_', ' '))}${Number(row.candidate_count || 0) > 1 ? `<span class="portfolio-price-date">${Number(row.candidate_count).toLocaleString('en-IN')} candidates</span>` : ''}</td>
+      </tr>`).join('') : '<tr><td colspan="8">No uploaded fund could be evaluated against the catalogue.</td></tr>';
+      const rejected = Number(result.rejected_non_direct_growth || 0);
+      const ambiguous = Number(result.ambiguous_funds || 0);
+      document.getElementById('mutualFundsCatalogueNote').textContent = `${Number(result.matched_funds || 0).toLocaleString('en-IN')} of ${Number(result.uploaded_funds || 0).toLocaleString('en-IN')} uploaded funds matched against ${Number(result.catalogue_schemes || 0).toLocaleString('en-IN')} current Direct-Growth schemes${rejected ? ` · ${rejected.toLocaleString('en-IN')} non-Direct-Growth input rejected` : ''}${ambiguous ? ` · ${ambiguous.toLocaleString('en-IN')} ambiguous` : ''}.`;
+      document.getElementById('mutualFundsCatalogueContract').textContent = `${result.contract_version || 'amfi-direct-growth-catalogue-v1'}. ${(result.limitations || []).join(' ')}`;
+    }
+
+    async function loadMutualFundCatalogue(funds, sequence) {
+      document.getElementById('mutualFundsCatalogueNote').textContent = 'Loading the official AMFI complete NAV report and filtering it to current Direct-Growth schemes.';
+      try {
+        const response = await fetch('/api/mutual-funds/catalogue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ funds: (Array.isArray(funds) ? funds : []).map((row) => ({ scheme: row.scheme, category: row.category, category_source: row.category_source, weight_pct: row.weight_pct })) }),
+        });
+        const payload = await response.json();
+        if (sequence !== mutualFundsAnalysisSequence) return;
+        if (!response.ok || payload.ok !== true) throw new Error(payload.reason || 'catalogue_unavailable');
+        renderMutualFundCatalogue(payload.classification);
+      } catch (_error) {
+        if (sequence !== mutualFundsAnalysisSequence) return;
+        document.getElementById('mutualFundsCatalogueNote').textContent = 'The official AMFI scheme catalogue is temporarily unavailable. Uploaded and transparent name-based categories remain visible; no scheme match was inferred.';
+        document.getElementById('mutualFundsCatalogueContract').textContent = 'amfi-direct-growth-catalogue-v1. Catalogue evidence is withheld when the official source cannot be reached.';
+      }
+    }
+
+    function renderMutualFundPerformance(performance) {
+      const result = performance && typeof performance === 'object' ? performance : {};
+      const rows = Array.isArray(result.rows) ? result.rows : [];
+      const percentage = (value) => value === null || value === undefined ? '—' : `${Number(value).toFixed(2)}%`;
+      const signedPercentage = (value) => value === null || value === undefined ? '—' : `${Number(value) > 0 ? '+' : ''}${Number(value).toFixed(2)}%`;
+      document.getElementById('mutualFundsPerformanceMatchedValue').textContent = Number(result.matched_funds || 0).toLocaleString('en-IN');
+      document.getElementById('mutualFundsPerformanceSessionsValue').textContent = Number(result.common_observations || 0).toLocaleString('en-IN');
+      document.getElementById('mutualFundsPerformanceStartValue').textContent = formatDisplayDate(result.start_date);
+      document.getElementById('mutualFundsPerformanceEndValue').textContent = formatDisplayDate(result.end_date);
+      mutualFundsPerformanceBody.innerHTML = rows.length ? rows.map((row) => `<tr>
+        <td>${escapeHtml(row.scheme || '—')}</td><td>${escapeHtml(row.category || 'Unclassified')}</td>
+        <td>${escapeHtml(row.scheme_code || '—')}</td>
+        <td>${row.nav === null || row.nav === undefined ? '—' : `${Number(row.nav).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}${row.nav_date ? `<span class="portfolio-price-date">${escapeHtml(formatDisplayDate(row.nav_date))}</span>` : ''}`}</td>
+        <td class="${stockYtdMetricClass(row.aligned_return_pct)}">${signedPercentage(row.aligned_return_pct)}</td>
+        <td class="${stockYtdMetricClass(row.annualized_return_pct)}">${signedPercentage(row.annualized_return_pct)}</td>
+        <td>${percentage(row.annualized_volatility_pct)}</td><td>${signedPercentage(row.maximum_drawdown_pct)}</td>
+        <td>${row.sharpe_ratio === null || row.sharpe_ratio === undefined ? '—' : Number(row.sharpe_ratio).toFixed(2)}</td>
+        <td>${row.sortino_ratio === null || row.sortino_ratio === undefined ? '—' : Number(row.sortino_ratio).toFixed(2)}</td>
+        <td>${escapeHtml(String(row.status || 'unavailable').replaceAll('_', ' '))}</td>
+      </tr>`).join('') : '<tr><td colspan="11">No reviewed exact scheme was available for an aligned AMFI comparison.</td></tr>';
+      document.getElementById('mutualFundsPerformanceNote').textContent = result.common_observations
+        ? `${Number(result.matched_funds || 0).toLocaleString('en-IN')} funds measured across ${Number(result.common_observations).toLocaleString('en-IN')} common AMFI NAV observations, ${formatDisplayDate(result.start_date)} to ${formatDisplayDate(result.end_date)}.`
+        : 'No common AMFI NAV window was available. Only reviewed exact Direct-Growth mappings are requested; unreviewed names remain unmatched.';
+      document.getElementById('mutualFundsPerformanceContract').textContent = `${result.contract_version || 'mutual-fund-performance-comparison-v1'}. ${(result.limitations || []).join(' ')}`;
+    }
+
+    async function loadMutualFundPerformance(funds, sequence) {
+      document.getElementById('mutualFundsPerformanceNote').textContent = 'Loading reviewed official AMFI NAV histories in the background. The holdings analysis remains usable while this finishes.';
+      try {
+        const response = await fetch('/api/mutual-funds/performance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ funds: (Array.isArray(funds) ? funds : []).map((row) => ({ scheme: row.scheme, category: row.category })) }),
+        });
+        const payload = await response.json();
+        if (sequence !== mutualFundsAnalysisSequence) return;
+        if (!response.ok || payload.ok !== true) throw new Error(payload.reason || 'performance_unavailable');
+        renderMutualFundPerformance(payload.performance_comparison);
+      } catch (_error) {
+        if (sequence !== mutualFundsAnalysisSequence) return;
+        document.getElementById('mutualFundsPerformanceNote').textContent = 'Official AMFI NAV history is temporarily unavailable. The uploaded allocation analysis is still complete; retry by selecting the file again.';
+        document.getElementById('mutualFundsPerformanceContract').textContent = 'mutual-fund-performance-comparison-v1. No NAV metric is inferred when the official source cannot be reached.';
+      }
+    }
+
     function renderMutualFundAnalysis(result) {
       const funds = Array.isArray(result.funds) ? result.funds : [];
       const categories = Array.isArray(result.categories) ? result.categories : [];
@@ -6139,6 +6284,7 @@
       const suggestions = Array.isArray(result.suggestions) ? result.suggestions : [];
       const issues = Array.isArray(result.issues) ? result.issues : [];
       const diversification = result.diversification || {};
+      const performance = result.performance_comparison || {};
       const percentage = (value) => value === null || value === undefined ? '—' : `${Number(value).toFixed(2)}%`;
 
       document.getElementById('mutualFundsCountValue').textContent = Number(diversification.fund_count || 0).toLocaleString('en-IN');
@@ -6149,6 +6295,7 @@
       document.getElementById('mutualFundsHhiValue').textContent = diversification.fund_hhi === null || diversification.fund_hhi === undefined ? '—' : Number(diversification.fund_hhi).toFixed(4);
       document.getElementById('mutualFundsLargestCategoryValue').textContent = percentage(diversification.largest_category_weight_pct);
       document.getElementById('mutualFundsHoldingsCoverageValue').textContent = `${Number(diversification.funds_with_underlying_holdings || 0).toLocaleString('en-IN')} / ${Number(diversification.fund_count || 0).toLocaleString('en-IN')}`;
+      renderMutualFundPerformance(performance);
 
       mutualFundsCategoryBody.innerHTML = categories.length ? categories.map((row) => `<tr>
         <td>${escapeHtml(row.category || 'Unclassified')}</td>
@@ -6191,6 +6338,7 @@
     }
 
     async function analyzeMutualFundFile() {
+      const sequence = ++mutualFundsAnalysisSequence;
       const file = mutualFundsFileInput.files && mutualFundsFileInput.files[0];
       if (!file) {
         showNotice('Choose a CSV or XLSX mutual-fund holdings file first.');
@@ -6218,6 +6366,8 @@
           return false;
         }
         renderMutualFundAnalysis(result);
+        loadMutualFundCatalogue(result.funds, sequence);
+        loadMutualFundPerformance(result.funds, sequence);
         showNotice('Mutual-fund holdings analysis complete.');
         return true;
       } catch (_error) {
@@ -6229,19 +6379,26 @@
     }
 
     function clearMutualFundAnalysis() {
+      mutualFundsAnalysisSequence += 1;
       mutualFundsFileInput.value = '';
       document.getElementById('mutualFundsStatus').textContent = 'Choose a CSV or XLSX file';
       document.getElementById('mutualFundsUploadStatus').textContent = 'Choose a file and analysis will start automatically.';
-      ['mutualFundsCountValue', 'mutualFundsCategoryCountValue', 'mutualFundsLargestWeightValue', 'mutualFundsMaxOverlapValue', 'mutualFundsEffectiveCountValue', 'mutualFundsHhiValue', 'mutualFundsLargestCategoryValue', 'mutualFundsHoldingsCoverageValue'].forEach((id) => {
+      ['mutualFundsCountValue', 'mutualFundsCategoryCountValue', 'mutualFundsLargestWeightValue', 'mutualFundsMaxOverlapValue', 'mutualFundsEffectiveCountValue', 'mutualFundsHhiValue', 'mutualFundsLargestCategoryValue', 'mutualFundsHoldingsCoverageValue', 'mutualFundsCatalogueMatchedValue', 'mutualFundsCatalogueSizeValue', 'mutualFundsCatalogueDateValue', 'mutualFundsCatalogueVersionValue', 'mutualFundsPerformanceMatchedValue', 'mutualFundsPerformanceSessionsValue', 'mutualFundsPerformanceStartValue', 'mutualFundsPerformanceEndValue'].forEach((id) => {
         document.getElementById(id).textContent = '—';
       });
       mutualFundsCategoryBody.innerHTML = '<tr><td colspan="3">No fund list has been analyzed.</td></tr>';
       mutualFundsPortfolioBody.innerHTML = '<tr><td colspan="5">No fund list has been analyzed.</td></tr>';
+      mutualFundsCatalogueBody.innerHTML = '<tr><td colspan="8">No catalogue match has been run.</td></tr>';
+      mutualFundsPerformanceBody.innerHTML = '<tr><td colspan="11">No performance comparison has been run.</td></tr>';
       mutualFundsOverlapBody.innerHTML = '<tr><td colspan="6">No underlying holdings were supplied.</td></tr>';
       mutualFundsLookthroughBody.innerHTML = '<tr><td colspan="2">No look-through holdings were supplied.</td></tr>';
       mutualFundsSuggestionsBody.innerHTML = '<tr><td colspan="3">No analysis has been run.</td></tr>';
       mutualFundsIssuesBody.innerHTML = '<tr><td colspan="3">No validation run yet.</td></tr>';
       document.getElementById('mutualFundsBasisNote').textContent = 'Upload a file to calculate normalized portfolio weights.';
+      document.getElementById('mutualFundsCatalogueNote').textContent = "Upload a fund list to resolve current Direct-Growth schemes against AMFI's complete NAV report.";
+      document.getElementById('mutualFundsCatalogueContract').textContent = 'The AMFI catalogue contract has not been loaded.';
+      document.getElementById('mutualFundsPerformanceNote').textContent = 'Upload a fund list to request aligned official AMFI NAV history for reviewed exact schemes.';
+      document.getElementById('mutualFundsPerformanceContract').textContent = 'The official NAV comparison contract has not been loaded.';
       document.getElementById('mutualFundsOverlapNote').textContent = 'Add an Underlying Holdings sheet to calculate pairwise overlap.';
       document.getElementById('mutualFundsDiversificationNote').textContent = 'Upload a file to calculate concentration and effective fund count.';
       document.getElementById('mutualFundsContractNote').textContent = 'The mutual-fund holdings analysis contract has not been loaded.';
@@ -6777,6 +6934,9 @@
       const entryReadiness = entryValidation.readiness || {};
       const entrySplit = entryValidation.split || {};
       const entryTraitValidation = Array.isArray(entryValidation.trait_validation) ? entryValidation.trait_validation : [];
+      const pointInTime = result.point_in_time_readiness || {};
+      const pointInTimeSummary = pointInTime.summary || {};
+      const pointInTimeCategories = Array.isArray(pointInTime.categories) ? pointInTime.categories : [];
 
       document.getElementById('historicalStoryMethodGrid').innerHTML = storyMethod.length
         ? storyMethod.map((row) => `<article class="historical-story-method">
@@ -6842,6 +7002,26 @@
           </tr>`).join('')
         : '<tr><td colspan="12">Official annual history has not been imported.</td></tr>';
 
+      document.getElementById('historicalPointInTimeNote').textContent = pointInTime.contract_version
+        ? `${pointInTime.admission_reason} Release-native RBI observations use rbi-release-vintage-import-v1; retrospective Handbook rows remain available to the story layer but are excluded from entry-date tests.`
+        : 'The release-date and revision audit has not been loaded.';
+      document.getElementById('historicalPointInTimeGrid').innerHTML = `
+        <article class="summary-card"><div class="summary-value">${Number(pointInTimeSummary.release_dated_observations || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Release-dated observations</div></article>
+        <article class="summary-card"><div class="summary-value">${Number(pointInTimeSummary.retrospective_only_observations || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Retrospective-only observations</div></article>
+        <article class="summary-card"><div class="summary-value">${Number(pointInTimeSummary.ready_categories || 0).toLocaleString('en-IN')}/${Number(pointInTimeSummary.categories || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Evidence families ready</div></article>
+        <article class="summary-card"><div class="summary-value ${pointInTime.entry_snapshot_admission === 'ready' ? 'positive' : 'negative'}">${escapeHtml(pointInTime.entry_snapshot_admission || 'blocked')}</div><div class="summary-meta">Entry-snapshot admission</div></article>`;
+      document.getElementById('historicalPointInTimeBody').innerHTML = pointInTimeCategories.length
+        ? pointInTimeCategories.map((row) => `<tr>
+            <td><strong>${escapeHtml(row.label)}</strong><br><span class="status">${escapeHtml(row.use)}</span></td>
+            <td>${escapeHtml(row.status)}</td>
+            <td>${Number(row.release_dated_observations || 0).toLocaleString('en-IN')}</td>
+            <td>${Number(row.retrospective_only_observations || 0).toLocaleString('en-IN')}</td>
+            <td>${Number(row.release_dated_series || 0).toLocaleString('en-IN')}/${Number(row.required_series || 0).toLocaleString('en-IN')}</td>
+            <td>${escapeHtml(row.frequency)}<br><span class="status">${row.from_date ? `${formatDisplayDate(row.from_date)} to ${formatDisplayDate(row.to_date)}` : 'No dated coverage'}</span></td>
+            <td>${escapeHtml(row.missing_requirement || 'Release contract satisfied')}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="7">Point-in-time readiness has not been audited.</td></tr>';
+
       document.getElementById('historicalEntryValidationNote').textContent = entryValidation.contract_version
         ? `${entryValidation.method} Classifier admission: ${entryValidation.classifier_admission}. ${entryValidation.classifier_admission_reason}`
         : 'Entry snapshots have not been calculated yet. The contract will keep evidence known at the start separate from what happened afterwards.';
@@ -6856,7 +7036,9 @@
             const outcome = snapshot.outcome && snapshot.outcome.windows ? snapshot.outcome.windows['252'] || {} : {};
             const factors = Array.isArray(snapshot.factors) ? snapshot.factors : [];
             const traits = Array.isArray(snapshot.traits) ? snapshot.traits : [];
-            const coverage = `${factors.filter((factor) => factor.status === 'ready').length}/${factors.length} factors ready`;
+            const readyFactors = factors.filter((factor) => factor.status === 'ready').length;
+            const partialFactors = factors.filter((factor) => factor.status === 'partial').length;
+            const coverage = `${readyFactors} ready${partialFactors ? ` · ${partialFactors} partial` : ''} / ${factors.length} factors`;
             const traitText = traits.length ? traits.map((trait) => trait.label).join(' · ') : 'No threshold trait observed';
             return `<tr>
               <td><strong>${escapeHtml(snapshot.episode_title)}</strong><br><span class="status">${escapeHtml(snapshot.episode_period)}</span></td>
@@ -7067,11 +7249,30 @@
       const registry = Array.isArray(result.registry) ? result.registry : [];
       const traits = Array.isArray(result.trait_results) ? result.trait_results : [];
       const limitations = Array.isArray(result.limitations) ? result.limitations : [];
+      const pointInTime = result.point_in_time_readiness || {};
+      const evidenceSummary = pointInTime.summary || {};
+      const evidenceCategories = Array.isArray(pointInTime.categories) ? pointInTime.categories : [];
 
       document.getElementById('backtestsRegisteredValue').textContent = Number(summary.registered_contracts || 0).toLocaleString('en-IN');
       document.getElementById('backtestsCompletedValue').textContent = Number(summary.chronological_tests_completed || 0).toLocaleString('en-IN');
       document.getElementById('backtestsHeldOutValue').textContent = Number(summary.held_out_tests_passed || 0).toLocaleString('en-IN');
       document.getElementById('backtestsApprovedValue').textContent = Number(summary.approved_for_decision_support || 0).toLocaleString('en-IN');
+      document.getElementById('backtestsEvidenceNote').textContent = pointInTime.contract_version
+        ? `${pointInTime.admission_reason} This gate is evaluated before any factor/outcome relationship is tested.`
+        : 'Point-in-time evidence readiness is unavailable; release-aware factor testing remains blocked.';
+      document.getElementById('backtestsEvidenceGrid').innerHTML = `
+        <article class="summary-card"><div class="summary-value">${Number(evidenceSummary.categories || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Evidence families</div></article>
+        <article class="summary-card"><div class="summary-value">${Number(evidenceSummary.ready_categories || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Families ready</div></article>
+        <article class="summary-card"><div class="summary-value">${Number(evidenceSummary.release_dated_observations || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Release-dated observations</div></article>
+        <article class="summary-card"><div class="summary-value ${pointInTime.entry_snapshot_admission === 'ready' ? 'positive' : 'negative'}">${escapeHtml(pointInTime.entry_snapshot_admission || 'blocked')}</div><div class="summary-meta">Admission state</div></article>`;
+      document.getElementById('backtestsEvidenceGridDetail').innerHTML = evidenceCategories.length
+        ? evidenceCategories.map((row) => `<article class="historical-fingerprint-card ${row.status === 'ready' ? 'ready' : row.status === 'partial' ? 'partial' : 'unavailable'}">
+            <div class="historical-step">${escapeHtml(row.status)} · ${Number(row.release_dated_series || 0)}/${Number(row.required_series || 0)} required series</div>
+            <h3>${escapeHtml(row.label)}</h3>
+            <p>${Number(row.release_dated_observations || 0).toLocaleString('en-IN')} release-dated observations; ${Number(row.retrospective_only_observations || 0).toLocaleString('en-IN')} retrospective-only.</p>
+            <div class="fingerprint-limitation">${escapeHtml(row.missing_requirement || 'Release-date and revision contract satisfied.')}</div>
+          </article>`).join('')
+        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">No audit returned</div><h3>Evidence admission blocked</h3><p>No point-in-time evidence categories were available.</p></article>';
       document.getElementById('backtestsValidationGrid').innerHTML = `
         <article class="summary-card"><div class="summary-value">${Number(validation.discovery_outcomes_ready || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Discovery outcomes ready</div></article>
         <article class="summary-card"><div class="summary-value">${Number(validation.held_out_outcomes_ready || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Held-out outcomes ready</div></article>
@@ -7193,7 +7394,12 @@
         const loaded = await loadHistoricalRegimes(false);
         if (showSuccess && loaded) {
           const written = result.write_result || {};
-          showNotice(`Official RBI history updated · ${Number(written.inserted || 0).toLocaleString('en-IN')} new · ${Number(written.duplicates || 0).toLocaleString('en-IN')} already stored.`);
+          const releaseSources = Array.isArray(result.release_sources) ? result.release_sources : [];
+          const releaseCount = releaseSources.filter((row) => row.status === 'parsed').length;
+          const releaseSummary = releaseSources.length
+            ? ` · ${releaseCount}/${releaseSources.length} release-native sources parsed`
+            : '';
+          showNotice(`Official RBI history updated · ${Number(written.inserted || 0).toLocaleString('en-IN')} new · ${Number(written.duplicates || 0).toLocaleString('en-IN')} already stored${releaseSummary}.`);
         }
         return loaded;
       } catch (_error) {

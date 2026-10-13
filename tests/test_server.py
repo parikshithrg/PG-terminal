@@ -41,6 +41,7 @@ from server import (
     build_historical_episode_stories,
     build_historical_episode_fingerprints,
     build_historical_entry_snapshot_validation,
+    build_historical_point_in_time_readiness,
     build_backtests_workspace,
     build_seasonality_backtest_workspace,
     aggregate_historical_closes,
@@ -67,6 +68,7 @@ from server import (
     normalize_futures_eod_quotes,
     parse_daily_candles,
     parse_daily_closes,
+    parse_rbi_release_vintage,
     parse_dashboard_index_tokens,
     parse_equity_tokens,
     parse_nifty500_constituents,
@@ -89,6 +91,10 @@ from server import (
     infer_portfolio_mapping,
     build_portfolio_analysis,
     build_mutual_fund_holdings_analysis,
+    build_mutual_fund_performance_comparison,
+    build_mutual_fund_catalogue_classification,
+    match_mutual_fund_scheme_catalogue,
+    parse_amfi_scheme_catalogue_text,
     parse_seasonality_index_tokens,
     rank_historical_month_averages,
 )
@@ -155,7 +161,11 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
 
         result = build_historical_regime_workspace(candles)
 
-        self.assertEqual(result["contract_version"], "historical-regimes-v10")
+        self.assertEqual(result["contract_version"], "historical-regimes-v12")
+        self.assertEqual(
+            result["point_in_time_readiness"]["contract_version"],
+            "historical-point-in-time-readiness-v1",
+        )
         self.assertGreaterEqual(result["summary"]["bull_markets"]["count"], 2)
         self.assertGreaterEqual(result["summary"]["bear_markets"]["count"], 1)
         self.assertGreaterEqual(result["summary"]["corrections"]["count"], 1)
@@ -196,6 +206,55 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(rows[0]["date"], date(1980, 3, 31))
         self.assertEqual(rows[0]["base_period"], "1978-79 = 100")
         self.assertEqual(rows[-1]["period_label"], "1980-81")
+
+    def test_rbi_release_vintage_parser_preserves_signed_value_and_release_metadata(self):
+        source = {
+            "release_id": "rbi-bop-q2-2023-24",
+            "series_key": "india_current_account_balance_usd_mn",
+            "kind": "current_account",
+            "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=56991",
+            "title": "Developments in India's Balance of Payments during Q2:2023-24",
+            "observation_date": date(2023, 9, 30),
+            "period_label": "Q2 2023-24",
+            "revision_status": "preliminary",
+        }
+        row = parse_rbi_release_vintage(
+            """
+            <html><body><div>Date : Dec 26, 2023</div>
+            <p>India’s current account deficit (CAD) narrowed to US$ 8.3 billion
+            (1.0 per cent of GDP) in Q2:2023-24.</p></body></html>
+            """,
+            source=source,
+        )
+
+        self.assertEqual(row["value"], -8300.0)
+        self.assertEqual(row["vintage_date"], date(2023, 12, 26))
+        self.assertEqual(row["metadata"]["release_date"], "2023-12-26")
+        self.assertEqual(row["metadata"]["revision_status"], "preliminary")
+        self.assertTrue(row["metadata"]["allows_non_positive"])
+
+    def test_rbi_release_vintage_parser_reads_external_debt_stock(self):
+        source = {
+            "release_id": "rbi-external-debt-mar-2021",
+            "series_key": "india_external_debt_usd_mn",
+            "kind": "external_debt",
+            "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=51819",
+            "title": "India's External Debt as at the end of March 2021",
+            "observation_date": date(2021, 3, 31),
+            "period_label": "March 2021",
+            "revision_status": "provisional",
+        }
+        row = parse_rbi_release_vintage(
+            """
+            <html><body><div>Date : Jun 30, 2021</div>
+            <p>At end-March 2021, India’s external debt was placed at
+            US$ 570.0 billion.</p></body></html>
+            """,
+            source=source,
+        )
+
+        self.assertEqual(row["value"], 570000.0)
+        self.assertEqual(row["metadata"]["release_date"], "2021-06-30")
 
     def test_historical_series_summary_withholds_wpi_change_across_base_break(self):
         common = {
@@ -692,6 +751,62 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
             changed_comparison["snapshots"][0]["outcome"]["windows"]["252"]["return_pct"],
         )
 
+    def test_historical_entry_snapshot_uses_only_releases_known_at_entry(self):
+        episodes = [
+            {
+                "key": "episode-2022",
+                "title": "Episode 2022",
+                "period": "2022",
+                "window": {"start_financial_year": 2022, "end_financial_year": 2022},
+            }
+        ]
+        start = date(2020, 1, 1)
+        candles = [
+            {"date": start + timedelta(days=index), "close": 100.0 + index * 0.05}
+            for index in range(1200)
+        ]
+        common = {
+            "frequency": "quarterly",
+            "unit": "US dollar million",
+            "base_period": "Not applicable",
+            "source_authority": "Reserve Bank of India",
+            "vintage_date": date(2022, 1, 1),
+        }
+        rows = [
+            {
+                **common,
+                "series_key": "india_external_debt_usd_mn",
+                "date": date(2021, 3, 31),
+                "period_label": "March 2021",
+                "value": 570000.0,
+                "metadata": {"release_date": "2021-06-30", "revision_status": "provisional"},
+            },
+            {
+                **common,
+                "series_key": "india_current_account_balance_usd_mn",
+                "date": date(2021, 12, 31),
+                "period_label": "Q3 2021-22",
+                "value": -9200.0,
+                "metadata": {"release_date": "2022-06-30", "revision_status": "preliminary"},
+            },
+        ]
+
+        comparison = build_historical_entry_snapshot_validation(
+            episodes,
+            candles,
+            instrument="Nifty 50",
+            official_history_rows=rows,
+        )
+        factor = next(
+            item
+            for item in comparison["snapshots"][0]["factors"]
+            if item["key"] == "rates_currency_credit"
+        )
+        self.assertEqual(factor["status"], "partial")
+        self.assertIn("570,000.00", factor["observation"])
+        self.assertNotIn("-9,200.00", factor["observation"])
+        self.assertIn("1/3 required", factor["limitation"])
+
     def test_backtests_workspace_reuses_chronological_entry_validation(self):
         entry_validation = {
             "contract_version": "historical-entry-validation-v1",
@@ -733,13 +848,76 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
             ],
         }
         workspace = build_backtests_workspace(entry_validation)
-        self.assertEqual(workspace["contract_version"], "backtests-v2")
-        self.assertEqual(workspace["summary"]["registered_contracts"], 1)
+        self.assertEqual(workspace["contract_version"], "backtests-v4")
+        self.assertEqual(workspace["summary"]["registered_contracts"], 2)
         self.assertEqual(workspace["summary"]["chronological_tests_completed"], 1)
         self.assertEqual(workspace["summary"]["held_out_tests_passed"], 0)
         self.assertEqual(workspace["registry"][0]["status"], "blocked")
         self.assertFalse(workspace["trait_results"][0]["held_out_gate_passed"])
         self.assertEqual(workspace["validation_split"]["held_out_period"]["from"], "2022-04-01")
+
+    def test_historical_point_in_time_readiness_excludes_retrospective_rows(self):
+        rows = [
+            {
+                "series_key": "india_real_gdp_growth_pct",
+                "date": date(2020, 3, 31),
+                "frequency": "annual",
+                "vintage_date": date(2026, 8, 29),
+                "metadata": {},
+            },
+            {
+                "series_key": "india_wpi_all_commodities_annual_average",
+                "date": date(2020, 3, 31),
+                "frequency": "annual",
+                "vintage_date": date(2026, 8, 29),
+                "metadata": {},
+            },
+        ]
+        readiness = build_historical_point_in_time_readiness(rows)
+        macro = next(row for row in readiness["categories"] if row["key"] == "macro_growth_inflation")
+        self.assertEqual(readiness["contract_version"], "historical-point-in-time-readiness-v1")
+        self.assertEqual(readiness["entry_snapshot_admission"], "blocked")
+        self.assertEqual(macro["status"], "blocked")
+        self.assertEqual(macro["retrospective_only_observations"], 2)
+        self.assertEqual(macro["release_dated_observations"], 0)
+
+    def test_historical_point_in_time_readiness_accepts_explicit_release_metadata(self):
+        def released(series_key, release_date):
+            return {
+                "series_key": series_key,
+                "date": date(2020, 3, 31),
+                "frequency": "annual",
+                "vintage_date": date(2020, 8, 31),
+                "metadata": {
+                    "release_date": release_date,
+                    "revision_status": "initial",
+                },
+            }
+
+        rows = [
+            released("india_real_gdp_growth_pct", "2020-05-29"),
+            released("india_wpi_all_commodities_annual_average", "2020-06-15"),
+            released("india_call_money_rate_annual", "2020-06-01"),
+            released("inr_usd_annual_average", "2020-06-01"),
+            released("india_bank_credit_growth_pct", "2020-06-01"),
+            released("india_current_account_balance_usd_mn", "2020-06-30"),
+            released("india_external_debt_usd_mn", "2020-06-30"),
+        ]
+        membership = [
+            {
+                "effective_date": date(2020, 3, 27),
+                "release_date": date(2020, 3, 13),
+                "revision_status": "initial",
+                "frequency": "event",
+            }
+        ]
+        readiness = build_historical_point_in_time_readiness(
+            rows,
+            membership_snapshots=membership,
+        )
+        self.assertEqual(readiness["entry_snapshot_admission"], "ready")
+        self.assertEqual(readiness["summary"]["ready_categories"], 4)
+        self.assertEqual(readiness["summary"]["blocked_categories"], 0)
 
     def test_all_index_seasonality_backtest_keeps_unavailable_indices_visible(self):
         def history(offset: float) -> list[dict[str, object]]:
@@ -2755,6 +2933,124 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         )
         self.assertEqual(result["weight_basis"], "weight")
         self.assertEqual([fund["weight_pct"] for fund in result["funds"]], [70.0, 30.0])
+
+    def test_mutual_fund_performance_uses_one_common_window_for_reviewed_schemes(self):
+        sessions = [date(2026, 1, 1) + timedelta(days=index) for index in range(130)]
+        result = build_mutual_fund_performance_comparison(
+            [
+                {"scheme": "Nippon India Large Cap Fund - Direct Plan - Growth", "category": "Equity - Large Cap"},
+                {"scheme": "ICICI Prudential Short Term Fund - Direct Plan - Growth", "category": "Debt - Short Duration"},
+                {"scheme": "Unreviewed Opportunity Fund", "category": "Equity"},
+            ],
+            {
+                "118632": [
+                    {"date": session, "close": 100 + index * (20 / 129)}
+                    for index, session in enumerate(sessions)
+                ],
+                "120754": [
+                    {"date": session, "close": 100 + index * (5 / 129)}
+                    for index, session in enumerate(sessions)
+                ],
+            },
+        )
+        self.assertEqual(result["common_observations"], 130)
+        self.assertEqual(result["start_date"], sessions[0].isoformat())
+        self.assertEqual(result["end_date"], sessions[-1].isoformat())
+        self.assertEqual(result["matched_funds"], 2)
+        large_cap = next(row for row in result["rows"] if row.get("scheme_code") == "118632")
+        self.assertEqual(large_cap["aligned_return_pct"], 20.0)
+        self.assertEqual(large_cap["status"], "ready")
+        unreviewed = next(row for row in result["rows"] if row["scheme"] == "Unreviewed Opportunity Fund")
+        self.assertEqual(unreviewed["status"], "exact_scheme_not_reviewed")
+
+    def test_mutual_fund_performance_withholds_metrics_without_common_history(self):
+        result = build_mutual_fund_performance_comparison(
+            [
+                {"scheme": "Nippon India Large Cap Fund - Direct Plan - Growth", "category": "Equity - Large Cap"},
+                {"scheme": "ICICI Prudential Short Term Fund - Direct Plan - Growth", "category": "Debt - Short Duration"},
+            ],
+            {
+                "118632": [{"date": date(2026, 1, 2), "close": 100.0}],
+                "120754": [{"date": date(2026, 1, 3), "close": 100.0}],
+            },
+        )
+        self.assertEqual(result["status"], "unavailable")
+        self.assertEqual(result["reason"], "insufficient_common_history")
+        self.assertTrue(all(row["status"] == "insufficient_common_history" for row in result["rows"]))
+
+    def test_amfi_catalogue_keeps_only_current_direct_growth_and_versions_categories(self):
+        catalogue = parse_amfi_scheme_catalogue_text("\n".join((
+            "Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date",
+            "",
+            "Open Ended Schemes(Equity Scheme - Large Cap Fund)",
+            "Nippon India Mutual Fund",
+            "118632;INF204K01UN9;-;Nippon India Large Cap Fund;Direct Plan;Growth Option;94.5718;12-Oct-2026",
+            "118631;INF204K01UM1;-;Nippon India Large Cap Fund;Regular Plan;Growth Option;80.0000;12-Oct-2026",
+            "118630;INF204K01UL3;-;Nippon India Large Cap Fund;Direct Plan;IDCW Option;40.0000;12-Oct-2026",
+            "Open Ended Schemes(Debt Scheme - Short Duration Fund)",
+            "ICICI Prudential Mutual Fund",
+            "120754;INF109K013N3;-;ICICI Prudential Short Term Fund;Direct Plan;Growth;70.6747;12-Oct-2026",
+            "999999;INF000000001;-;Old Direct Fund;Direct Plan;Growth;10.0000;01-Jan-2025",
+        )))
+        self.assertEqual(catalogue["catalogue_as_of"], "2026-10-12")
+        self.assertEqual(catalogue["current_direct_growth_schemes"], 2)
+        self.assertEqual(catalogue["stale_direct_growth_rows_excluded"], 1)
+        self.assertEqual(catalogue["rows"][0]["category_schema_version"], "amfi-category-map-v1")
+        categories = {row["scheme_code"]: row["category"] for row in catalogue["rows"]}
+        self.assertEqual(categories["118632"], "Equity - Large Cap")
+        self.assertEqual(categories["120754"], "Debt - Short Duration")
+
+    def test_amfi_catalogue_matching_rejects_plan_substitution_and_exposes_ambiguity(self):
+        rows = [
+            {"scheme_code": "1", "scheme_base": "alpha equity fund"},
+            {"scheme_code": "2", "scheme_base": "alpha equity fund"},
+            {"scheme_code": "3", "scheme_base": "beta debt fund"},
+        ]
+        self.assertEqual(
+            match_mutual_fund_scheme_catalogue("Alpha Equity Fund - Direct Plan - Growth", rows)["status"],
+            "ambiguous_direct_growth_match",
+        )
+        self.assertEqual(
+            match_mutual_fund_scheme_catalogue("Beta Debt Fund - Regular Plan - Growth", rows)["status"],
+            "non_direct_growth_input",
+        )
+        match = match_mutual_fund_scheme_catalogue("Beta Debt Fund", rows)
+        self.assertEqual(match["status"], "unique_direct_growth_match")
+        self.assertEqual(match["match"]["scheme_code"], "3")
+
+    def test_amfi_catalogue_classification_preserves_uploaded_category_and_audit_fields(self):
+        catalogue = {
+            "category_schema_version": "amfi-category-map-v1",
+            "catalogue_as_of": "2026-10-12",
+            "current_direct_growth_schemes": 1,
+            "stale_direct_growth_rows_excluded": 4,
+            "rows": [{
+                "scheme_code": "118632",
+                "scheme_base": "nippon india large cap fund",
+                "official_name": "Nippon India Large Cap Fund - Direct Plan - Growth Option",
+                "amc_name": "Nippon India Mutual Fund",
+                "plan": "Direct Plan",
+                "option": "Growth Option",
+                "category": "Equity - Large Cap",
+                "category_raw": "Equity Scheme - Large Cap Fund",
+                "nav": 94.5718,
+                "nav_date": date(2026, 10, 12),
+            }],
+        }
+        result = build_mutual_fund_catalogue_classification(
+            [{
+                "scheme": "Nippon India Large Cap Fund - Direct Plan - Growth",
+                "category": "My Equity Bucket",
+                "category_source": "uploaded",
+                "weight_pct": 100,
+            }],
+            catalogue,
+        )
+        self.assertEqual(result["matched_funds"], 1)
+        self.assertEqual(result["rows"][0]["status"], "reviewed_exact_match")
+        self.assertEqual(result["rows"][0]["uploaded_category"], "My Equity Bucket")
+        self.assertEqual(result["rows"][0]["amfi_category_raw"], "Equity Scheme - Large Cap Fund")
+        self.assertEqual(result["category_schema_version"], "amfi-category-map-v1")
 
     def test_mutual_fund_xlsx_reads_optional_underlying_holdings_sheet(self):
         payload = io.BytesIO()

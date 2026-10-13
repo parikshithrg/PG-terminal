@@ -57,6 +57,9 @@ NIFTY_GSEC_SOURCE_URL = "https://www.niftyindices.com/indices/fixed-income/gsec-
 NIFTY_GSEC_INDEX_NAME = "Nifty 10 yr Benchmark G-Sec"
 AMFI_NAV_HISTORY_URL = "https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx"
 AMFI_NAV_SOURCE_URL = "https://www.amfiindia.com/net-asset-value/nav-download"
+AMFI_LATEST_NAV_URL = "https://portal.amfiindia.com/spages/NAVAll.txt"
+AMFI_SCHEME_CATALOGUE_CONTRACT_VERSION = "amfi-direct-growth-catalogue-v1"
+AMFI_CATEGORY_SCHEMA_VERSION = "amfi-category-map-v1"
 AMFI_PORTFOLIO_SCHEMES = (
     {
         "scheme_code": "120754",
@@ -111,10 +114,11 @@ FRED_GLOBAL_SERIES = {
 }
 SENTIMENT_EVIDENCE_MODEL_VERSION = "market-sentiment-evidence-v1"
 REGIME_RULE_VERSION = "market-regime-candidate-v1"
-HISTORICAL_REGIME_CONTRACT_VERSION = "historical-regimes-v10"
+HISTORICAL_REGIME_CONTRACT_VERSION = "historical-regimes-v12"
 HISTORICAL_FINGERPRINT_CONTRACT_VERSION = "historical-episode-fingerprint-v1"
 HISTORICAL_ENTRY_VALIDATION_CONTRACT_VERSION = "historical-entry-validation-v1"
-BACKTESTS_CONTRACT_VERSION = "backtests-v2"
+HISTORICAL_POINT_IN_TIME_CONTRACT_VERSION = "historical-point-in-time-readiness-v1"
+BACKTESTS_CONTRACT_VERSION = "backtests-v4"
 SEASONALITY_BACKTEST_CONTRACT_VERSION = "seasonality-all-indices-backtest-v1"
 HISTORICAL_BULL_BEAR_THRESHOLD_PCT = 20.0
 HISTORICAL_CORRECTION_THRESHOLD_PCT = 10.0
@@ -556,6 +560,59 @@ RBI_HISTORICAL_SERIES_SOURCES = (
     },
 )
 RBI_HISTORICAL_SERIES_SOURCE = "Reserve Bank of India Handbook of Statistics on Indian Economy"
+RBI_RELEASE_VINTAGE_CONTRACT_VERSION = "rbi-release-vintage-import-v1"
+RBI_RELEASE_VINTAGE_SOURCES = (
+    {
+        "release_id": "rbi-bop-q2-2023-24",
+        "series_key": "india_current_account_balance_usd_mn",
+        "kind": "current_account",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=56991",
+        "title": "RBI balance of payments release: Q2 2023-24",
+        "observation_date": date(2023, 9, 30),
+        "period_label": "Q2 2023-24",
+        "revision_status": "preliminary",
+    },
+    {
+        "release_id": "rbi-bop-q4-2023-24",
+        "series_key": "india_current_account_balance_usd_mn",
+        "kind": "current_account",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=58147",
+        "title": "RBI balance of payments release: Q4 2023-24",
+        "observation_date": date(2024, 3, 31),
+        "period_label": "Q4 2023-24",
+        "revision_status": "preliminary",
+    },
+    {
+        "release_id": "rbi-bop-q1-2024-25",
+        "series_key": "india_current_account_balance_usd_mn",
+        "kind": "current_account",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=58783",
+        "title": "RBI balance of payments release: Q1 2024-25",
+        "observation_date": date(2024, 6, 30),
+        "period_label": "Q1 2024-25",
+        "revision_status": "preliminary",
+    },
+    {
+        "release_id": "rbi-external-debt-q1-2013-14",
+        "series_key": "india_external_debt_usd_mn",
+        "kind": "external_debt",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=29664",
+        "title": "RBI external debt release: end-June 2013",
+        "observation_date": date(2013, 6, 30),
+        "period_label": "End-June 2013",
+        "revision_status": "provisional",
+    },
+    {
+        "release_id": "rbi-external-debt-2020-21",
+        "series_key": "india_external_debt_usd_mn",
+        "kind": "external_debt",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=51819",
+        "title": "RBI external debt release: end-March 2021",
+        "observation_date": date(2021, 3, 31),
+        "period_label": "End-March 2021",
+        "revision_status": "provisional",
+    },
+)
 KITE_FUTURES_SOURCE = "Kite Connect NFO completed daily price and open interest"
 NIFTY_INDICES_PUBLIC_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -630,6 +687,7 @@ MAX_GOOGLE_FINANCE_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_GOOGLE_FINANCE_SYMBOLS = 100
 MAX_NIFTY_GSEC_RESPONSE_BYTES = 512 * 1024
 MAX_AMFI_NAV_RESPONSE_BYTES = 8 * 1024 * 1024
+MAX_AMFI_CATALOGUE_RESPONSE_BYTES = 16 * 1024 * 1024
 REQUEST_TIMEOUT_SECONDS = 10
 BREADTH_CACHE_SECONDS = 15 * 60
 SEASONALITY_CACHE_SECONDS = 15 * 60
@@ -638,6 +696,7 @@ NIFTY_GSEC_CACHE_SECONDS = 6 * 60 * 60
 AMFI_NAV_CACHE_SECONDS = 6 * 60 * 60
 AMFI_NAV_LOOKBACK_DAYS = 300
 AMFI_NAV_CHUNK_DAYS = 90
+AMFI_NAV_REQUEST_TIMEOUT_SECONDS = 12
 HISTORICAL_LOOKBACK_DAYS = 420
 NIFTY500_HISTORY_LOOKBACK_DAYS = 1800
 SEASONALITY_LOOKBACK_YEARS = 10
@@ -689,6 +748,7 @@ _CROSS_INDEX_VALIDATION_CACHE: dict[str, object] = {}
 _NIFTY_GSEC_HISTORY_CACHE: dict[str, object] = {}
 _GOOGLE_FINANCE_QUOTE_CACHE: dict[str, dict[str, object]] = {}
 _AMFI_NAV_HISTORY_CACHE: dict[str, object] = {}
+_AMFI_SCHEME_CATALOGUE_CACHE: dict[str, object] = {}
 _SESSION_LOCK = threading.Lock()
 _BREADTH_BUILD_LOCK = threading.Lock()
 _HISTORICAL_MONTH_LEADERS_LOCK = threading.Lock()
@@ -2723,6 +2783,109 @@ class _RbiTableHtmlParser(HTMLParser):
             self._cell_parts = None
 
 
+class _RbiReleaseTextParser(HTMLParser):
+    """Collect human-visible RBI release text while ignoring scripts and styles."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._ignored_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() in {"script", "style", "noscript"}:
+            self._ignored_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in {"script", "style", "noscript"} and self._ignored_depth:
+            self._ignored_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if not self._ignored_depth and data.strip():
+            self.parts.append(data)
+
+
+def parse_rbi_release_vintage(
+    html_payload: str,
+    *,
+    source: dict[str, object],
+) -> dict[str, object]:
+    """Parse one explicitly registered RBI release into an entry-safe vintage."""
+    parser = _RbiReleaseTextParser()
+    try:
+        parser.feed(html_payload)
+    except Exception as error:
+        raise ValueError("invalid_rbi_release_vintage") from error
+    text = re.sub(r"\s+", " ", " ".join(parser.parts).replace("\xa0", " ")).strip()
+    release_match = re.search(
+        r"Date\s*:\s*([A-Z][a-z]{2,8}\s+\d{1,2},\s+\d{4})",
+        text,
+    )
+    if release_match is None:
+        raise ValueError("invalid_rbi_release_vintage")
+    release_date = None
+    for pattern in ("%b %d, %Y", "%B %d, %Y"):
+        try:
+            release_date = datetime.strptime(release_match.group(1), pattern).date()
+            break
+        except ValueError:
+            continue
+    if release_date is None:
+        raise ValueError("invalid_rbi_release_vintage")
+
+    kind = str(source.get("kind") or "")
+    if kind == "current_account":
+        value_match = re.search(
+            r"current account(?: balance)?(?: \(CAD\))?[^.]{0,220}?\b(surplus|deficit)\b[^.]{0,160}?US\$\s*([0-9]+(?:\.[0-9]+)?)\s*billion",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if value_match is None:
+            raise ValueError("invalid_rbi_release_vintage")
+        value = float(value_match.group(2)) * 1000
+        if value_match.group(1).lower() == "deficit":
+            value *= -1
+        unit = "US dollar million"
+    elif kind == "external_debt":
+        value_match = re.search(
+            r"India.?s external debt[^.]{0,260}?(?:was placed|was) at US\$\s*([0-9]+(?:\.[0-9]+)?)\s*billion",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if value_match is None:
+            raise ValueError("invalid_rbi_release_vintage")
+        value = float(value_match.group(1)) * 1000
+        unit = "US dollar million"
+    else:
+        raise ValueError("invalid_rbi_release_vintage")
+
+    observation_date = source.get("observation_date")
+    if not isinstance(observation_date, date) or observation_date > release_date:
+        raise ValueError("invalid_rbi_release_vintage")
+    revision_status = str(source.get("revision_status") or "").lower()
+    if revision_status not in {"initial", "preliminary", "provisional", "revised", "final"}:
+        raise ValueError("invalid_rbi_release_vintage")
+    return {
+        "series_key": str(source.get("series_key") or ""),
+        "date": observation_date,
+        "period_label": str(source.get("period_label") or observation_date.isoformat()),
+        "frequency": "quarterly",
+        "value": value,
+        "unit": unit,
+        "base_period": "Not applicable",
+        "source_title": str(source.get("title") or "RBI press release"),
+        "source_url": str(source.get("url") or ""),
+        "source_authority": "Reserve Bank of India",
+        "vintage_date": release_date,
+        "metadata": {
+            "release_date": release_date.isoformat(),
+            "revision_status": revision_status,
+            "release_id": str(source.get("release_id") or ""),
+            "release_contract_version": RBI_RELEASE_VINTAGE_CONTRACT_VERSION,
+            "allows_non_positive": kind == "current_account",
+        },
+    }
+
+
 def parse_rbi_annual_series_table(
     html_payload: str,
     *,
@@ -3853,13 +4016,14 @@ def build_historical_entry_snapshot_validation(
     *,
     instrument: str,
     global_risk_rows: list[dict[str, object]] | None = None,
+    official_history_rows: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     """Build outcome-blind episode-entry snapshots and a chronological split.
 
     Only observations dated on or before an episode's entry date are allowed in
     its snapshot. Outcomes are calculated in a separate object. Current RBI
-    Handbook vintages remain deliberately unavailable here because the annual
-    summary does not yet retain each release date and subsequent revision.
+    Retrospective Handbook rows remain unavailable here. Official observations
+    enter only when their original release date and revision state are retained.
     """
     price_rows = sorted(
         (
@@ -3888,6 +4052,35 @@ def build_historical_entry_snapshot_validation(
             )
     for rows in global_by_key.values():
         rows.sort(key=lambda item: item[0])
+
+    release_by_key: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for row in official_history_rows or []:
+        if not isinstance(row, dict) or not isinstance(row.get("date"), date):
+            continue
+        metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+        raw_release_date = metadata.get("release_date") or row.get("release_date")
+        try:
+            release_date = (
+                raw_release_date
+                if isinstance(raw_release_date, date)
+                else date.fromisoformat(str(raw_release_date)[:10])
+            )
+        except (TypeError, ValueError):
+            continue
+        revision_status = str(metadata.get("revision_status") or row.get("revision_status") or "").lower()
+        if revision_status not in {"initial", "preliminary", "provisional", "revised", "final"}:
+            continue
+        release_by_key[str(row.get("series_key") or "")].append(
+            {**row, "release_date": release_date, "revision_status": revision_status}
+        )
+    for rows in release_by_key.values():
+        rows.sort(
+            key=lambda item: (
+                item["date"],
+                item["release_date"],
+                item.get("vintage_date") or date.min,
+            )
+        )
 
     def pct_change(values: list[float], sessions: int) -> float | None:
         if len(values) <= sessions or values[-sessions - 1] == 0:
@@ -3952,6 +4145,56 @@ def build_historical_entry_snapshot_validation(
             "observation": observation,
             "limitation": limitation,
         }
+
+    def released_factor(
+        entry_date: date,
+        *,
+        key: str,
+        label: str,
+        series_keys: tuple[str, ...],
+        required_series: int,
+        unavailable_observation: str,
+        unavailable_limitation: str,
+    ) -> dict[str, str]:
+        selected: list[dict[str, object]] = []
+        for series_key in series_keys:
+            eligible = [
+                row
+                for row in release_by_key.get(series_key, [])
+                if row["date"] <= entry_date and row["release_date"] <= entry_date
+            ]
+            if eligible:
+                selected.append(eligible[-1])
+        if not selected:
+            return factor_card(
+                key,
+                label,
+                "unavailable",
+                "not_observed",
+                unavailable_observation,
+                unavailable_limitation,
+            )
+        observations = []
+        for row in selected:
+            value = float(row["value"])
+            unit = str(row.get("unit") or "")
+            observations.append(
+                f"{row.get('period_label')}: {value:,.2f} {unit} "
+                f"({row['revision_status']}; released {row['release_date'].isoformat()})"
+            )
+        status = "ready" if len(selected) >= required_series else "partial"
+        return factor_card(
+            key,
+            label,
+            status,
+            "release_dated" if status == "ready" else "release_dated_partial",
+            "; ".join(observations) + ".",
+            (
+                "Only observations published by the episode entry date are used; later revisions remain excluded."
+                if status == "ready"
+                else f"{len(selected)}/{required_series} required release-dated series are available by this entry date."
+            ),
+        )
 
     ordered_episodes = sorted(
         episode_stories,
@@ -4077,14 +4320,45 @@ def build_historical_entry_snapshot_validation(
         else:
             factors.append(factor_card("global_risk", "Global risk backdrop", "unavailable", "not_observed", "No aligned global observations are available by the entry date.", "Narrative descriptions are not substituted for dated market evidence."))
 
+        factors.append(
+            released_factor(
+                entry_date,
+                key="rates_currency_credit",
+                label="Rates, currency, credit and external balance",
+                series_keys=(
+                    "india_call_money_rate_annual",
+                    "inr_usd_annual_average",
+                    "india_bank_credit_growth_pct",
+                    "india_non_food_credit_growth_pct",
+                    "india_current_account_balance_usd_mn",
+                    "india_external_debt_usd_mn",
+                    "india_foreign_exchange_reserves_usd_mn",
+                ),
+                required_series=3,
+                unavailable_observation="Release-dated credit and external-balance observations are not connected.",
+                unavailable_limitation="Current RBI Handbook vintages are retrospective and therefore excluded.",
+            )
+        )
+        factors.append(
+            released_factor(
+                entry_date,
+                key="macro_growth_inflation",
+                label="Macro growth and inflation",
+                series_keys=(
+                    "india_real_gdp_growth_pct",
+                    "india_wpi_all_commodities_annual_average",
+                ),
+                required_series=2,
+                unavailable_observation="Release dates and historical revisions are not yet preserved for the annual macro spine.",
+                unavailable_limitation="Retrospective annual actuals remain visible in the full-window story but cannot enter this snapshot.",
+            )
+        )
         for key, label, observation, limitation in (
             ("breadth_participation", "Breadth and participation", "Effective-dated constituent breadth is not connected.", "Today's constituents are never backfilled into a historical snapshot."),
             ("leadership_concentration", "Leadership and concentration", "Effective-dated sector membership and weights are not connected.", "Later winners and current weights cannot enter the entry information set."),
             ("institutional_flows_liquidity", "Institutional flows and liquidity", "Comparable dated flow history is not connected for the entry date.", "Later flow records and narrative descriptions are excluded."),
-            ("rates_currency_credit", "Rates, currency, and credit", "Release-dated, unrevised credit and external-balance observations are not connected.", "Current RBI Handbook vintages are retrospective and therefore excluded."),
             ("derivatives_positioning", "Derivatives positioning", "Comparable price/OI history is not connected for the entry date.", "Modern derivatives evidence is not projected into earlier market structures."),
             ("earnings_valuation", "Earnings and valuation", "Point-in-time estimates and valuations are not connected.", "Later reported earnings are excluded."),
-            ("macro_growth_inflation", "Macro growth and inflation", "Release dates and historical revisions are not yet preserved for the annual macro spine.", "Retrospective annual actuals remain visible in the full-window story but cannot enter this snapshot."),
         ):
             factors.append(factor_card(key, label, "unavailable", "not_observed", observation, limitation))
 
@@ -4213,6 +4487,175 @@ def build_historical_entry_snapshot_validation(
         "classifier_admission": "blocked",
         "classifier_admission_reason": "Entry snapshots remove outcome leakage, but sparse point-in-time categories and small held-out samples do not yet support admission to the live classifier.",
         "method": "Entry factors use only dated observations available by each episode start. Forward outcomes are calculated separately, discovery rules are formed only from earlier episodes, and later episodes remain held out.",
+    }
+
+
+def build_historical_point_in_time_readiness(
+    official_history_rows: list[dict[str, object]],
+    *,
+    membership_snapshots: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    """Audit which historical evidence can safely enter an entry-date test.
+
+    Retrospective official history remains valuable for episode stories, but it
+    is not admitted to a point-in-time snapshot unless the stored row preserves
+    its publication date and revision state. Missing release metadata is a
+    visible blocked state; the retrieval vintage is never treated as the
+    historical information date.
+    """
+
+    def parsed_date(value: object) -> date | None:
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            try:
+                return date.fromisoformat(value[:10])
+            except ValueError:
+                return None
+        return None
+
+    families = [
+        {
+            "key": "macro_growth_inflation",
+            "label": "Macro growth and inflation",
+            "series_keys": {
+                "india_real_gdp_growth_pct",
+                "india_wpi_all_commodities_annual_average",
+            },
+            "required_keys": 2,
+            "use": "Reconstruct growth and inflation information available at each episode entry.",
+            "missing_requirement": "Preserve every original publication date and subsequent official revision vintage.",
+        },
+        {
+            "key": "rates_currency_credit",
+            "label": "Rates, currency and credit",
+            "series_keys": {
+                "india_call_money_rate_annual",
+                "inr_usd_annual_average",
+                "india_bank_credit_growth_pct",
+                "india_non_food_credit_growth_pct",
+            },
+            "required_keys": 3,
+            "use": "Measure financing conditions, policy transmission and currency pressure without hindsight.",
+            "missing_requirement": "Add official release-dated credit histories alongside rates and currency vintages.",
+        },
+        {
+            "key": "external_balance",
+            "label": "External balance and reserves",
+            "series_keys": {
+                "india_current_account_balance_usd_mn",
+                "india_current_account_balance_pct_gdp",
+                "india_external_debt_usd_mn",
+                "india_foreign_exchange_reserves_usd_mn",
+            },
+            "required_keys": 2,
+            "use": "Describe external vulnerability and buffers using the releases known at the time.",
+            "missing_requirement": "Connect release-dated balance-of-payments, external-debt and reserve vintages.",
+        },
+        {
+            "key": "effective_dated_membership",
+            "label": "Effective-dated index membership",
+            "series_keys": set(),
+            "required_keys": 1,
+            "use": "Rebuild historical breadth, leadership and sector participation without survivor bias.",
+            "missing_requirement": "Source authoritative constituent additions, removals and effective dates.",
+        },
+    ]
+    by_family: dict[str, list[dict[str, object]]] = {
+        str(family["key"]): [] for family in families
+    }
+    for row in official_history_rows:
+        if not isinstance(row, dict):
+            continue
+        series_key = str(row.get("series_key") or "")
+        for family in families:
+            if series_key in family["series_keys"]:
+                by_family[str(family["key"])].append(row)
+
+    membership_rows = [row for row in membership_snapshots or [] if isinstance(row, dict)]
+    category_rows: list[dict[str, object]] = []
+    release_dated_total = 0
+    retrospective_total = 0
+    for family in families:
+        family_key = str(family["key"])
+        rows = membership_rows if family_key == "effective_dated_membership" else by_family[family_key]
+        release_dated: list[dict[str, object]] = []
+        retrospective: list[dict[str, object]] = []
+        release_keys: set[str] = set()
+        frequencies: set[str] = set()
+        dates: list[date] = []
+        for row in rows:
+            metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+            release_date = parsed_date(metadata.get("release_date") or row.get("release_date"))
+            vintage_date = parsed_date(row.get("vintage_date"))
+            revision_status = str(metadata.get("revision_status") or row.get("revision_status") or "").lower()
+            observation_date = parsed_date(row.get("date") or row.get("effective_date"))
+            if observation_date is not None:
+                dates.append(observation_date)
+            frequency = str(row.get("frequency") or "event")
+            if frequency:
+                frequencies.add(frequency)
+            entry_safe = (
+                release_date is not None
+                and revision_status in {"initial", "preliminary", "provisional", "revised", "final"}
+                and (vintage_date is None or release_date <= vintage_date)
+            )
+            if entry_safe:
+                release_dated.append(row)
+                release_keys.add(str(row.get("series_key") or family_key))
+            else:
+                retrospective.append(row)
+
+        release_dated_total += len(release_dated)
+        retrospective_total += len(retrospective)
+        required_keys = int(family["required_keys"])
+        ready_keys = len(release_keys)
+        status = "ready" if ready_keys >= required_keys else "partial" if release_dated else "blocked"
+        category_rows.append(
+            {
+                "key": family_key,
+                "label": family["label"],
+                "status": status,
+                "release_dated_observations": len(release_dated),
+                "retrospective_only_observations": len(retrospective),
+                "release_dated_series": ready_keys,
+                "required_series": required_keys,
+                "frequency": ", ".join(sorted(frequencies)) if frequencies else "not connected",
+                "from_date": min(dates).isoformat() if dates else None,
+                "to_date": max(dates).isoformat() if dates else None,
+                "use": family["use"],
+                "missing_requirement": None if status == "ready" else family["missing_requirement"],
+            }
+        )
+
+    ready_categories = sum(row["status"] == "ready" for row in category_rows)
+    partial_categories = sum(row["status"] == "partial" for row in category_rows)
+    admission = "ready" if ready_categories == len(category_rows) else "blocked"
+    return {
+        "contract_version": HISTORICAL_POINT_IN_TIME_CONTRACT_VERSION,
+        "summary": {
+            "categories": len(category_rows),
+            "ready_categories": ready_categories,
+            "partial_categories": partial_categories,
+            "blocked_categories": len(category_rows) - ready_categories - partial_categories,
+            "release_dated_observations": release_dated_total,
+            "retrospective_only_observations": retrospective_total,
+        },
+        "categories": category_rows,
+        "entry_snapshot_admission": admission,
+        "admission_reason": (
+            "Every required evidence family retains publication dates, revision states and effective dates."
+            if admission == "ready"
+            else "Release-dated macro, credit, external-balance and effective-dated membership evidence is incomplete; retrospective rows remain excluded from entry snapshots."
+        ),
+        "rules": [
+            "Observation date describes the measured period; release date controls when the value may enter a backtest.",
+            "Revision status is mandatory, and every later vintage remains distinguishable from the initial release.",
+            "Retrieval or Handbook vintage dates never substitute for an original historical release date.",
+            "Current index constituents are never projected backwards into historical breadth or leadership tests.",
+        ],
     }
 
 
@@ -4346,6 +4789,7 @@ def build_backtests_workspace(
     entry_validation: dict[str, object],
     *,
     seasonality_backtest: dict[str, object] | None = None,
+    point_in_time_readiness: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Register the first auditable, research-only chronological test.
 
@@ -4447,6 +4891,29 @@ def build_backtests_workspace(
     seasonality_contract = seasonality_payload.get("registry_contract") if seasonality_payload else None
     if isinstance(seasonality_contract, dict):
         registry.append(seasonality_contract)
+    evidence_payload = point_in_time_readiness if isinstance(point_in_time_readiness, dict) else {}
+    evidence_summary = evidence_payload.get("summary") if isinstance(evidence_payload.get("summary"), dict) else {}
+    evidence_categories = evidence_payload.get("categories") if isinstance(evidence_payload.get("categories"), list) else []
+    registry.append(
+        {
+            "test_id": "historical-regime-release-aware-factors-v1",
+            "name": "Release-aware regime factors",
+            "hypothesis_version": "point-in-time-evidence-gate-v1",
+            "hypothesis": "Release-dated macro, credit, external-balance and membership states may improve episode classification without outcome leakage.",
+            "universe": f"{instrument} historical episodes with publication-vintage and membership evidence",
+            "discovery_period": {"from": None, "to": None},
+            "held_out_period": {"from": None, "to": None},
+            "discovery_episodes": 0,
+            "held_out_episodes": 0,
+            "costs_included": "Not applicable — evidence-admission gate; no trade path",
+            "status": "registered" if evidence_payload.get("entry_snapshot_admission") == "ready" else "blocked",
+            "status_label": (
+                "Evidence families ready · episode test not yet run"
+                if evidence_payload.get("entry_snapshot_admission") == "ready"
+                else "Blocked · release-aware evidence incomplete"
+            ),
+        }
+    )
     seasonality_completed = int(bool(seasonality_summary.get("indices_tested")))
     seasonality_survived = int(seasonality_summary.get("survived") or 0)
     return {
@@ -4471,6 +4938,11 @@ def build_backtests_workspace(
         "registry": registry,
         "trait_results": trait_rows,
         "seasonality": seasonality_payload,
+        "point_in_time_readiness": {
+            **evidence_payload,
+            "summary": evidence_summary,
+            "categories": evidence_categories,
+        },
         "admission": "blocked",
         "admission_reason": "No test is approved for decision support. Entry-date leakage is controlled, but the held-out sample is small and point-in-time breadth, membership, macro, flow, derivatives, earnings and valuation coverage remains incomplete.",
         "limitations": [
@@ -5153,6 +5625,9 @@ def build_historical_regime_workspace(
         for frequency in ("daily", "weekly", "monthly", "quarterly", "annual")
     }
     official_history = build_historical_series_summary(official_history_rows or [])
+    point_in_time_readiness = build_historical_point_in_time_readiness(
+        official_history_rows or []
+    )
     official_ready = official_history["status"] == "ready"
     episode_stories = build_historical_episode_stories(official_history)
     episode_fingerprint_comparison = build_historical_episode_fingerprints(
@@ -5167,6 +5642,7 @@ def build_historical_regime_workspace(
         index_candles,
         instrument=instrument,
         global_risk_rows=global_risk_rows,
+        official_history_rows=official_history_rows,
     )
     coverage_ladder = [
         {
@@ -5567,6 +6043,7 @@ def build_historical_regime_workspace(
         "episode_stories": episode_stories,
         "episode_fingerprint_comparison": episode_fingerprint_comparison,
         "entry_snapshot_validation": entry_snapshot_validation,
+        "point_in_time_readiness": point_in_time_readiness,
         "coverage_ladder": coverage_ladder,
         "story_eras": story_eras,
         "story_method": [
@@ -9351,6 +9828,294 @@ def resolve_portfolio_amfi_scheme(company_name: str) -> dict[str, object] | None
     return None
 
 
+def _canonical_amfi_category(raw_category: str) -> str:
+    """Map the current AMFI report heading to a stable broad scheme category."""
+    text = re.sub(r"\s+", " ", str(raw_category)).strip()
+    lowered = text.lower()
+    rules = (
+        (("large & mid cap", "large and mid cap"), "Equity - Large & Mid Cap"),
+        (("large cap",), "Equity - Large Cap"),
+        (("mid cap",), "Equity - Mid Cap"),
+        (("small cap",), "Equity - Small Cap"),
+        (("flexi cap",), "Equity - Flexi Cap"),
+        (("multi cap",), "Equity - Multi Cap"),
+        (("focused fund", "focussed fund"), "Equity - Focused"),
+        (("value fund",), "Equity - Value"),
+        (("contra fund",), "Equity - Contra"),
+        (("dividend yield",), "Equity - Dividend Yield"),
+        (("elss", "tax saver"), "Equity - ELSS"),
+        (("sectoral", "thematic"), "Equity - Sectoral / Thematic"),
+        (("banking and psu", "banking & psu"), "Debt - Banking and PSU"),
+        (("corporate bond",), "Debt - Corporate Bond"),
+        (("credit risk",), "Debt - Credit Risk"),
+        (("dynamic bond",), "Debt - Dynamic Bond"),
+        (("floater",), "Debt - Floater"),
+        (("gilt", "government securities"), "Debt - Government Securities"),
+        (("long duration",), "Debt - Long Duration"),
+        (("medium to long",), "Debt - Medium to Long Duration"),
+        (("medium duration",), "Debt - Medium Duration"),
+        (("short duration", "short term"), "Debt - Short Duration"),
+        (("low duration",), "Debt - Low Duration"),
+        (("ultra short",), "Debt - Ultra Short Duration"),
+        (("money market",), "Debt - Money Market"),
+        (("liquid fund",), "Debt - Liquid"),
+        (("overnight fund",), "Debt - Overnight"),
+        (("aggressive hybrid",), "Hybrid - Aggressive"),
+        (("conservative hybrid",), "Hybrid - Conservative"),
+        (("balanced advantage", "dynamic asset allocation"), "Hybrid - Dynamic Asset Allocation"),
+        (("multi asset allocation",), "Hybrid - Multi Asset Allocation"),
+        (("equity savings",), "Hybrid - Equity Savings"),
+        (("arbitrage",), "Hybrid - Arbitrage"),
+        (("children",), "Solution Oriented - Children"),
+        (("retirement",), "Solution Oriented - Retirement"),
+        (("fund of funds", "fof"), "Other - Fund of Funds"),
+        (("index fund",), "Other - Index Fund"),
+        (("exchange traded fund", "etf"), "Other - ETF"),
+    )
+    for terms, category in rules:
+        if any(term in lowered for term in terms):
+            return category
+    if "debt scheme" in lowered:
+        return "Debt"
+    if "equity scheme" in lowered:
+        return "Equity"
+    if "hybrid scheme" in lowered:
+        return "Hybrid"
+    if "solution oriented" in lowered:
+        return "Solution Oriented"
+    if "other scheme" in lowered:
+        return "Other"
+    return text or "Unclassified"
+
+
+def _normalized_amfi_scheme_base(value: str) -> str:
+    text = re.sub(r"[^a-z0-9]+", " ", str(value).lower()).strip()
+    removable = {"direct", "plan", "growth", "option"}
+    return " ".join(token for token in text.split() if token not in removable)
+
+
+def parse_amfi_scheme_catalogue_text(text: str) -> dict[str, object]:
+    """Parse AMFI's current complete NAV report into current Direct-Growth schemes."""
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError("invalid_amfi_catalogue_response")
+    lines = text.splitlines()
+    header = next((line.strip() for line in lines if line.strip()), "")
+    expected = "Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date"
+    if header != expected:
+        raise ValueError("invalid_amfi_catalogue_header")
+    current_category = ""
+    current_amc = ""
+    candidates: list[dict[str, object]] = []
+    all_dates: list[date] = []
+    category_pattern = re.compile(r"^(?:Open Ended|Close Ended|Interval) Schemes?\((.+)\)$", re.IGNORECASE)
+    for raw_line in lines[1:]:
+        line = raw_line.strip()
+        if not line:
+            continue
+        category_match = category_pattern.match(line)
+        if category_match:
+            current_category = re.sub(r"\s+", " ", category_match.group(1)).strip()
+            current_amc = ""
+            continue
+        if ";" not in line:
+            current_amc = re.sub(r"\s+", " ", line).strip()
+            continue
+        try:
+            fields = next(csv.reader([line], delimiter=";"))
+        except csv.Error:
+            continue
+        if len(fields) != 8:
+            continue
+        scheme_code, isin_growth, isin_reinvestment, scheme_name, plan, option, nav_text, date_text = (
+            field.strip() for field in fields
+        )
+        if not scheme_code or not scheme_name or plan.lower() != "direct plan":
+            continue
+        option_key = re.sub(r"[^a-z]+", " ", option.lower()).strip()
+        if "growth" not in option_key or any(term in option_key for term in ("idcw", "dividend", "payout", "reinvestment")):
+            continue
+        nav = _portfolio_number(nav_text)
+        try:
+            nav_date = datetime.strptime(date_text, "%d-%b-%Y").date()
+        except ValueError:
+            continue
+        if nav is None or nav <= 0:
+            continue
+        all_dates.append(nav_date)
+        candidates.append({
+            "scheme_code": scheme_code,
+            "scheme_name": scheme_name,
+            "official_name": f"{scheme_name} - {plan} - {option}",
+            "scheme_base": _normalized_amfi_scheme_base(scheme_name),
+            "amc_name": current_amc or "Unavailable",
+            "plan": plan,
+            "option": option,
+            "isin_growth": None if isin_growth in {"", "-"} else isin_growth,
+            "isin_reinvestment": None if isin_reinvestment in {"", "-"} else isin_reinvestment,
+            "nav": round(float(nav), 4),
+            "nav_date": nav_date,
+            "category": _canonical_amfi_category(current_category),
+            "category_raw": current_category or "Unavailable",
+            "category_source": "AMFI current complete NAV report",
+            "category_schema_version": AMFI_CATEGORY_SCHEMA_VERSION,
+        })
+    if not candidates or not all_dates:
+        raise ValueError("amfi_catalogue_empty")
+    catalogue_date = max(all_dates)
+    freshness_floor = catalogue_date - timedelta(days=7)
+    current_rows = [row for row in candidates if row["nav_date"] >= freshness_floor]
+    current_rows.sort(key=lambda row: (str(row["scheme_name"]).lower(), str(row["scheme_code"])))
+    return {
+        "contract_version": AMFI_SCHEME_CATALOGUE_CONTRACT_VERSION,
+        "category_schema_version": AMFI_CATEGORY_SCHEMA_VERSION,
+        "source": "AMFI current complete NAV report",
+        "source_url": AMFI_NAV_SOURCE_URL,
+        "catalogue_as_of": catalogue_date.isoformat(),
+        "current_direct_growth_schemes": len(current_rows),
+        "stale_direct_growth_rows_excluded": len(candidates) - len(current_rows),
+        "rows": current_rows,
+    }
+
+
+def match_mutual_fund_scheme_catalogue(
+    uploaded_name: str,
+    catalogue_rows: list[dict[str, object]],
+) -> dict[str, object]:
+    """Resolve one uploaded label without crossing plan or option boundaries."""
+    label = str(uploaded_name).strip()
+    lowered = re.sub(r"[^a-z0-9]+", " ", label.lower()).strip()
+    if any(term in lowered.split() for term in ("regular", "idcw", "dividend")):
+        return {"status": "non_direct_growth_input", "match": None, "candidates": 0}
+    by_code = {str(row.get("scheme_code")): row for row in catalogue_rows}
+    reviewed = resolve_portfolio_amfi_scheme(label)
+    if reviewed is not None and str(reviewed["scheme_code"]) in by_code:
+        return {"status": "reviewed_exact_match", "match": by_code[str(reviewed["scheme_code"])], "candidates": 1}
+    base = _normalized_amfi_scheme_base(label)
+    matches = [row for row in catalogue_rows if str(row.get("scheme_base") or "") == base]
+    if len(matches) == 1:
+        explicit = "direct" in lowered.split() and "growth" in lowered.split()
+        return {
+            "status": "exact_direct_growth_match" if explicit else "unique_direct_growth_match",
+            "match": matches[0],
+            "candidates": 1,
+        }
+    if len(matches) > 1:
+        return {"status": "ambiguous_direct_growth_match", "match": None, "candidates": len(matches)}
+    return {"status": "scheme_not_found", "match": None, "candidates": 0}
+
+
+def build_mutual_fund_catalogue_classification(
+    funds: list[dict[str, object]],
+    catalogue: dict[str, object],
+) -> dict[str, object]:
+    """Attach auditable current AMFI Direct-Growth and category evidence."""
+    rows = catalogue.get("rows")
+    if not isinstance(funds, list) or not isinstance(rows, list):
+        raise ValueError("invalid_mutual_fund_catalogue_input")
+    results: list[dict[str, object]] = []
+    for fund in funds:
+        scheme = str(fund.get("scheme") or "").strip()
+        resolved = match_mutual_fund_scheme_catalogue(scheme, rows)
+        match = resolved.get("match")
+        result = {
+            "scheme": scheme,
+            "portfolio_weight_pct": fund.get("weight_pct"),
+            "uploaded_category": fund.get("category") or "Unclassified",
+            "uploaded_category_source": fund.get("category_source") or "unavailable",
+            "status": resolved["status"],
+            "candidate_count": resolved["candidates"],
+            "scheme_code": None,
+            "official_name": None,
+            "amc_name": None,
+            "plan": None,
+            "option": None,
+            "amfi_category": None,
+            "amfi_category_raw": None,
+            "nav": None,
+            "nav_date": None,
+        }
+        if isinstance(match, dict):
+            result.update({
+                "scheme_code": match.get("scheme_code"),
+                "official_name": match.get("official_name"),
+                "amc_name": match.get("amc_name"),
+                "plan": match.get("plan"),
+                "option": match.get("option"),
+                "amfi_category": match.get("category"),
+                "amfi_category_raw": match.get("category_raw"),
+                "nav": match.get("nav"),
+                "nav_date": match.get("nav_date").isoformat() if isinstance(match.get("nav_date"), date) else None,
+            })
+        results.append(result)
+    matched = sum(row["scheme_code"] is not None for row in results)
+    explicit_matches = sum(row["status"] in {"reviewed_exact_match", "exact_direct_growth_match"} for row in results)
+    ambiguous = sum(row["status"] == "ambiguous_direct_growth_match" for row in results)
+    rejected = sum(row["status"] == "non_direct_growth_input" for row in results)
+    return {
+        "contract_version": AMFI_SCHEME_CATALOGUE_CONTRACT_VERSION,
+        "category_schema_version": catalogue.get("category_schema_version") or AMFI_CATEGORY_SCHEMA_VERSION,
+        "source": catalogue.get("source") or "AMFI current complete NAV report",
+        "source_url": catalogue.get("source_url") or AMFI_NAV_SOURCE_URL,
+        "catalogue_as_of": catalogue.get("catalogue_as_of"),
+        "catalogue_schemes": catalogue.get("current_direct_growth_schemes", len(rows)),
+        "stale_rows_excluded": catalogue.get("stale_direct_growth_rows_excluded", 0),
+        "uploaded_funds": len(results),
+        "matched_funds": matched,
+        "explicit_matches": explicit_matches,
+        "ambiguous_funds": ambiguous,
+        "rejected_non_direct_growth": rejected,
+        "rows": results,
+        "limitations": [
+            "Only current Direct Plan Growth rows from AMFI's complete NAV report are eligible; Regular, IDCW, dividend, payout and reinvestment options are excluded before matching.",
+            "Reviewed exact scheme codes take precedence. Other labels require one exact normalized scheme-name match; ambiguous names remain unresolved.",
+            "AMFI category headings are mapped through a versioned local category schema and the original heading remains visible for audit.",
+            "Current NAV catalogue matching does not by itself provide historical returns, expense ratios, exit loads, taxes or a recommendation.",
+        ],
+    }
+
+
+def fetch_amfi_scheme_catalogue() -> dict[str, object]:
+    """Fetch and cache the official current AMFI Direct-Growth catalogue."""
+    with _SESSION_LOCK:
+        cached = _AMFI_SCHEME_CATALOGUE_CACHE.get("current")
+        if cached and time.monotonic() - float(cached.get("created_at", 0)) < AMFI_NAV_CACHE_SECONDS:
+            catalogue = cached.get("catalogue")
+            if isinstance(catalogue, dict):
+                return catalogue
+    request = urllib.request.Request(
+        AMFI_LATEST_NAV_URL,
+        headers={
+            "Accept": "text/plain,*/*;q=0.8",
+            "Accept-Encoding": "identity",
+            "Referer": AMFI_NAV_SOURCE_URL,
+            "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=AMFI_NAV_REQUEST_TIMEOUT_SECONDS) as response:
+            final_url = urllib.parse.urlsplit(response.geturl())
+            if response.status != HTTPStatus.OK or (final_url.hostname or "").lower() != "portal.amfiindia.com":
+                raise ValueError("amfi_catalogue_source_unavailable")
+            body = response.read(MAX_AMFI_CATALOGUE_RESPONSE_BYTES + 1)
+            if len(body) > MAX_AMFI_CATALOGUE_RESPONSE_BYTES:
+                raise ValueError("amfi_catalogue_response_too_large")
+        text = body.decode("utf-8-sig")
+        if "<html" in text[:500].lower():
+            raise ValueError("invalid_amfi_catalogue_response")
+        catalogue = parse_amfi_scheme_catalogue_text(text)
+    except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout, TimeoutError, OSError) as error:
+        raise ValueError("amfi_catalogue_source_unavailable") from error
+    except UnicodeDecodeError as error:
+        raise ValueError("invalid_amfi_catalogue_response") from error
+    with _SESSION_LOCK:
+        _AMFI_SCHEME_CATALOGUE_CACHE["current"] = {
+            "created_at": time.monotonic(),
+            "catalogue": catalogue,
+        }
+    return catalogue
+
+
 def _mutual_fund_headers_and_rows(
     raw_rows: list[list[object]],
 ) -> tuple[list[str], list[dict[str, object]]]:
@@ -9806,6 +10571,146 @@ def build_mutual_fund_holdings_analysis(
     }
 
 
+def build_mutual_fund_performance_comparison(
+    funds: list[dict[str, object]],
+    nav_histories: dict[str, list[dict[str, object]]],
+    *,
+    risk_free_annual_pct: float = 0.0,
+    maximum_observations: int = 253,
+) -> dict[str, object]:
+    """Compare reviewed exact schemes on one common trailing NAV window."""
+    if not isinstance(funds, list) or maximum_observations < 2:
+        raise ValueError("invalid_mutual_fund_comparison_input")
+    resolved_rows: list[dict[str, object]] = []
+    histories_by_code: dict[str, dict[date, float]] = {}
+    for fund in funds:
+        scheme_name = str(fund.get("scheme") or "").strip()
+        reviewed = resolve_portfolio_amfi_scheme(scheme_name)
+        if reviewed is None:
+            resolved_rows.append({
+                "scheme": scheme_name,
+                "category": fund.get("category") or "Unclassified",
+                "scheme_code": None,
+                "official_scheme_name": None,
+                "status": "exact_scheme_not_reviewed",
+            })
+            continue
+        scheme_code = str(reviewed["scheme_code"])
+        observations = {
+            row["date"]: float(row["close"])
+            for row in nav_histories.get(scheme_code, [])
+            if isinstance(row.get("date"), date)
+            and _portfolio_number(row.get("close")) is not None
+            and float(row["close"]) > 0
+        }
+        if observations:
+            histories_by_code[scheme_code] = observations
+        resolved_rows.append({
+            "scheme": scheme_name,
+            "category": fund.get("category") or MUTUAL_FUND_REVIEWED_CATEGORIES.get(scheme_code, "Unclassified"),
+            "scheme_code": scheme_code,
+            "official_scheme_name": reviewed["name"],
+            "status": "pending_alignment" if observations else "amfi_nav_history_unavailable",
+        })
+
+    common_dates: set[date] | None = None
+    for observations in histories_by_code.values():
+        observation_dates = set(observations)
+        common_dates = observation_dates if common_dates is None else common_dates.intersection(observation_dates)
+    aligned_dates = sorted(common_dates or set())[-maximum_observations:]
+    if len(aligned_dates) < 2:
+        for row in resolved_rows:
+            if row["status"] == "pending_alignment":
+                row["status"] = "insufficient_common_history"
+        return {
+            "contract_version": "mutual-fund-performance-comparison-v1",
+            "status": "unavailable",
+            "reason": "insufficient_common_history",
+            "source": "AMFI official NAV history",
+            "source_url": AMFI_NAV_SOURCE_URL,
+            "risk_free_annual_pct": round(float(risk_free_annual_pct), 2),
+            "common_observations": len(aligned_dates),
+            "start_date": aligned_dates[0].isoformat() if aligned_dates else None,
+            "end_date": aligned_dates[-1].isoformat() if aligned_dates else None,
+            "rows": resolved_rows,
+            "limitations": [
+                "Only reviewed exact Direct-Growth scheme mappings are evaluated; similarly named plans or options are not substituted.",
+                "A common observation window is required so every available fund is measured over the same dates.",
+            ],
+        }
+
+    risk_free_daily = (1 + float(risk_free_annual_pct) / 100.0) ** (1 / 252) - 1
+    for row in resolved_rows:
+        scheme_code = row.get("scheme_code")
+        observations = histories_by_code.get(str(scheme_code), {})
+        if not observations or row["status"] != "pending_alignment":
+            continue
+        values = [observations[session_date] for session_date in aligned_dates]
+        daily_returns = [
+            current / previous - 1
+            for previous, current in zip(values, values[1:])
+            if previous > 0
+        ]
+        if not daily_returns:
+            row["status"] = "insufficient_common_history"
+            continue
+        count = len(daily_returns)
+        mean_return = sum(daily_returns) / count
+        deviation = math.sqrt(
+            sum((value - mean_return) ** 2 for value in daily_returns) / (count - 1)
+        ) if count > 1 else 0.0
+        mean_excess = mean_return - risk_free_daily
+        downside_deviation = math.sqrt(
+            sum(min(value - risk_free_daily, 0.0) ** 2 for value in daily_returns) / count
+        )
+        peak = values[0]
+        maximum_drawdown = 0.0
+        for value in values:
+            peak = max(peak, value)
+            maximum_drawdown = min(maximum_drawdown, value / peak - 1)
+        growth = values[-1] / values[0]
+        annualized_return = growth ** (252 / count) - 1 if growth > 0 else None
+        row.update({
+            "nav": round(values[-1], 4),
+            "nav_date": aligned_dates[-1].isoformat(),
+            "start_nav": round(values[0], 4),
+            "start_date": aligned_dates[0].isoformat(),
+            "aligned_return_pct": round((growth - 1) * 100, 2),
+            "annualized_return_pct": round(annualized_return * 100, 2) if annualized_return is not None else None,
+            "annualized_volatility_pct": round(deviation * math.sqrt(252) * 100, 2),
+            "maximum_drawdown_pct": round(maximum_drawdown * 100, 2),
+            "sharpe_ratio": round(mean_excess / deviation * math.sqrt(252), 2) if deviation > 0 else None,
+            "sortino_ratio": round(mean_excess / downside_deviation * math.sqrt(252), 2) if downside_deviation > 0 else None,
+            "observations": len(values),
+            "status": "ready" if count >= 126 else "partial_history",
+        })
+
+    ready_rows = sum(row.get("status") == "ready" for row in resolved_rows)
+    measured_rows = sum(row.get("status") in {"ready", "partial_history"} for row in resolved_rows)
+    return {
+        "contract_version": "mutual-fund-performance-comparison-v1",
+        "status": "ready" if ready_rows else ("partial" if measured_rows else "unavailable"),
+        "reason": None if measured_rows else "no_reviewed_scheme_history",
+        "source": "AMFI official NAV history",
+        "source_url": AMFI_NAV_SOURCE_URL,
+        "risk_free_annual_pct": round(float(risk_free_annual_pct), 2),
+        "common_observations": len(aligned_dates),
+        "return_sessions": len(aligned_dates) - 1,
+        "start_date": aligned_dates[0].isoformat(),
+        "end_date": aligned_dates[-1].isoformat(),
+        "matched_funds": measured_rows,
+        "ready_funds": ready_rows,
+        "rows": resolved_rows,
+        "limitations": [
+            "Only reviewed exact Direct-Growth scheme mappings are evaluated; similarly named plans or options are not substituted.",
+            "Every measured fund uses the same common AMFI NAV dates. The aligned return may cover less than one calendar year when source history is shorter.",
+            "Sharpe and Sortino use the disclosed 0% annual risk-free assumption in this first slice; no current money-market rate is silently inferred.",
+            "Expense ratios, exit loads, taxes, category benchmarks and investor-specific cash flows are not included.",
+            "The table is descriptive and does not rank funds or make a product recommendation.",
+        ],
+    }
+
+
 def parse_amfi_nav_history_text(
     text: str,
     requested_scheme_codes: set[str],
@@ -9890,7 +10795,7 @@ def fetch_amfi_portfolio_nav_histories(
                 method="GET",
             )
             try:
-                with urllib.request.urlopen(request, timeout=45) as response:
+                with urllib.request.urlopen(request, timeout=AMFI_NAV_REQUEST_TIMEOUT_SECONDS) as response:
                     final_url = urllib.parse.urlsplit(response.geturl())
                     if response.status != HTTPStatus.OK or (final_url.hostname or "").lower() != "portal.amfiindia.com":
                         raise ValueError("amfi_nav_source_unavailable")
@@ -11658,6 +12563,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 build_backtests_workspace(
                     historical_workspace["entry_snapshot_validation"],
                     seasonality_backtest=seasonality_backtest,
+                    point_in_time_readiness=historical_workspace["point_in_time_readiness"],
                 ),
             )
         except ValueError as error:
@@ -11668,6 +12574,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
 
     def _send_historical_series_refresh(self) -> None:
         observations: list[dict[str, object]] = []
+        release_source_results: list[dict[str, object]] = []
         for source in RBI_HISTORICAL_SERIES_SOURCES:
             request = urllib.request.Request(
                 str(source["url"]),
@@ -11742,6 +12649,40 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                     {"ok": False, "reason": "invalid_rbi_historical_series_response"},
                 )
                 return
+        for source in RBI_RELEASE_VINTAGE_SOURCES:
+            request = urllib.request.Request(
+                str(source["url"]),
+                headers={
+                    "Accept": "text/html,application/xhtml+xml",
+                    "Referer": "https://www.rbi.org.in/",
+                    "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+                },
+                method="GET",
+            )
+            text_payload, reason = self._request_provider_text(request, RBI_MAX_RESPONSE_BYTES)
+            if reason is not None:
+                release_source_results.append(
+                    {
+                        "release_id": source["release_id"],
+                        "status": "unavailable",
+                        "reason": reason,
+                    }
+                )
+                continue
+            try:
+                observations.append(
+                    parse_rbi_release_vintage(text_payload or "", source=source)
+                )
+                release_source_results.append(
+                    {"release_id": source["release_id"], "status": "parsed"}
+                )
+            except ValueError:
+                release_source_results.append(
+                    {
+                        "release_id": source["release_id"],
+                        "status": "invalid_response",
+                    }
+                )
         try:
             store = _get_eod_store()
             write_result = store.append_historical_series_observations(
@@ -11770,6 +12711,8 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 "source": RBI_HISTORICAL_SERIES_SOURCE,
                 "write_result": write_result,
                 "official_history": summary,
+                "release_vintage_contract": RBI_RELEASE_VINTAGE_CONTRACT_VERSION,
+                "release_sources": release_source_results,
             },
         )
 
@@ -13621,6 +14564,18 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 self._send_mutual_fund_analysis(payload)
             return
 
+        if self.path == "/api/mutual-funds/performance":
+            payload = self._read_json_payload()
+            if payload is not None:
+                self._send_mutual_fund_performance(payload)
+            return
+
+        if self.path == "/api/mutual-funds/catalogue":
+            payload = self._read_json_payload()
+            if payload is not None:
+                self._send_mutual_fund_catalogue(payload)
+            return
+
         if self.path == "/api/portfolio/preview":
             payload = self._read_json_payload(MAX_PORTFOLIO_IMPORT_BYTES)
             if payload is not None:
@@ -14073,9 +15028,79 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 "file_name": parsed["file_name"],
                 "sheet_name": parsed["sheet_name"],
                 "underlying_sheet_name": parsed["underlying_sheet_name"],
+                "performance_comparison": build_mutual_fund_performance_comparison(result["funds"], {}),
                 "persistence": "browser_memory_only",
             },
         )
+
+    def _send_mutual_fund_performance(self, payload: dict[str, object]) -> None:
+        funds = payload.get("funds")
+        if not isinstance(funds, list) or not funds or len(funds) > 50:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_mutual_fund_list"})
+            return
+        normalized_funds: list[dict[str, object]] = []
+        for row in funds:
+            if not isinstance(row, dict):
+                self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_mutual_fund_list"})
+                return
+            scheme = str(row.get("scheme") or "").strip()
+            if not scheme or len(scheme) > 256:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_mutual_fund_list"})
+                return
+            normalized_funds.append({
+                "scheme": scheme,
+                "category": str(row.get("category") or "Unclassified")[:128],
+            })
+        reviewed_schemes = [
+            scheme
+            for scheme in (
+                resolve_portfolio_amfi_scheme(str(fund["scheme"]))
+                for fund in normalized_funds
+            )
+            if scheme is not None
+        ]
+        histories, failures = fetch_amfi_portfolio_nav_histories(
+            reviewed_schemes,
+            datetime.now(INDIA_TIMEZONE).date(),
+            lookback_days=430,
+        )
+        comparison = build_mutual_fund_performance_comparison(normalized_funds, histories)
+        self._send_json(
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                "performance_comparison": comparison,
+                "amfi_nav_failures": failures,
+            },
+        )
+
+    def _send_mutual_fund_catalogue(self, payload: dict[str, object]) -> None:
+        funds = payload.get("funds")
+        if not isinstance(funds, list) or not funds or len(funds) > 50:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_mutual_fund_list"})
+            return
+        normalized_funds: list[dict[str, object]] = []
+        for row in funds:
+            if not isinstance(row, dict):
+                self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_mutual_fund_list"})
+                return
+            scheme = str(row.get("scheme") or "").strip()
+            if not scheme or len(scheme) > 256:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_mutual_fund_list"})
+                return
+            normalized_funds.append({
+                "scheme": scheme,
+                "category": str(row.get("category") or "Unclassified")[:128],
+                "category_source": str(row.get("category_source") or "unavailable")[:64],
+                "weight_pct": _portfolio_number(row.get("weight_pct")),
+            })
+        try:
+            catalogue = fetch_amfi_scheme_catalogue()
+            classification = build_mutual_fund_catalogue_classification(normalized_funds, catalogue)
+        except ValueError as error:
+            self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": str(error)})
+            return
+        self._send_json(HTTPStatus.OK, {"ok": True, "classification": classification})
 
     def _send_portfolio_analysis(self, payload: dict[str, object]) -> None:
         rows = payload.get("rows")

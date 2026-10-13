@@ -646,6 +646,13 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   release-dated unrevised macro, credit, flow, derivatives, earnings and
   valuation histories. Current RBI Handbook vintages continue to support the
   retrospective story only and never enter an entry snapshot.
+- `historical-regimes-v11` adds a formal point-in-time evidence-readiness
+  ledger. Macro growth/inflation, rates/currency/credit, external-balance and
+  effective-dated membership families are audited separately. An observation
+  can enter an entry snapshot only when its publication date and revision state
+  are retained; a Handbook retrieval vintage never substitutes for the date an
+  investor could first know the value. Retrospective rows remain available to
+  the story layer and visibly excluded from historical decision sets.
 - Market cycles and economic cycles are deliberately separate. Recession and
   depression sections remain visibly unclassified until a versioned definition
   and authoritative point-in-time macro history are available; an equity
@@ -711,6 +718,52 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   investable portfolio are claimed, and no result is approved for decision
   support. Weekday and turn-of-month families remain future contracts.
 
+### Backtests v3 · point-in-time evidence admission — complete
+
+- Registered the release-aware regime-factor contract before testing any new
+  factor/outcome relationship. The Backtests page now shows the same evidence
+  families and admission state as Historical Regimes.
+- Release-dated observations, retrospective-only rows, required series and the
+  next missing source are visible for every family. The contract remains
+  blocked while official credit/external-balance release vintages and
+  effective-dated index membership are incomplete.
+- A blocked admission is an expected research result. Revised historical facts
+  cannot silently improve an old signal, and current constituents cannot be
+  projected backwards into breadth or leadership tests.
+
+### Historical Regimes v12 · RBI release-vintage importer — complete
+
+- Added a conservative, explicitly registered importer for official RBI
+  balance-of-payments and external-debt press releases. The first five source
+  pages preserve observation date, publication date, preliminary/provisional
+  status, source URL and release identifier.
+- Current-account surpluses and deficits are stored as signed US-dollar-million
+  observations; external debt is stored as a US-dollar-million stock. Signed
+  deficits are permitted only when the source metadata explicitly opts into
+  non-positive values.
+- Release-native collection is best effort and independent of the existing RBI
+  Handbook refresh: one unavailable or structurally changed press-release page
+  is reported without erasing the long-run retrospective story layer.
+- Entry snapshots select only observations whose observation date and release
+  date were both known by the episode start. Later releases and later revisions
+  remain excluded. Handbook rows without original release metadata remain
+  story-only.
+- The first registry is deliberately small and auditable. It establishes the
+  ingestion and point-in-time contracts; it does not yet provide continuous
+  historical coverage.
+
+### Backtests v4 · release-aware entry evidence — complete
+
+- Historical-regime entry snapshots now consume the stored release-native RBI
+  evidence for rates, currency, credit and external balance, and separately for
+  macro growth and inflation.
+- A factor can be visibly partial when fewer than its required release-dated
+  series were known at entry. The interface reports ready and partial factors
+  separately instead of hiding partial historical evidence.
+- No new trait, prediction or trading rule is inferred from the first sparse
+  release set. The wider factor-admission gate remains blocked until coverage
+  and effective-dated index membership are sufficient.
+
 ### Mutual Funds Comparer foundation — complete
 
 - Added a dedicated **Mutual Funds Comparer** workspace to the sidebar.
@@ -749,6 +802,50 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
 - Uploads remain in request/browser memory and are not written to the database.
   Expense ratios, exit loads, taxes, investor risk capacity and transaction
   cash flows are outside this slice.
+
+### Mutual-fund performance comparison v1 — complete
+
+- The same holdings upload now requests official AMFI NAV history for every
+  reviewed exact Direct-Growth scheme in the file. Unreviewed names remain
+  visible as unmatched; similarly named plans or options are never substituted.
+- All measured funds use one intersection of available NAV dates, capped at 253
+  common observations. The table reports aligned total and annualized returns,
+  annualized volatility, maximum drawdown, Sharpe and Sortino from that same
+  window.
+- The first slice uses a disclosed 0% annual risk-free assumption. It does not
+  silently infer a current deposit or Treasury rate, and it withholds ratios
+  when the common history is insufficient.
+- Official NAV performance remains separate from the holdings/category and
+  overlap analysis. Expense ratios, exit loads, taxes, category benchmarks and
+  investor cash flows are not included, and the table does not rank or recommend
+  funds.
+- NAV retrieval runs as a separate background request with a bounded source
+  timeout, so slow or unavailable AMFI responses do not block category,
+  concentration, overlap or diversification results.
+- Category-specific benchmark series and longer three/five-year aligned windows
+  remain the next Mutual Funds Comparer milestones.
+
+### Mutual-fund scheme catalogue and classification v2 — complete
+
+- The comparer now reads AMFI's current complete NAV report and builds a cached
+  catalogue containing only current `Direct Plan` + `Growth` rows. Regular,
+  IDCW, dividend, payout and reinvestment options are excluded before matching.
+- Reviewed exact scheme codes take precedence. Other uploaded names require one
+  exact normalized scheme-name match; duplicate candidates remain visibly
+  ambiguous and no nearest-name substitution is made.
+- Each successful match exposes the official scheme name, scheme code, AMC,
+  latest NAV/date, stable mapped category, raw AMFI category heading and match
+  status. The raw heading remains available to audit every local category.
+- Category normalization is versioned as `amfi-category-map-v1`; catalogue
+  behavior is versioned as `amfi-direct-growth-catalogue-v1`.
+- Catalogue retrieval runs independently of allocation and performance work, so
+  an unavailable official report cannot erase uploaded analysis or trigger a
+  guessed match.
+- Category benchmark mapping and three/five-year performance windows are next.
+- Status: **held pending user-file validation**. The completed upload,
+  catalogue and one-year performance foundations remain available, but no new
+  Mutual Funds Comparer milestone will be started until representative user
+  files can be tested.
 
 ## Validation work for observed seasonality
 
