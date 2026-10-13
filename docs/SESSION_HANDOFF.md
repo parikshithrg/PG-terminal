@@ -486,15 +486,28 @@ orders or position sizing.
 
 ## Next work
 
-1. Expand the audited RBI release registry into continuous balance-of-payments,
+1. Continue `mutual-fund-true-diversification-v3`. The ISIN-normalized overlap
+   engine, plan-independent holdings identity, investor-weighted look-through,
+   repeated holdings, sector exposure, effective security count, fund
+   contribution and disclosure audit table are implemented. Official monthly
+   disclosure adapters are live for Nippon India and Motilal Oswal; the user's
+   14-fund workbook now parses and all five Motilal portfolios populate the
+   overlap tables. Add official-source adapters for Axis, ICICI Prudential,
+   SBI, WhiteOak Capital, Edelweiss and PPFAS, then add dated security-level
+   market-cap classification. Keep unsupported AMCs explicit and do not fill
+   them from an aggregator. The user-facing comparer is now intentionally an
+   overview rather than a table-heavy audit page: allocation, top similarity
+   pairs, a coverage-labelled structural/regime-fit score, and concise review
+   prompts are the only primary outputs.
+2. Expand the audited RBI release registry into continuous balance-of-payments,
    external-debt, credit and macro vintages while retaining every original
    publication date and revision state, then add authoritative effective-dated
    index membership. Preserve base changes and honest frequency; never
    synthesize missing daily values or use revised actuals in an earlier
    information set.
-2. Live-check the first full NIFTY 500 five-year retrieval after reconnecting
+3. Live-check the first full NIFTY 500 five-year retrieval after reconnecting
    Kite, including year switching, coverage counts, and reverse ranking order.
-3. Begin the queued Portfolio performance and Alpha Opportunities roadmap:
+4. Begin the queued Portfolio performance and Alpha Opportunities roadmap:
    transaction-based performance; approved RBI 91-day T-bill history; complete
    permitted ETF/equity histories; and position-level return, volatility, and
    drawdown attribution. Keep the NCD excluded until a genuine mark-to-market or
@@ -505,15 +518,23 @@ orders or position sizing.
    Keep holdings local/read-only and keep the whole-market Dashboard headline
    deferred until its inputs, methodology, confidence rules, and wording are
    explicitly designed and reviewed.
-4. Continue daily collection for institutional flows, macro context, global risk,
+5. Continue daily collection for institutional flows, macro context, global risk,
    and futures/OI; freeze their directional thresholds only after adequate
    coverage, then test them out of sample.
-5. Source and audit authoritative dated index membership before populating the
+6. Source and audit authoritative dated index membership before populating the
    new point-in-time schema; never infer historical membership from today's list.
-6. Display any decision layer only after its evidence and limitations are
+7. Display any decision layer only after its evidence and limitations are
    reviewable in the interface.
 
 ## Approved longer-range product milestones
+
+Site-wide interface direction approved on 13-Oct-26: use the simplified Mutual
+Funds Comparer as the pattern for every page. Lead with concise data inferences,
+key metrics, visual summaries, confidence/coverage, and useful review points.
+Reduce explanatory prose and do not expose technical tables unless they matter
+to a layperson's decision; preserve detailed inputs and audits behind optional
+detail views. Clearly separate observed facts, derived conclusions, and
+suggestions, and never hide missing or stale evidence for cosmetic simplicity.
 
 1. Turn Dashboard into the summary layer for every workspace page, with one
    concise section per page, freshness/readiness state, and a route to details.

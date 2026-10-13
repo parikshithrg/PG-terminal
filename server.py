@@ -7,6 +7,7 @@ import base64
 import binascii
 import csv
 import hashlib
+import html as html_module
 import io
 import json
 import math
@@ -60,6 +61,9 @@ AMFI_NAV_SOURCE_URL = "https://www.amfiindia.com/net-asset-value/nav-download"
 AMFI_LATEST_NAV_URL = "https://portal.amfiindia.com/spages/NAVAll.txt"
 AMFI_SCHEME_CATALOGUE_CONTRACT_VERSION = "amfi-direct-growth-catalogue-v1"
 AMFI_CATEGORY_SCHEMA_VERSION = "amfi-category-map-v1"
+MUTUAL_FUND_DIVERSIFICATION_CONTRACT_VERSION = "mutual-fund-true-diversification-v3"
+NIPPON_PORTFOLIO_DISCLOSURE_PAGE_URL = "https://mf.nipponindiaim.com/investor-service/downloads/factsheet-portfolio-and-other-disclosures/"
+MOTILAL_OSWAL_FUND_PAGE_BASE_URL = "https://www.motilaloswalmf.com/mutual-funds/"
 AMFI_PORTFOLIO_SCHEMES = (
     {
         "scheme_code": "120754",
@@ -688,12 +692,15 @@ MAX_GOOGLE_FINANCE_SYMBOLS = 100
 MAX_NIFTY_GSEC_RESPONSE_BYTES = 512 * 1024
 MAX_AMFI_NAV_RESPONSE_BYTES = 8 * 1024 * 1024
 MAX_AMFI_CATALOGUE_RESPONSE_BYTES = 16 * 1024 * 1024
+MAX_AMC_PORTFOLIO_PAGE_BYTES = 2 * 1024 * 1024
+MAX_AMC_PORTFOLIO_RESPONSE_BYTES = 16 * 1024 * 1024
 REQUEST_TIMEOUT_SECONDS = 10
 BREADTH_CACHE_SECONDS = 15 * 60
 SEASONALITY_CACHE_SECONDS = 15 * 60
 GOOGLE_FINANCE_CACHE_SECONDS = 5 * 60
 NIFTY_GSEC_CACHE_SECONDS = 6 * 60 * 60
 AMFI_NAV_CACHE_SECONDS = 6 * 60 * 60
+AMC_PORTFOLIO_CACHE_SECONDS = 6 * 60 * 60
 AMFI_NAV_LOOKBACK_DAYS = 300
 AMFI_NAV_CHUNK_DAYS = 90
 AMFI_NAV_REQUEST_TIMEOUT_SECONDS = 12
@@ -749,6 +756,7 @@ _NIFTY_GSEC_HISTORY_CACHE: dict[str, object] = {}
 _GOOGLE_FINANCE_QUOTE_CACHE: dict[str, dict[str, object]] = {}
 _AMFI_NAV_HISTORY_CACHE: dict[str, object] = {}
 _AMFI_SCHEME_CATALOGUE_CACHE: dict[str, object] = {}
+_AMC_PORTFOLIO_CACHE: dict[str, object] = {}
 _SESSION_LOCK = threading.Lock()
 _BREADTH_BUILD_LOCK = threading.Lock()
 _HISTORICAL_MONTH_LEADERS_LOCK = threading.Lock()
@@ -9889,9 +9897,26 @@ def _canonical_amfi_category(raw_category: str) -> str:
 
 
 def _normalized_amfi_scheme_base(value: str) -> str:
-    text = re.sub(r"[^a-z0-9]+", " ", str(value).lower()).strip()
-    removable = {"direct", "plan", "growth", "option"}
+    text = re.sub(r"\([^)]*\)", " ", str(value).lower())
+    text = re.sub(r"\b(large|mid|small|multi|flexi)cap\b", r"\1 cap", text)
+    text = re.sub(r"[^a-z0-9]+", " ", text).strip()
+    removable = {"direct", "regular", "plan", "growth", "option"}
     return " ".join(token for token in text.split() if token not in removable)
+
+
+def _underlying_scheme_keys(value: str) -> set[str]:
+    """Return conservative aliases for one plan-independent scheme identity."""
+    base = _normalized_amfi_scheme_base(value)
+    keys = {base} if base else set()
+    tokens = base.split()
+    if tokens and tokens[-1] == "fund":
+        keys.add(" ".join(tokens[:-1]))
+    if tokens[:2] == ["nippon", "india"]:
+        without_india = [tokens[0], *tokens[2:]]
+        keys.add(" ".join(without_india))
+        if without_india and without_india[-1] == "fund":
+            keys.add(" ".join(without_india[:-1]))
+    return {item for item in keys if item}
 
 
 def parse_amfi_scheme_catalogue_text(text: str) -> dict[str, object]:
@@ -10002,6 +10027,49 @@ def match_mutual_fund_scheme_catalogue(
     if len(matches) > 1:
         return {"status": "ambiguous_direct_growth_match", "match": None, "candidates": len(matches)}
     return {"status": "scheme_not_found", "match": None, "candidates": 0}
+
+
+def match_mutual_fund_underlying_scheme_catalogue(
+    uploaded_name: str,
+    catalogue_rows: list[dict[str, object]],
+) -> dict[str, object]:
+    """Resolve a Growth-plan label to the shared underlying scheme portfolio.
+
+    Regular and Direct plans are deliberately equivalent only for portfolio
+    holdings. NAV performance continues to use exact plan-specific codes.
+    """
+    label = str(uploaded_name).strip()
+    lowered = re.sub(r"[^a-z0-9]+", " ", label.lower()).strip()
+    tokens = set(lowered.split())
+    if any(term in tokens for term in ("idcw", "dividend", "payout", "reinvestment")):
+        return {"status": "non_growth_option", "match": None, "candidates": 0}
+    keys = _underlying_scheme_keys(label)
+    matches = [
+        row for row in catalogue_rows
+        if keys.intersection(_underlying_scheme_keys(str(row.get("scheme_name") or row.get("scheme_base") or "")))
+    ]
+    unique_matches = {str(row.get("scheme_code")): row for row in matches}
+    matches = list(unique_matches.values())
+    underlying_identities = {
+        (
+            str(row.get("amc_name") or "").lower(),
+            str(row.get("scheme_base") or _normalized_amfi_scheme_base(str(row.get("scheme_name") or ""))),
+        )
+        for row in matches
+    }
+    if len(matches) > 1 and len(underlying_identities) == 1:
+        matches = [min(matches, key=lambda row: str(row.get("scheme_code") or ""))]
+    if len(matches) == 1:
+        if "regular" in tokens:
+            status = "regular_plan_underlying_match"
+        elif "direct" in tokens:
+            status = "direct_plan_underlying_match"
+        else:
+            status = "unique_underlying_scheme_match"
+        return {"status": status, "match": matches[0], "candidates": 1}
+    if len(matches) > 1:
+        return {"status": "ambiguous_underlying_scheme", "match": None, "candidates": len(matches)}
+    return {"status": "underlying_scheme_not_found", "match": None, "candidates": 0}
 
 
 def build_mutual_fund_catalogue_classification(
@@ -10116,6 +10184,384 @@ def fetch_amfi_scheme_catalogue() -> dict[str, object]:
     return catalogue
 
 
+class _NipponPortfolioLinkParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.links: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() != "a":
+            return
+        href = next((value for key, value in attrs if key.lower() == "href"), None)
+        if not href:
+            return
+        lowered = href.lower()
+        if "monthly-portfolio" in lowered and lowered.endswith((".xls", ".xlsx")):
+            self.links.append(href)
+
+
+def parse_nippon_portfolio_disclosure_links(html: str) -> list[dict[str, object]]:
+    """Extract and newest-first sort official monthly workbook links."""
+    parser = _NipponPortfolioLinkParser()
+    parser.feed(html)
+    rows: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for href in parser.links:
+        url = urllib.parse.urljoin(NIPPON_PORTFOLIO_DISCLOSURE_PAGE_URL, href)
+        parsed = urllib.parse.urlsplit(url)
+        if (parsed.hostname or "").lower() != "mf.nipponindiaim.com" or url in seen:
+            continue
+        match = re.search(r"(\d{2})-([A-Za-z]{3})-(\d{2})(?:\.(?:xls|xlsx))$", parsed.path)
+        if not match:
+            continue
+        try:
+            disclosure_date = datetime.strptime("-".join(match.groups()), "%d-%b-%y").date()
+        except ValueError:
+            continue
+        rows.append({"url": url, "portfolio_date": disclosure_date})
+        seen.add(url)
+    rows.sort(key=lambda item: item["portfolio_date"], reverse=True)
+    return rows
+
+
+def parse_nippon_portfolio_workbook(payload: bytes, *, source_url: str) -> dict[str, object]:
+    """Parse Nippon India's official monthly multi-scheme disclosure workbook."""
+    if not payload or len(payload) > MAX_AMC_PORTFOLIO_RESPONSE_BYTES:
+        raise ValueError("invalid_nippon_portfolio_workbook")
+    try:
+        matrices = _xlsx_sheet_matrices(payload)
+    except ValueError as error:
+        raise ValueError("invalid_nippon_portfolio_workbook") from error
+    schemes: list[dict[str, object]] = []
+    dates: list[date] = []
+    for sheet_name, matrix in matrices:
+        if sheet_name.strip().lower() == "index" or len(matrix) < 4:
+            continue
+        scheme_label = str(matrix[0][1] if len(matrix[0]) > 1 else "").strip()
+        scheme_name = re.sub(r"\s*\([^)]*\).*", "", scheme_label, count=1).strip()
+        if not scheme_name:
+            continue
+        portfolio_date: date | None = None
+        for row in matrix[:8]:
+            text = " ".join(str(cell) for cell in row if str(cell).strip())
+            match = re.search(r"as on\s+([A-Za-z]+\s+\d{1,2},\s*\d{4})", text, re.IGNORECASE)
+            if match:
+                try:
+                    normalized_date = re.sub(r"\s+", " ", match.group(1))
+                    normalized_date = re.sub(r",\s*", ", ", normalized_date)
+                    portfolio_date = datetime.strptime(normalized_date, "%B %d, %Y").date()
+                except ValueError:
+                    portfolio_date = None
+                break
+        header_index = -1
+        header_keys: dict[str, int] = {}
+        for index, row in enumerate(matrix[:20]):
+            keys = {re.sub(r"[^a-z0-9%]", "", str(cell).lower()): column for column, cell in enumerate(row)}
+            isin_column = next((column for key, column in keys.items() if key == "isin"), None)
+            name_column = next((column for key, column in keys.items() if "nameoftheinstrument" in key), None)
+            weight_column = next((column for key, column in keys.items() if "%tonav" in key), None)
+            if isin_column is not None and name_column is not None and weight_column is not None:
+                header_index = index
+                header_keys = {
+                    "isin": isin_column,
+                    "security": name_column,
+                    "weight": weight_column,
+                    "sector": next((column for key, column in keys.items() if "industry" in key or "rating" in key), -1),
+                }
+                break
+        if header_index < 0 or portfolio_date is None:
+            continue
+        holdings: list[dict[str, object]] = []
+        for row in matrix[header_index + 1:]:
+            def cell(column: int) -> object:
+                return row[column] if 0 <= column < len(row) else ""
+
+            isin = re.sub(r"[^A-Z0-9]", "", str(cell(header_keys["isin"])).upper())
+            security = re.sub(r"\*+$", "", str(cell(header_keys["security"])).strip()).strip()
+            weight = _portfolio_number(cell(header_keys["weight"]))
+            if not re.fullmatch(r"IN[A-Z0-9]{10}", isin) or not security or weight is None or weight <= 0:
+                continue
+            holdings.append({
+                "isin": isin,
+                "security": security,
+                "sector": str(cell(header_keys["sector"])).strip() or "Unclassified",
+                "weight": float(weight),
+            })
+        if not holdings:
+            continue
+        raw_total = sum(float(item["weight"]) for item in holdings)
+        scale = 100.0 if raw_total <= 1.5 else 1.0
+        for item in holdings:
+            item["weight_pct"] = round(float(item.pop("weight")) * scale, 6)
+        schemes.append({
+            "scheme_name": scheme_name,
+            "scheme_keys": sorted(_underlying_scheme_keys(scheme_name)),
+            "sheet_name": sheet_name,
+            "portfolio_date": portfolio_date.isoformat(),
+            "coverage_pct": round(sum(float(item["weight_pct"]) for item in holdings), 2),
+            "holdings": holdings,
+        })
+        dates.append(portfolio_date)
+    if not schemes or not dates:
+        raise ValueError("invalid_nippon_portfolio_workbook")
+    return {
+        "provider": "nippon_india",
+        "amc_name": "Nippon India Mutual Fund",
+        "source": "Nippon India Mutual Fund monthly portfolio disclosure",
+        "source_page_url": NIPPON_PORTFOLIO_DISCLOSURE_PAGE_URL,
+        "source_url": source_url,
+        "portfolio_date": max(dates).isoformat(),
+        "schemes": schemes,
+    }
+
+
+def fetch_nippon_portfolio_disclosure() -> dict[str, object]:
+    """Fetch and cache the newest parseable official Nippon monthly workbook."""
+    with _SESSION_LOCK:
+        cached = _AMC_PORTFOLIO_CACHE.get("nippon_india")
+        if cached and time.monotonic() - float(cached.get("created_at", 0)) < AMC_PORTFOLIO_CACHE_SECONDS:
+            package = cached.get("package")
+            if isinstance(package, dict):
+                return package
+    page_request = urllib.request.Request(
+        NIPPON_PORTFOLIO_DISCLOSURE_PAGE_URL,
+        headers={"Accept": "text/html,*/*;q=0.8", "Accept-Encoding": "identity", "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(page_request, timeout=AMFI_NAV_REQUEST_TIMEOUT_SECONDS) as response:
+            final_page = urllib.parse.urlsplit(response.geturl())
+            if response.status != HTTPStatus.OK or (final_page.hostname or "").lower() != "mf.nipponindiaim.com":
+                raise ValueError("nippon_portfolio_source_unavailable")
+            body = response.read(MAX_AMC_PORTFOLIO_PAGE_BYTES + 1)
+            if len(body) > MAX_AMC_PORTFOLIO_PAGE_BYTES:
+                raise ValueError("nippon_portfolio_page_too_large")
+        links = parse_nippon_portfolio_disclosure_links(body.decode("utf-8", errors="replace"))
+        if not links:
+            raise ValueError("nippon_portfolio_link_unavailable")
+        last_error: ValueError | None = None
+        package: dict[str, object] | None = None
+        for link in links[:3]:
+            disclosure_url = str(link["url"])
+            request = urllib.request.Request(
+                disclosure_url,
+                headers={"Accept": "application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*;q=0.8", "Accept-Encoding": "identity", "Referer": NIPPON_PORTFOLIO_DISCLOSURE_PAGE_URL, "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT},
+                method="GET",
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=AMFI_NAV_REQUEST_TIMEOUT_SECONDS) as response:
+                    final_url = urllib.parse.urlsplit(response.geturl())
+                    if response.status != HTTPStatus.OK or (final_url.hostname or "").lower() != "mf.nipponindiaim.com":
+                        raise ValueError("nippon_portfolio_source_unavailable")
+                    workbook = response.read(MAX_AMC_PORTFOLIO_RESPONSE_BYTES + 1)
+                    if len(workbook) > MAX_AMC_PORTFOLIO_RESPONSE_BYTES:
+                        raise ValueError("nippon_portfolio_response_too_large")
+                package = parse_nippon_portfolio_workbook(workbook, source_url=disclosure_url)
+                break
+            except ValueError as error:
+                last_error = error
+        if package is None:
+            raise last_error or ValueError("nippon_portfolio_source_unavailable")
+    except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout, TimeoutError, OSError) as error:
+        raise ValueError("nippon_portfolio_source_unavailable") from error
+    with _SESSION_LOCK:
+        _AMC_PORTFOLIO_CACHE["nippon_india"] = {"created_at": time.monotonic(), "package": package}
+    return package
+
+
+def parse_motilal_portfolio_page(html: str, *, page_url: str) -> str:
+    """Resolve the official month-end portfolio workbook advertised on a fund page."""
+    parsed_page = urllib.parse.urlsplit(page_url)
+    if (parsed_page.hostname or "").lower() not in {"motilaloswalmf.com", "www.motilaloswalmf.com"}:
+        raise ValueError("invalid_motilal_portfolio_page")
+    candidates = re.findall(
+        r"portfolioUrl\s*:?\s*(?:</strong>)?\s*:?\s*(/content/dam/motilal-mf/sheets/fund-csvs/[^<\"'\s]+\.xlsx)",
+        html,
+        flags=re.IGNORECASE,
+    )
+    if not candidates:
+        raise ValueError("motilal_portfolio_link_unavailable")
+    workbook_url = urllib.parse.urljoin(page_url, html_module.unescape(candidates[0]))
+    parsed = urllib.parse.urlsplit(workbook_url)
+    if (
+        (parsed.hostname or "").lower() not in {"motilaloswalmf.com", "www.motilaloswalmf.com"}
+        or not parsed.path.startswith("/content/dam/motilal-mf/sheets/fund-csvs/")
+        or not parsed.path.lower().endswith(".xlsx")
+    ):
+        raise ValueError("invalid_motilal_portfolio_link")
+    return workbook_url
+
+
+def parse_motilal_portfolio_workbook(
+    payload: bytes,
+    *,
+    scheme_name: str,
+    source_url: str,
+    source_page_url: str,
+) -> dict[str, object]:
+    """Parse one official Motilal Oswal month-end scheme workbook."""
+    if not payload or len(payload) > MAX_AMC_PORTFOLIO_RESPONSE_BYTES:
+        raise ValueError("invalid_motilal_portfolio_workbook")
+    try:
+        matrices = _xlsx_sheet_matrices(payload)
+    except ValueError as error:
+        raise ValueError("invalid_motilal_portfolio_workbook") from error
+    for _sheet_name, matrix in matrices:
+        if len(matrix) < 4:
+            continue
+        portfolio_date: date | None = None
+        disclosed_scheme = ""
+        for row in matrix[:12]:
+            text = " ".join(str(cell) for cell in row if str(cell).strip())
+            if not disclosed_scheme and re.search(r"motilal\s+oswal", text, re.IGNORECASE) and "fund" in text.lower():
+                disclosed_scheme = re.sub(r"\s+", " ", text).strip()
+            match = re.search(r"as\s+on\s+([A-Za-z]+\s+\d{1,2},\s*\d{4})", text, re.IGNORECASE)
+            if match:
+                try:
+                    normalized_date = re.sub(r",\s*", ", ", re.sub(r"\s+", " ", match.group(1)))
+                    portfolio_date = datetime.strptime(normalized_date, "%B %d, %Y").date()
+                except ValueError:
+                    portfolio_date = None
+        header_index = -1
+        columns: dict[str, int] = {}
+        for index, row in enumerate(matrix[:25]):
+            keys = {re.sub(r"[^a-z0-9%]", "", str(cell).lower()): column for column, cell in enumerate(row)}
+            isin_column = next((column for key, column in keys.items() if key == "isin"), None)
+            name_column = next((column for key, column in keys.items() if "nameoftheinstrument" in key), None)
+            weight_column = next((column for key, column in keys.items() if "%tonetassets" in key), None)
+            if isin_column is not None and name_column is not None and weight_column is not None:
+                header_index = index
+                columns = {
+                    "isin": isin_column,
+                    "security": name_column,
+                    "weight": weight_column,
+                    "sector": next((column for key, column in keys.items() if "industry" in key or "rating" in key), -1),
+                }
+                break
+        if header_index < 0 or portfolio_date is None:
+            continue
+        holdings: list[dict[str, object]] = []
+        for row in matrix[header_index + 1:]:
+            def cell(column: int) -> object:
+                return row[column] if 0 <= column < len(row) else ""
+
+            isin = re.sub(r"[^A-Z0-9]", "", str(cell(columns["isin"])).upper())
+            security = re.sub(r"\*+$", "", str(cell(columns["security"])).strip()).strip()
+            weight = _portfolio_number(cell(columns["weight"]))
+            if not re.fullmatch(r"IN[A-Z0-9]{10}", isin) or not security or weight is None or weight <= 0:
+                continue
+            holdings.append({
+                "isin": isin,
+                "security": security,
+                "sector": str(cell(columns["sector"])).strip() or "Unclassified",
+                "weight_pct": round(float(weight), 6),
+            })
+        if not holdings:
+            continue
+        return {
+            "provider": "motilal_oswal",
+            "amc_name": "Motilal Oswal Mutual Fund",
+            "source": "Motilal Oswal Mutual Fund monthly portfolio disclosure",
+            "source_page_url": source_page_url,
+            "source_url": source_url,
+            "portfolio_date": portfolio_date.isoformat(),
+            "schemes": [{
+                "scheme_name": scheme_name or disclosed_scheme,
+                "scheme_keys": sorted(_underlying_scheme_keys(scheme_name or disclosed_scheme)),
+                "portfolio_date": portfolio_date.isoformat(),
+                "source_url": source_url,
+                "source_page_url": source_page_url,
+                "coverage_pct": round(sum(float(item["weight_pct"]) for item in holdings), 2),
+                "holdings": holdings,
+            }],
+        }
+    raise ValueError("invalid_motilal_portfolio_workbook")
+
+
+def _motilal_scheme_page_url(scheme_name: str) -> str:
+    base = _normalized_amfi_scheme_base(scheme_name)
+    slug = re.sub(r"[^a-z0-9]+", "-", base).strip("-")
+    slug = slug.replace("-and-mid-cap-", "-and-midcap-")
+    if not slug.startswith("motilal-oswal-") or not slug.endswith("-fund"):
+        raise ValueError("invalid_motilal_scheme_name")
+    return urllib.parse.urljoin(MOTILAL_OSWAL_FUND_PAGE_BASE_URL, slug)
+
+
+def fetch_motilal_portfolio_disclosures(scheme_names: list[str]) -> dict[str, object]:
+    """Fetch and cache official per-scheme Motilal Oswal month-end workbooks."""
+    schemes: list[dict[str, object]] = []
+    source_urls: list[str] = []
+    source_page_urls: list[str] = []
+    dates: list[date] = []
+    for scheme_name in dict.fromkeys(str(name).strip() for name in scheme_names if str(name).strip()):
+        cache_key = "motilal_oswal:" + _normalized_amfi_scheme_base(scheme_name)
+        with _SESSION_LOCK:
+            cached = _AMC_PORTFOLIO_CACHE.get(cache_key)
+            cached_package = cached.get("package") if cached and time.monotonic() - float(cached.get("created_at", 0)) < AMC_PORTFOLIO_CACHE_SECONDS else None
+        if isinstance(cached_package, dict):
+            package = cached_package
+        else:
+            page_url = _motilal_scheme_page_url(scheme_name)
+            page_request = urllib.request.Request(
+                page_url,
+                headers={"Accept": "text/html,*/*;q=0.8", "Accept-Encoding": "identity", "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT},
+                method="GET",
+            )
+            try:
+                with urllib.request.urlopen(page_request, timeout=AMFI_NAV_REQUEST_TIMEOUT_SECONDS) as response:
+                    final_page = urllib.parse.urlsplit(response.geturl())
+                    if response.status != HTTPStatus.OK or (final_page.hostname or "").lower() not in {"motilaloswalmf.com", "www.motilaloswalmf.com"}:
+                        raise ValueError("motilal_portfolio_source_unavailable")
+                    page_body = response.read(MAX_AMC_PORTFOLIO_PAGE_BYTES + 1)
+                    if len(page_body) > MAX_AMC_PORTFOLIO_PAGE_BYTES:
+                        raise ValueError("motilal_portfolio_page_too_large")
+                resolved_page_url = response.geturl()
+                workbook_url = parse_motilal_portfolio_page(page_body.decode("utf-8", errors="replace"), page_url=resolved_page_url)
+                workbook_request = urllib.request.Request(
+                    workbook_url,
+                    headers={"Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*;q=0.8", "Accept-Encoding": "identity", "Referer": resolved_page_url, "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT},
+                    method="GET",
+                )
+                with urllib.request.urlopen(workbook_request, timeout=AMFI_NAV_REQUEST_TIMEOUT_SECONDS) as response:
+                    final_workbook = urllib.parse.urlsplit(response.geturl())
+                    if response.status != HTTPStatus.OK or (final_workbook.hostname or "").lower() not in {"motilaloswalmf.com", "www.motilaloswalmf.com"}:
+                        raise ValueError("motilal_portfolio_source_unavailable")
+                    workbook = response.read(MAX_AMC_PORTFOLIO_RESPONSE_BYTES + 1)
+                    if len(workbook) > MAX_AMC_PORTFOLIO_RESPONSE_BYTES:
+                        raise ValueError("motilal_portfolio_response_too_large")
+                package = parse_motilal_portfolio_workbook(
+                    workbook,
+                    scheme_name=scheme_name,
+                    source_url=workbook_url,
+                    source_page_url=resolved_page_url,
+                )
+            except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout, TimeoutError, OSError) as error:
+                raise ValueError("motilal_portfolio_source_unavailable") from error
+            with _SESSION_LOCK:
+                _AMC_PORTFOLIO_CACHE[cache_key] = {"created_at": time.monotonic(), "package": package}
+        schemes.extend(item for item in package.get("schemes", []) if isinstance(item, dict))
+        if package.get("source_url"):
+            source_urls.append(str(package["source_url"]))
+        if package.get("source_page_url"):
+            source_page_urls.append(str(package["source_page_url"]))
+        if package.get("portfolio_date"):
+            try:
+                dates.append(date.fromisoformat(str(package["portfolio_date"])))
+            except ValueError:
+                pass
+    if not schemes:
+        raise ValueError("motilal_portfolio_source_unavailable")
+    return {
+        "provider": "motilal_oswal",
+        "amc_name": "Motilal Oswal Mutual Fund",
+        "source": "Motilal Oswal Mutual Fund monthly portfolio disclosures",
+        "source_page_urls": source_page_urls,
+        "source_url": source_urls[0] if len(source_urls) == 1 else MOTILAL_OSWAL_FUND_PAGE_BASE_URL,
+        "portfolio_date": max(dates).isoformat() if dates else None,
+        "schemes": schemes,
+    }
+
+
 def _mutual_fund_headers_and_rows(
     raw_rows: list[list[object]],
 ) -> tuple[list[str], list[dict[str, object]]]:
@@ -10125,7 +10571,7 @@ def _mutual_fund_headers_and_rows(
 
     def score(row: list[object]) -> int:
         keys = [key(cell) for cell in row if str(cell).strip()]
-        scheme = any(any(token in item for token in ("scheme", "fundname", "mutualfund")) for item in keys)
+        scheme = any(item == "fund" or any(token in item for token in ("scheme", "fundname", "mutualfund")) for item in keys)
         security = any(any(token in item for token in ("security", "holding", "stock", "company")) for item in keys)
         measure = any(any(token in item for token in ("weight", "allocation", "currentvalue", "marketvalue", "invested")) for item in keys)
         return (12 if scheme else 0) + (4 if security else 0) + (10 if measure else 0)
@@ -10246,6 +10692,8 @@ def _infer_mutual_fund_mapping(headers: list[str], *, underlying: bool = False) 
         "current_value": ("currentvalue", "marketvalue", "presentvalue", "curvalue", "valuation"),
         "invested_value": ("investedamount", "investedvalue", "investmentamount", "costvalue", "buyvalue"),
         "security": ("security", "securityname", "holding", "holdingname", "stock", "stockname", "company", "companyname", "issuer"),
+        "isin": ("isin", "securityisin", "instrumentisin"),
+        "sector": ("sector", "industry", "industryrating", "classification"),
     }
 
     def match(field: str) -> str | None:
@@ -10453,31 +10901,40 @@ def build_mutual_fund_holdings_analysis(
 
     underlying_by_fund: dict[str, dict[str, float]] = defaultdict(dict)
     underlying_labels: dict[str, str] = {}
+    underlying_isins: dict[str, str | None] = {}
+    underlying_sectors: dict[str, str] = {}
     underlying_coverage: dict[str, float] = defaultdict(float)
     if underlying_rows and underlying_mapping:
         underlying_scheme_column = underlying_mapping.get("scheme")
         security_column = underlying_mapping.get("security")
         underlying_weight_column = underlying_mapping.get("weight")
+        isin_column = underlying_mapping.get("isin") if isinstance(underlying_mapping.get("isin"), str) else None
+        sector_column = underlying_mapping.get("sector") if isinstance(underlying_mapping.get("sector"), str) else None
         if all(isinstance(item, str) for item in (underlying_scheme_column, security_column, underlying_weight_column)):
-            parsed_underlying: list[tuple[int, str, str, float]] = []
+            parsed_underlying: list[tuple[int, str, str, str, str | None, str, float]] = []
             by_fund_totals: dict[str, float] = defaultdict(float)
             for row_number, row in enumerate(underlying_rows, start=2):
                 scheme = str(row.get(str(underlying_scheme_column)) or "").strip()
                 security = str(row.get(str(security_column)) or "").strip()
+                isin = re.sub(r"[^A-Z0-9]", "", str(row.get(str(isin_column)) or "").upper()) if isin_column else ""
+                sector = str(row.get(str(sector_column)) or "").strip() if sector_column else ""
                 weight = _portfolio_number(row.get(str(underlying_weight_column)))
                 fund_key = re.sub(r"[^a-z0-9]", "", scheme.lower())
-                security_key = re.sub(r"[^a-z0-9]", "", security.lower())
+                security_key = f"isin:{isin}" if re.fullmatch(r"IN[A-Z0-9]{10}", isin) else re.sub(r"[^a-z0-9]", "", security.lower())
                 if not fund_key or fund_key not in prepared_by_key:
                     issues.append({"row_number": row_number, "scheme": scheme, "reason": "underlying_scheme_not_in_fund_list"})
                     continue
                 if not security_key or weight is None or weight <= 0:
                     issues.append({"row_number": row_number, "scheme": scheme, "reason": "invalid_underlying_holding"})
                     continue
-                parsed_underlying.append((row_number, fund_key, security_key, weight))
+                parsed_underlying.append((row_number, fund_key, security_key, security, isin or None, sector or "Unclassified", weight))
                 underlying_labels[security_key] = security
+                underlying_isins[security_key] = isin or None
+                if sector and underlying_sectors.get(security_key, "Unclassified") == "Unclassified":
+                    underlying_sectors[security_key] = sector
                 by_fund_totals[fund_key] += weight
             scales = {key: (100.0 if total <= 1.5 else 1.0) for key, total in by_fund_totals.items()}
-            for row_number, fund_key, security_key, weight in parsed_underlying:
+            for row_number, fund_key, security_key, _security, _isin, _sector, weight in parsed_underlying:
                 scaled = weight * scales[fund_key]
                 if underlying_coverage[fund_key] + scaled > 105.0:
                     issues.append({"row_number": row_number, "scheme": prepared_by_key[fund_key]["scheme"], "reason": "underlying_weights_exceed_100_pct"})
@@ -10505,20 +10962,107 @@ def build_mutual_fund_holdings_analysis(
     overlaps.sort(key=lambda item: (-float(item["overlap_pct"]), str(item["fund_a"]), str(item["fund_b"])))
 
     lookthrough: dict[str, float] = defaultdict(float)
+    funds_by_security: dict[str, set[str]] = defaultdict(set)
+    fund_keys_by_security: dict[str, set[str]] = defaultdict(set)
     for fund in funds:
         fund_key = str(fund["scheme_key"])
         for security_key, security_weight in underlying_by_fund.get(fund_key, {}).items():
             lookthrough[security_key] += float(fund["weight_pct"]) * security_weight / 100.0
+            funds_by_security[security_key].add(str(fund["scheme"]))
+            fund_keys_by_security[security_key].add(fund_key)
     top_underlying = [
-        {"security": underlying_labels.get(key, key), "portfolio_weight_pct": round(weight, 2)}
+        {
+            "security": underlying_labels.get(key, key),
+            "isin": underlying_isins.get(key),
+            "sector": underlying_sectors.get(key, "Unclassified"),
+            "portfolio_weight_pct": round(weight, 2),
+            "fund_count": len(funds_by_security[key]),
+            "repeated": len(funds_by_security[key]) > 1,
+        }
         for key, weight in sorted(lookthrough.items(), key=lambda item: (-item[1], item[0]))[:20]
     ]
+    repeated_holdings = [
+        {
+            "security": underlying_labels.get(key, key),
+            "isin": underlying_isins.get(key),
+            "sector": underlying_sectors.get(key, "Unclassified"),
+            "portfolio_weight_pct": round(weight, 2),
+            "fund_count": len(funds_by_security[key]),
+            "funds": sorted(funds_by_security[key]),
+        }
+        for key, weight in sorted(lookthrough.items(), key=lambda item: (-item[1], item[0]))
+        if len(funds_by_security[key]) > 1
+    ][:50]
+    sector_totals: dict[str, float] = defaultdict(float)
+    for security_key, weight in lookthrough.items():
+        sector_totals[underlying_sectors.get(security_key, "Unclassified")] += weight
+    sector_exposure = [
+        {"sector": sector, "portfolio_weight_pct": round(weight, 2)}
+        for sector, weight in sorted(sector_totals.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+    def cap_bucket(category: str) -> str:
+        lowered = category.lower()
+        if "large & mid" in lowered or "large and mid" in lowered:
+            return "Large & Mid Cap"
+        if "large cap" in lowered:
+            return "Large Cap"
+        if "mid cap" in lowered:
+            return "Mid Cap"
+        if "small cap" in lowered or "microcap" in lowered:
+            return "Small / Micro Cap"
+        if lowered.startswith("equity") or "equity" in lowered or "index" in lowered:
+            return "Blended / Other Equity"
+        return "Non-equity / Unclassified"
+
+    cap_totals: dict[str, float] = defaultdict(float)
+    for fund in funds:
+        cap_totals[cap_bucket(str(fund["category"]))] += float(fund["weight_pct"])
+    market_cap_allocation = [
+        {"bucket": bucket, "portfolio_weight_pct": round(weight, 2), "basis": "fund_category_mandate"}
+        for bucket, weight in sorted(cap_totals.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+    contribution_by_fund: list[dict[str, object]] = []
+    overlap_by_fund: dict[str, float] = defaultdict(float)
+    for item in overlaps:
+        overlap = float(item["overlap_pct"])
+        overlap_by_fund[str(item["fund_a"])] = max(overlap_by_fund[str(item["fund_a"])], overlap)
+        overlap_by_fund[str(item["fund_b"])] = max(overlap_by_fund[str(item["fund_b"])], overlap)
+    for fund in funds:
+        fund_key = str(fund["scheme_key"])
+        portfolio_weight = float(fund["weight_pct"])
+        unique_weight = sum(
+            portfolio_weight * security_weight / 100.0
+            for security_key, security_weight in underlying_by_fund.get(fund_key, {}).items()
+            if len(fund_keys_by_security[security_key]) == 1
+        )
+        repeated_weight = sum(
+            portfolio_weight * security_weight / 100.0
+            for security_key, security_weight in underlying_by_fund.get(fund_key, {}).items()
+            if len(fund_keys_by_security[security_key]) > 1
+        )
+        contribution_by_fund.append({
+            "scheme": fund["scheme"],
+            "portfolio_weight_pct": round(portfolio_weight, 2),
+            "captured_lookthrough_pct": round(unique_weight + repeated_weight, 2),
+            "unique_exposure_pct": round(unique_weight, 2),
+            "repeated_exposure_pct": round(repeated_weight, 2),
+            "highest_pair_overlap_pct": round(overlap_by_fund.get(str(fund["scheme"]), 0.0), 2) if fund_key in underlying_by_fund else None,
+        })
+    contribution_by_fund.sort(key=lambda item: (-float(item["repeated_exposure_pct"]), str(item["scheme"])))
 
     fund_hhi = sum((float(fund["weight_pct"]) / 100.0) ** 2 for fund in funds)
     category_hhi = sum((weight / 100.0) ** 2 for weight in category_totals.values())
     largest_fund = max((float(fund["weight_pct"]) for fund in funds), default=0.0)
     largest_category = max(category_totals.values(), default=0.0)
     maximum_overlap = max((float(item["overlap_pct"]) for item in overlaps), default=None)
+    captured_lookthrough = sum(lookthrough.values())
+    repeated_lookthrough = sum(weight for key, weight in lookthrough.items() if len(funds_by_security[key]) > 1)
+    security_hhi = (
+        sum((weight / captured_lookthrough) ** 2 for weight in lookthrough.values())
+        if captured_lookthrough > 0 else None
+    )
     suggestions: list[dict[str, str]] = []
     if largest_fund > 40:
         suggestions.append({"priority": "Review", "title": "Single-fund concentration", "detail": f"The largest fund is {largest_fund:.2f}% of the portfolio. Check whether that concentration is intentional and consistent with the fund's mandate."})
@@ -10543,12 +11087,16 @@ def build_mutual_fund_holdings_analysis(
         fund["underlying_coverage_pct"] = round(underlying_coverage.get(key, 0.0), 2) if key in underlying_coverage else None
     return {
         "ok": True,
-        "contract_version": "mutual-fund-holdings-analysis-v1",
+        "contract_version": MUTUAL_FUND_DIVERSIFICATION_CONTRACT_VERSION,
         "weight_basis": basis_field,
         "funds": funds,
         "categories": categories,
         "overlaps": overlaps,
         "top_underlying_holdings": top_underlying,
+        "repeated_holdings": repeated_holdings,
+        "sector_exposure": sector_exposure,
+        "market_cap_allocation": market_cap_allocation,
+        "contribution_by_fund": contribution_by_fund,
         "diversification": {
             "fund_count": len(funds),
             "category_count": len(category_totals),
@@ -10559,16 +11107,154 @@ def build_mutual_fund_holdings_analysis(
             "category_hhi": round(category_hhi, 4),
             "maximum_overlap_pct": round(maximum_overlap, 2) if maximum_overlap is not None else None,
             "funds_with_underlying_holdings": len(fund_keys_with_holdings),
+            "captured_lookthrough_pct": round(captured_lookthrough, 2),
+            "repeated_lookthrough_pct": round(repeated_lookthrough, 2),
+            "security_hhi": round(security_hhi, 4) if security_hhi is not None else None,
+            "effective_security_count": round(1.0 / security_hhi, 2) if security_hhi else None,
         },
         "suggestions": suggestions,
         "issues": issues,
         "limitations": [
             "Category labels supplied in the upload take precedence; otherwise only reviewed exact mappings and transparent name rules are used.",
-            "Overlap is calculated only from uploaded underlying security weights and is a lower bound when either fund has less than 95% holdings coverage.",
+            "Overlap is calculated from security-level weights using ISIN when available, otherwise a normalized security name. It is a lower bound when either fund has less than 95% holdings coverage.",
+            "Market-cap allocation is currently a fund-category mandate view; constituent-level market-cap classification requires a separate dated market-cap source.",
             "The analysis does not include expense ratios, exit loads, taxes, investment horizon, risk capacity or transaction-level cash flows.",
             "Improvement suggestions are deterministic review prompts, not personalized investment recommendations or buy/sell instructions.",
         ],
     }
+
+
+def _mutual_fund_holdings_provider(amc_name: str) -> str | None:
+    normalized = re.sub(r"[^a-z0-9]+", " ", str(amc_name).lower()).strip()
+    if "nippon india" in normalized:
+        return "nippon_india"
+    if "motilal oswal" in normalized:
+        return "motilal_oswal"
+    return None
+
+
+def build_mutual_fund_true_diversification(
+    funds: list[dict[str, object]],
+    catalogue: dict[str, object],
+    provider_packages: dict[str, dict[str, object]],
+    *,
+    provider_failures: dict[str, str] | None = None,
+) -> dict[str, object]:
+    """Join investor allocations to dated official security-level disclosures."""
+    catalogue_rows = catalogue.get("rows")
+    if not isinstance(funds, list) or not funds or not isinstance(catalogue_rows, list):
+        raise ValueError("invalid_mutual_fund_diversification_input")
+    normalized_rows: list[dict[str, object]] = []
+    source_rows: list[dict[str, object]] = []
+    underlying_rows: list[dict[str, object]] = []
+    packages_by_provider = provider_packages if isinstance(provider_packages, dict) else {}
+    failures = provider_failures or {}
+    for fund in funds:
+        scheme = str(fund.get("scheme") or "").strip()
+        weight = _portfolio_number(fund.get("weight_pct"))
+        if not scheme or weight is None or weight <= 0:
+            continue
+        category = str(fund.get("category") or "Unclassified")[:128]
+        resolved = match_mutual_fund_underlying_scheme_catalogue(scheme, catalogue_rows)
+        match = resolved.get("match")
+        if isinstance(match, dict) and re.sub(r"[^a-z]+", " ", category.lower()).strip() in {
+            "equity", "hybrid", "debt", "other", "solution oriented", "unclassified",
+        }:
+            official_category = str(match.get("category") or "").strip()
+            if official_category and official_category.lower() != "unclassified":
+                category = official_category[:128]
+        normalized_rows.append({"Scheme": scheme, "Weight %": weight, "Category": category})
+        source_row: dict[str, object] = {
+            "scheme": scheme,
+            "underlying_scheme": None,
+            "amc_name": None,
+            "provider": None,
+            "portfolio_date": None,
+            "captured_weight_pct": None,
+            "source_url": None,
+            "status": resolved["status"],
+        }
+        if not isinstance(match, dict):
+            source_rows.append(source_row)
+            continue
+        source_row["underlying_scheme"] = match.get("scheme_name") or match.get("official_name")
+        source_row["amc_name"] = match.get("amc_name")
+        provider = _mutual_fund_holdings_provider(str(match.get("amc_name") or ""))
+        source_row["provider"] = provider
+        if provider is None:
+            source_row["status"] = "official_source_adapter_pending"
+            source_rows.append(source_row)
+            continue
+        package = packages_by_provider.get(provider)
+        if not isinstance(package, dict):
+            source_row["status"] = failures.get(provider, "official_source_unavailable")
+            source_rows.append(source_row)
+            continue
+        target_keys = _underlying_scheme_keys(str(match.get("scheme_name") or ""))
+        scheme_matches = [
+            item for item in package.get("schemes", [])
+            if isinstance(item, dict) and target_keys.intersection(set(item.get("scheme_keys") or []))
+        ]
+        if len(scheme_matches) != 1:
+            source_row["status"] = "disclosure_scheme_ambiguous" if len(scheme_matches) > 1 else "scheme_not_in_latest_disclosure"
+            source_rows.append(source_row)
+            continue
+        disclosure = scheme_matches[0]
+        source_row.update({
+            "portfolio_date": disclosure.get("portfolio_date") or package.get("portfolio_date"),
+            "captured_weight_pct": disclosure.get("coverage_pct"),
+            "source_url": disclosure.get("source_url") or package.get("source_url"),
+            "status": "official_holdings_ready",
+        })
+        for holding in disclosure.get("holdings", []):
+            if not isinstance(holding, dict):
+                continue
+            underlying_rows.append({
+                "Scheme": scheme,
+                "Security": holding.get("security"),
+                "ISIN": holding.get("isin"),
+                "Sector": holding.get("sector"),
+                "Weight %": holding.get("weight_pct"),
+            })
+        source_rows.append(source_row)
+    if not normalized_rows:
+        raise ValueError("invalid_mutual_fund_diversification_input")
+    analysis = build_mutual_fund_holdings_analysis(
+        normalized_rows,
+        {"scheme": "Scheme", "weight": "Weight %", "current_value": None, "invested_value": None, "category": "Category"},
+        underlying_rows=underlying_rows,
+        underlying_mapping={"scheme": "Scheme", "security": "Security", "isin": "ISIN", "sector": "Sector", "weight": "Weight %"},
+    )
+    ready_rows = [row for row in source_rows if row["status"] == "official_holdings_ready"]
+    dates = sorted({str(row["portfolio_date"]) for row in ready_rows if row.get("portfolio_date")})
+    providers = sorted({str(row["provider"]) for row in ready_rows if row.get("provider")})
+    analysis["holdings_disclosure"] = {
+        "contract_version": MUTUAL_FUND_DIVERSIFICATION_CONTRACT_VERSION,
+        "source_policy": "official_amc_monthly_disclosure",
+        "source_page_urls": sorted({
+            str(url)
+            for package in packages_by_provider.values()
+            if isinstance(package, dict)
+            for url in (
+                package.get("source_page_urls")
+                if isinstance(package.get("source_page_urls"), list)
+                else [package.get("source_page_url")]
+            )
+            if url
+        }),
+        "funds_requested": len(source_rows),
+        "funds_with_official_holdings": len(ready_rows),
+        "providers_ready": len(providers),
+        "portfolio_dates": dates,
+        "latest_portfolio_date": max(dates) if dates else None,
+        "rows": source_rows,
+        "limitations": [
+            "Regular and Direct Growth plan labels map to one underlying scheme portfolio only for holdings analysis; plan-specific NAV performance remains separate.",
+            "Automatic retrieval currently supports official monthly disclosures from Nippon India and Motilal Oswal. Other AMCs remain explicit adapter-pending rows and are not filled from an aggregator.",
+            "Disclosures can have different month-end dates. Pairwise overlap should be compared only after checking each row's portfolio date and captured weight.",
+        ],
+    }
+    return analysis
 
 
 def build_mutual_fund_performance_comparison(
@@ -14576,6 +15262,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 self._send_mutual_fund_catalogue(payload)
             return
 
+        if self.path == "/api/mutual-funds/holdings":
+            payload = self._read_json_payload()
+            if payload is not None:
+                self._send_mutual_fund_holdings(payload)
+            return
+
         if self.path == "/api/portfolio/preview":
             payload = self._read_json_payload(MAX_PORTFOLIO_IMPORT_BYTES)
             if payload is not None:
@@ -15101,6 +15793,65 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": str(error)})
             return
         self._send_json(HTTPStatus.OK, {"ok": True, "classification": classification})
+
+    def _send_mutual_fund_holdings(self, payload: dict[str, object]) -> None:
+        funds = payload.get("funds")
+        if not isinstance(funds, list) or not funds or len(funds) > 50:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_mutual_fund_list"})
+            return
+        normalized_funds: list[dict[str, object]] = []
+        for row in funds:
+            if not isinstance(row, dict):
+                self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_mutual_fund_list"})
+                return
+            scheme = str(row.get("scheme") or "").strip()
+            weight = _portfolio_number(row.get("weight_pct"))
+            if not scheme or len(scheme) > 256 or weight is None or weight <= 0:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_mutual_fund_list"})
+                return
+            normalized_funds.append({
+                "scheme": scheme,
+                "category": str(row.get("category") or "Unclassified")[:128],
+                "weight_pct": weight,
+            })
+        try:
+            catalogue = fetch_amfi_scheme_catalogue()
+        except ValueError as error:
+            self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": str(error)})
+            return
+        requested_providers: dict[str, list[str]] = defaultdict(list)
+        catalogue_rows = catalogue.get("rows") if isinstance(catalogue.get("rows"), list) else []
+        for fund in normalized_funds:
+            resolved = match_mutual_fund_underlying_scheme_catalogue(str(fund["scheme"]), catalogue_rows)
+            match = resolved.get("match")
+            if not isinstance(match, dict):
+                continue
+            provider = _mutual_fund_holdings_provider(str(match.get("amc_name") or ""))
+            if provider:
+                requested_providers[provider].append(str(match.get("scheme_name") or match.get("official_name") or fund["scheme"]))
+        packages: dict[str, dict[str, object]] = {}
+        failures: dict[str, str] = {}
+        if "nippon_india" in requested_providers:
+            try:
+                packages["nippon_india"] = fetch_nippon_portfolio_disclosure()
+            except ValueError as error:
+                failures["nippon_india"] = str(error)
+        if "motilal_oswal" in requested_providers:
+            try:
+                packages["motilal_oswal"] = fetch_motilal_portfolio_disclosures(requested_providers["motilal_oswal"])
+            except ValueError as error:
+                failures["motilal_oswal"] = str(error)
+        try:
+            analysis = build_mutual_fund_true_diversification(
+                normalized_funds,
+                catalogue,
+                packages,
+                provider_failures=failures,
+            )
+        except ValueError as error:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": str(error)})
+            return
+        self._send_json(HTTPStatus.OK, {"ok": True, "analysis": analysis})
 
     def _send_portfolio_analysis(self, payload: dict[str, object]) -> None:
         rows = payload.get("rows")

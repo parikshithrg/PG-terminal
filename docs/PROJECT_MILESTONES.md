@@ -346,17 +346,25 @@ point-in-time-universe validation are next.
 
 ## Approved product-integration milestones
 
-### Shared interpretation guidance across every workspace
+### Shared presentation standard across every workspace
 
-Every page must explain what its tables show and how the user should read the
-data. Guidance should be placed close to the relevant table, use plain language,
-define important columns and states, explain what high/low or positive/negative
-values mean, and state the main limitations. It must help interpretation without
-turning descriptive evidence into a recommendation or repeating the table row by
-row.
+Use the simplified Mutual Funds Comparer as the site-wide presentation pattern.
+Each page should lead with a small number of decision-relevant conclusions,
+visual summaries, data freshness/coverage, and clear review points. Prefer data
+inferences over long explanatory copy, and use plain language suitable for a
+non-technical investor.
 
-Status: complete for all 27 tables currently implemented. Apply the same contract
-when a future workspace introduces a new table.
+Tables are secondary: retain them only when the rows materially help the user
+understand or act on the result. Keep technical catalogues, calculation inputs,
+method contracts, and audit detail behind an optional detail surface or in the
+calculation layer. Where a visible table still needs help, use one short reading
+hint rather than a long explanation.
+
+Every inference must distinguish observed facts from derived conclusions and
+suggestions. Coverage, freshness, missing-data limitations, and confidence must
+remain visible so a cleaner interface never creates false certainty. Apply this
+standard incrementally whenever an existing page is refined and to every new
+workspace from the start.
 
 ### A. Dashboard as the workspace summary
 
@@ -846,6 +854,54 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   catalogue and one-year performance foundations remain available, but no new
   Mutual Funds Comparer milestone will be started until representative user
   files can be tested.
+
+### Mutual-fund true-diversification and holdings overlap v3 — in progress
+
+- Use the uploaded scheme summary to establish the investor's allocation to
+  each fund, then map Regular and Direct plan variants to their shared
+  underlying scheme portfolio for holdings analysis. Plan-specific NAV
+  performance must remain separate and continue to use exact scheme codes.
+- Acquire each fund's latest disclosed security-level portfolio from a
+  permitted, auditable source, with an optional `Underlying Holdings` workbook
+  sheet retained as the manual fallback. Record the portfolio date and source;
+  never substitute a similarly named fund or silently mix disclosure dates.
+- Normalize constituents by ISIN/security identity and calculate pairwise fund
+  overlap as the sum of the smaller security weight in each shared holding.
+  Report both overlap percentage and coverage so incomplete disclosures cannot
+  appear artificially diversified.
+- Calculate the investor's combined look-through exposure using the actual
+  amount invested in each fund. Show repeated security, sector and market-cap
+  exposure; unique exposure contributed by each fund; effective concentration;
+  and large-, mid- and small-cap allocation across the complete portfolio.
+- Highlight funds that add little incremental diversification and explain the
+  duplicated holdings behind that result. Keep this descriptive and
+  evidence-linked: do not turn overlap alone into a buy, sell or switch
+  recommendation.
+- Acceptance example: holdings in a large-cap, mid-cap and small-cap fund must
+  reveal both their stated cap allocation and any repeated securities at the
+  fund-pair and combined-portfolio levels.
+- Implemented the plan-independent holdings identity, ISIN-normalized overlap
+  engine, investor-weighted combined look-through, repeated holdings, sector
+  exposure, effective security count, per-fund unique/repeated contribution,
+  mandate-level market-cap allocation and disclosure coverage/status tables.
+- Added automatic official month-end disclosure adapters for Nippon India and
+  Motilal Oswal. Nippon's large/mid/small acceptance example resolves all three
+  portfolios. The representative 14-fund upload now parses its `Fund` and
+  `Current Value` columns and resolves all five Motilal Oswal portfolios,
+  allowing the overlap tables to populate while unsupported AMCs remain
+  explicit adapter-pending rows.
+- Remaining v3 work is official-source coverage for Axis, ICICI Prudential,
+  SBI, WhiteOak Capital, Edelweiss and PPFAS, followed by security-level
+  large/mid/small-cap classification from a dated permitted source. No missing
+  AMC is backfilled from an aggregator.
+- Simplified the comparer interface into a layman-facing overview: upload,
+  asset/fund allocation, the three most important overlap pairs, a transparent
+  0–100 diversification score, and up to three improvement prompts. Technical
+  catalogue, NAV, source-audit and validation tables remain part of the local
+  calculations but are no longer displayed in the primary workflow. The score
+  is 80% structural diversification and 20% current-regime fit when a validated
+  dashboard regime is available; it is explicitly preliminary when official
+  holdings coverage is incomplete.
 
 ## Validation work for observed seasonality
 

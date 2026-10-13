@@ -93,8 +93,14 @@ from server import (
     build_mutual_fund_holdings_analysis,
     build_mutual_fund_performance_comparison,
     build_mutual_fund_catalogue_classification,
+    build_mutual_fund_true_diversification,
     match_mutual_fund_scheme_catalogue,
+    match_mutual_fund_underlying_scheme_catalogue,
     parse_amfi_scheme_catalogue_text,
+    parse_nippon_portfolio_disclosure_links,
+    parse_nippon_portfolio_workbook,
+    parse_motilal_portfolio_page,
+    parse_motilal_portfolio_workbook,
     parse_seasonality_index_tokens,
     rank_historical_month_averages,
 )
@@ -2902,6 +2908,16 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(result["diversification"]["effective_fund_count"], 1.92)
         self.assertTrue(any(item["title"] == "Add underlying holdings" for item in result["suggestions"]))
 
+    def test_mutual_fund_upload_accepts_broker_fund_and_current_value_headers(self):
+        parsed = parse_mutual_fund_file(
+            "holdings.csv",
+            b"Fund,Category,Current Value\nMotilal Oswal Digital India Fund - Regular Plan - Growth,Equity,30651.7\n",
+        )
+        self.assertEqual(parsed["mapping"]["scheme"], "Fund")
+        self.assertEqual(parsed["mapping"]["current_value"], "Current Value")
+        result = build_mutual_fund_holdings_analysis(parsed["rows"], parsed["mapping"])
+        self.assertEqual(result["funds"][0]["weight_pct"], 100.0)
+
     def test_mutual_fund_analysis_calculates_pair_overlap_from_uploaded_holdings(self):
         result = build_mutual_fund_holdings_analysis(
             [
@@ -3051,6 +3067,149 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(result["rows"][0]["uploaded_category"], "My Equity Bucket")
         self.assertEqual(result["rows"][0]["amfi_category_raw"], "Equity Scheme - Large Cap Fund")
         self.assertEqual(result["category_schema_version"], "amfi-category-map-v1")
+
+    def test_underlying_scheme_matching_accepts_regular_growth_without_changing_nav_contract(self):
+        rows = [{
+            "scheme_code": "118632",
+            "scheme_name": "Nippon India Large Cap Fund",
+            "scheme_base": "nippon india large cap fund",
+            "amc_name": "Nippon India Mutual Fund",
+        }]
+        resolved = match_mutual_fund_underlying_scheme_catalogue(
+            "Nippon India Large Cap Fund - Regular Plan - Growth Option",
+            rows,
+        )
+        self.assertEqual(resolved["status"], "regular_plan_underlying_match")
+        self.assertEqual(resolved["match"]["scheme_code"], "118632")
+        self.assertEqual(
+            match_mutual_fund_scheme_catalogue(
+                "Nippon India Large Cap Fund - Regular Plan - Growth Option",
+                rows,
+            )["status"],
+            "non_direct_growth_input",
+        )
+
+    def test_underlying_scheme_matching_collapses_duplicate_plan_rows(self):
+        rows = [
+            {"scheme_code": "152964", "scheme_name": "Motilal Oswal Digital India Fund", "scheme_base": "motilal oswal digital india fund", "amc_name": "Motilal Oswal Mutual Fund"},
+            {"scheme_code": "152965", "scheme_name": "Motilal Oswal Digital India Fund", "scheme_base": "motilal oswal digital india fund", "amc_name": "Motilal Oswal Mutual Fund"},
+        ]
+        resolved = match_mutual_fund_underlying_scheme_catalogue(
+            "Motilal Oswal Digital India Fund - Regular Plan - Growth",
+            rows,
+        )
+        self.assertEqual(resolved["status"], "regular_plan_underlying_match")
+        self.assertEqual(resolved["match"]["scheme_code"], "152964")
+
+    def test_nippon_disclosure_link_and_workbook_parser_preserve_isin_sector_and_date(self):
+        links = parse_nippon_portfolio_disclosure_links(
+            '<a href="/InvestorServices/FactsheetsDocuments/NIMF-MONTHLY-PORTFOLIO-31-Aug-26.xls">old</a>'
+            '<a href="/InvestorServices/FactsheetsDocuments/NIMF-MONTHLY-PORTFOLIO-30-Sep-26.xls">new</a>'
+        )
+        self.assertEqual(links[0]["portfolio_date"], date(2026, 9, 30))
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr(
+                "xl/workbook.xml",
+                '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="LC" sheetId="1" r:id="rId1"/></sheets></workbook>',
+            )
+            archive.writestr(
+                "xl/_rels/workbook.xml.rels",
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/></Relationships>',
+            )
+            archive.writestr(
+                "xl/worksheets/sheet1.xml",
+                '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                '<row r="1"><c r="A1" t="inlineStr"><is><t>RLMF</t></is></c><c r="B1" t="inlineStr"><is><t>Nippon India Large Cap Fund (An open-ended equity scheme)</t></is></c></row>'
+                '<row r="2"><c r="B2" t="inlineStr"><is><t>Monthly Portfolio Statement as on September 30, 2026</t></is></c></row>'
+                '<row r="4"><c r="B4" t="inlineStr"><is><t>ISIN</t></is></c><c r="C4" t="inlineStr"><is><t>Name of the Instrument</t></is></c><c r="D4" t="inlineStr"><is><t>Industry / Rating</t></is></c><c r="G4" t="inlineStr"><is><t>% to NAV</t></is></c></row>'
+                '<row r="5"><c r="B5" t="inlineStr"><is><t>INE002A01018</t></is></c><c r="C5" t="inlineStr"><is><t>Reliance Industries Limited</t></is></c><c r="D5" t="inlineStr"><is><t>Petroleum Products</t></is></c><c r="G5"><v>0.085</v></c></row>'
+                '</sheetData></worksheet>',
+            )
+        parsed = parse_nippon_portfolio_workbook(payload.getvalue(), source_url=str(links[0]["url"]))
+        scheme = parsed["schemes"][0]
+        self.assertEqual(scheme["portfolio_date"], "2026-09-30")
+        self.assertEqual(scheme["coverage_pct"], 8.5)
+        self.assertEqual(scheme["holdings"][0]["isin"], "INE002A01018")
+        self.assertEqual(scheme["holdings"][0]["sector"], "Petroleum Products")
+
+    def test_true_diversification_joins_regular_plans_and_reports_repeated_exposure(self):
+        catalogue = {
+            "rows": [
+                {"scheme_code": "1", "scheme_name": "Nippon India Large Cap Fund", "scheme_base": "nippon india large cap fund", "amc_name": "Nippon India Mutual Fund"},
+                {"scheme_code": "2", "scheme_name": "Nippon India Growth Mid Cap Fund", "scheme_base": "nippon india growth mid cap fund", "amc_name": "Nippon India Mutual Fund"},
+            ]
+        }
+        package = {
+            "provider": "nippon_india",
+            "source_url": "https://mf.nipponindiaim.com/example.xls",
+            "portfolio_date": "2026-09-30",
+            "schemes": [
+                {"scheme_name": "Nippon India Large Cap Fund", "scheme_keys": ["nippon india large cap fund", "nippon large cap fund"], "portfolio_date": "2026-09-30", "coverage_pct": 100, "holdings": [
+                    {"isin": "INE002A01018", "security": "Reliance Industries", "sector": "Energy", "weight_pct": 60},
+                    {"isin": "INE009A01021", "security": "Infosys", "sector": "IT", "weight_pct": 40},
+                ]},
+                {"scheme_name": "Nippon India Growth Mid Cap Fund", "scheme_keys": ["nippon india mid cap fund", "nippon mid cap fund"], "portfolio_date": "2026-09-30", "coverage_pct": 100, "holdings": [
+                    {"isin": "INE002A01018", "security": "Reliance Industries", "sector": "Energy", "weight_pct": 20},
+                    {"isin": "INE040A01034", "security": "HDFC Bank", "sector": "Banks", "weight_pct": 80},
+                ]},
+            ],
+        }
+        result = build_mutual_fund_true_diversification(
+            [
+                {"scheme": "Nippon India Large Cap Fund - Regular Plan - Growth", "category": "Equity - Large Cap", "weight_pct": 50},
+                {"scheme": "Nippon India Growth Mid Cap Fund - Direct Plan - Growth", "category": "Equity - Mid Cap", "weight_pct": 50},
+            ],
+            catalogue,
+            {"nippon_india": package},
+        )
+        self.assertEqual(result["holdings_disclosure"]["funds_with_official_holdings"], 2)
+        self.assertEqual(result["overlaps"][0]["overlap_pct"], 20.0)
+        self.assertEqual(result["repeated_holdings"][0]["isin"], "INE002A01018")
+        self.assertEqual(result["repeated_holdings"][0]["fund_count"], 2)
+        self.assertEqual(result["diversification"]["repeated_lookthrough_pct"], 40.0)
+        self.assertEqual(result["market_cap_allocation"][0]["bucket"], "Large Cap")
+
+    def test_motilal_page_and_workbook_parser_preserve_official_holdings(self):
+        page_url = "https://www.motilaloswalmf.com/mutual-funds/motilal-oswal-digital-india-fund"
+        workbook_url = parse_motilal_portfolio_page(
+            '<p><strong>portfolioUrl:</strong> /content/dam/motilal-mf/sheets/fund-csvs/Month_End_Portfolio_September_2026/YO58.xlsx</p>',
+            page_url=page_url,
+        )
+        self.assertEqual(
+            workbook_url,
+            "https://www.motilaloswalmf.com/content/dam/motilal-mf/sheets/fund-csvs/Month_End_Portfolio_September_2026/YO58.xlsx",
+        )
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr(
+                "xl/workbook.xml",
+                '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="YO58" sheetId="1" r:id="rId1"/></sheets></workbook>',
+            )
+            archive.writestr(
+                "xl/_rels/workbook.xml.rels",
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/></Relationships>',
+            )
+            archive.writestr(
+                "xl/worksheets/sheet1.xml",
+                '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                '<row r="1"><c r="A1" t="inlineStr"><is><t>MONTHLY PORTFOLIO STATEMENT AS ON SEPTEMBER 30, 2026</t></is></c></row>'
+                '<row r="2"><c r="A2" t="inlineStr"><is><t>Motilal Oswal Digital India Fund</t></is></c></row>'
+                '<row r="3"><c r="A3" t="inlineStr"><is><t>Sr. No.</t></is></c><c r="B3" t="inlineStr"><is><t>Name of the Instrument</t></is></c><c r="C3" t="inlineStr"><is><t>ISIN</t></is></c><c r="D3" t="inlineStr"><is><t>Industry*</t></is></c><c r="G3" t="inlineStr"><is><t>% to Net Assets</t></is></c></row>'
+                '<row r="4"><c r="A4"><v>1</v></c><c r="B4" t="inlineStr"><is><t>Eternal Limited</t></is></c><c r="C4" t="inlineStr"><is><t>INE758T01015</t></is></c><c r="D4" t="inlineStr"><is><t>Retailing</t></is></c><c r="G4"><v>6.37</v></c></row>'
+                '</sheetData></worksheet>',
+            )
+        parsed = parse_motilal_portfolio_workbook(
+            payload.getvalue(),
+            scheme_name="Motilal Oswal Digital India Fund",
+            source_url=workbook_url,
+            source_page_url=page_url,
+        )
+        scheme = parsed["schemes"][0]
+        self.assertEqual(scheme["portfolio_date"], "2026-09-30")
+        self.assertEqual(scheme["coverage_pct"], 6.37)
+        self.assertEqual(scheme["holdings"][0]["isin"], "INE758T01015")
+        self.assertEqual(scheme["holdings"][0]["sector"], "Retailing")
 
     def test_mutual_fund_xlsx_reads_optional_underlying_holdings_sheet(self):
         payload = io.BytesIO()
