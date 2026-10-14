@@ -996,7 +996,38 @@
     .mutual-fund-upload strong { display: block; color: var(--heading); font-size: 15px; }
     .mutual-fund-upload span { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.5; }
     .mutual-fund-upload input { width: 100%; color: var(--text); }
-    .mutual-fund-upload-status { margin: 8px 2px 24px; color: var(--muted); font-size: 12px; }
+    .mutual-fund-load-progress {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 7px 14px;
+      margin: 10px 2px 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .mutual-fund-load-progress[hidden] { display: none; }
+    .mutual-fund-progress-stage { color: var(--heading); font-weight: 650; }
+    .mutual-fund-progress-percent { color: var(--brand-deep); font-variant-numeric: tabular-nums; font-weight: 700; }
+    .mutual-fund-progress-track {
+      grid-column: 1 / -1;
+      height: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--soft);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+    .mutual-fund-progress-track i {
+      display: block;
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--brand), var(--brand-deep));
+      transition: width .28s ease;
+    }
+    .mutual-fund-progress-detail { grid-column: 1 / -1; margin: 0; line-height: 1.5; }
+    .mutual-fund-load-progress.complete .mutual-fund-progress-track i { background: var(--positive); }
+    .mutual-fund-load-progress.warning .mutual-fund-progress-track i { background: var(--warning); }
+    .mutual-fund-load-progress.error .mutual-fund-progress-track i { background: var(--negative); }
+    .mutual-fund-upload-status { margin: 7px 2px 24px; color: var(--muted); font-size: 12px; }
     .mutual-fund-summary .summary-card { min-height: 96px; }
     .mutual-fund-overview-section,
     .mutual-fund-score-section {
@@ -1008,7 +1039,7 @@
     .mutual-fund-section-head { display: flex; align-items: start; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
     .mutual-fund-section-head h2 { margin-top: 6px; font-size: 20px; }
     .mutual-fund-section-head p { max-width: 520px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; text-align: right; }
-    .mutual-fund-two-column { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+    .mutual-fund-two-column { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; }
     .mutual-fund-two-column h3 { margin: 0 0 12px; color: var(--heading); font-size: 13px; }
     .mutual-fund-allocation-list,
     .mutual-fund-position-list,
@@ -2935,6 +2966,12 @@
             <input id="mutualFundsFileInput" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
             <button class="panel-button" id="clearMutualFundsButton" type="button">Clear</button>
           </div>
+          <div class="mutual-fund-load-progress" id="mutualFundsLoadProgress" role="progressbar" aria-label="Mutual fund file analysis progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+            <span class="mutual-fund-progress-stage" id="mutualFundsProgressStage">Waiting for a file</span>
+            <span class="mutual-fund-progress-percent" id="mutualFundsProgressPercent">0%</span>
+            <div class="mutual-fund-progress-track" aria-hidden="true"><i id="mutualFundsProgressFill"></i></div>
+            <p class="mutual-fund-progress-detail" id="mutualFundsProgressDetail">Choose a file to begin.</p>
+          </div>
           <p class="mutual-fund-upload-status" id="mutualFundsUploadStatus">Choose a file and the overview will build automatically. Your data remains in local memory only.</p>
 
           <section class="summary-grid mutual-fund-summary" aria-label="Mutual fund portfolio summary">
@@ -2949,6 +2986,7 @@
             <div class="mutual-fund-two-column">
               <div><h3>Asset mix</h3><div class="mutual-fund-allocation-list" id="mutualFundsAssetMix"><div class="mutual-fund-empty">Allocation will appear here.</div></div></div>
               <div><h3>Largest fund positions</h3><div class="mutual-fund-position-list" id="mutualFundsTopFunds"><div class="mutual-fund-empty">Fund weights will appear here.</div></div></div>
+              <div><h3>Stock size mix</h3><div class="mutual-fund-allocation-list" id="mutualFundsMarketCapMix"><div class="mutual-fund-empty">Security-level classification will appear after official holdings load.</div></div><p class="analysis-note" id="mutualFundsMarketCapNote">Uses AMFI's dated half-yearly classification and exact ISIN matches.</p></div>
             </div>
           </section>
 
@@ -2979,7 +3017,7 @@
           </section>
 
           <section class="analysis-section mutual-fund-overview-section">
-            <div class="mutual-fund-section-head"><div><span>04 · NEXT STEPS</span><h2>How the portfolio could be improved</h2></div><p>Review prompts, not buy or sell instructions.</p></div>
+            <div class="mutual-fund-section-head"><div><span>04 · THREE IMPROVEMENT PATHS</span><h2>How the portfolio could be improved</h2></div><p>Three evidence-led reviews to reduce complexity, reveal hidden risk and improve benchmark-relative return efficiency. They are not buy or sell instructions.</p></div>
             <div class="mutual-fund-actions" id="mutualFundsActionCards"><div class="mutual-fund-empty">Improvement ideas will appear after analysis.</div></div>
           </section>
 
@@ -3463,8 +3501,16 @@
     const mutualFundsCapBody = document.getElementById('mutualFundsCapBody');
     const mutualFundsSuggestionsBody = document.getElementById('mutualFundsSuggestionsBody');
     const mutualFundsIssuesBody = document.getElementById('mutualFundsIssuesBody');
+    const mutualFundsLoadProgress = document.getElementById('mutualFundsLoadProgress');
+    const mutualFundsProgressStage = document.getElementById('mutualFundsProgressStage');
+    const mutualFundsProgressPercent = document.getElementById('mutualFundsProgressPercent');
+    const mutualFundsProgressFill = document.getElementById('mutualFundsProgressFill');
+    const mutualFundsProgressDetail = document.getElementById('mutualFundsProgressDetail');
     let mutualFundsAnalysisSequence = 0;
     let mutualFundsCurrentAnalysis = null;
+    let mutualFundsProgressTimer = null;
+    let mutualFundsProgressStartedAt = 0;
+    let mutualFundsProgressBaseDetail = '';
     const portfolioFileInput = document.getElementById('portfolioFileInput');
     const portfolioGoogleFinanceInput = document.getElementById('portfolioGoogleFinanceInput');
     const clearPortfolioButton = document.getElementById('clearPortfolioButton');
@@ -6259,6 +6305,74 @@
       });
     }
 
+    function refreshMutualFundProgressDetail() {
+      if (!mutualFundsProgressStartedAt || !mutualFundsProgressBaseDetail) return;
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - mutualFundsProgressStartedAt) / 1000));
+      mutualFundsProgressDetail.textContent = `${mutualFundsProgressBaseDetail} · ${elapsedSeconds}s elapsed`;
+    }
+
+    function setMutualFundProgress(value, stage, detail, state = '') {
+      const progress = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+      mutualFundsLoadProgress.hidden = false;
+      mutualFundsLoadProgress.classList.remove('complete', 'warning', 'error');
+      if (state) mutualFundsLoadProgress.classList.add(state);
+      mutualFundsLoadProgress.setAttribute('aria-valuenow', String(progress));
+      mutualFundsProgressStage.textContent = stage;
+      mutualFundsProgressPercent.textContent = `${progress}%`;
+      mutualFundsProgressFill.style.width = `${progress}%`;
+      mutualFundsProgressBaseDetail = detail;
+      mutualFundsProgressDetail.textContent = detail;
+      refreshMutualFundProgressDetail();
+    }
+
+    function startMutualFundProgress(file) {
+      if (mutualFundsProgressTimer) clearInterval(mutualFundsProgressTimer);
+      mutualFundsProgressStartedAt = Date.now();
+      setMutualFundProgress(2, 'File selected', `${file.name} · ${(file.size / (1024 * 1024)).toFixed(2)} MB`);
+      mutualFundsProgressTimer = setInterval(refreshMutualFundProgressDetail, 1000);
+    }
+
+    function finishMutualFundProgress(stage, detail, state = 'complete') {
+      if (mutualFundsProgressTimer) clearInterval(mutualFundsProgressTimer);
+      mutualFundsProgressTimer = null;
+      const elapsedSeconds = mutualFundsProgressStartedAt
+        ? Math.max(0, Math.round((Date.now() - mutualFundsProgressStartedAt) / 1000))
+        : 0;
+      mutualFundsProgressStartedAt = 0;
+      mutualFundsProgressBaseDetail = '';
+      setMutualFundProgress(100, stage, `${detail} · completed in ${elapsedSeconds}s`, state);
+    }
+
+    function mutualFundFileBase64WithProgress(file, sequence) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onprogress = (event) => {
+          if (sequence !== mutualFundsAnalysisSequence) return;
+          const fraction = event.lengthComputable && event.total ? event.loaded / event.total : 0;
+          const readPct = Math.max(4, Math.min(18, 4 + fraction * 14));
+          const loadedMb = event.loaded / (1024 * 1024);
+          const totalMb = (event.total || file.size) / (1024 * 1024);
+          setMutualFundProgress(readPct, 'Reading file', `${loadedMb.toFixed(2)} of ${totalMb.toFixed(2)} MB read`);
+        };
+        reader.onerror = () => reject(new Error('file_read_failed'));
+        reader.onload = () => {
+          try {
+            if (sequence !== mutualFundsAnalysisSequence) return reject(new Error('analysis_cancelled'));
+            const bytes = new Uint8Array(reader.result);
+            let binary = '';
+            for (let offset = 0; offset < bytes.length; offset += 32768) {
+              binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+            }
+            setMutualFundProgress(20, 'File read', 'Preparing the workbook for local validation');
+            resolve(btoa(binary));
+          } catch (error) {
+            reject(error);
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
     function renderMutualFundCatalogue(classification) {
       const result = classification && typeof classification === 'object' ? classification : {};
       const rows = Array.isArray(result.rows) ? result.rows : [];
@@ -6349,6 +6463,7 @@
     async function loadMutualFundOfficialHoldings(funds, sequence) {
       document.getElementById('mutualFundsHoldingsSourceNote').textContent = 'Resolving plan-independent schemes and loading supported official AMC monthly disclosures in the background.';
       document.getElementById('mutualFundsHoldingsContract').textContent = 'mutual-fund-true-diversification-v3. Official holdings retrieval is in progress.';
+      setMutualFundProgress(65, 'Loading official fund holdings', 'Checking supported AMC disclosures; this is usually the longest stage');
       try {
         const response = await fetch('/api/mutual-funds/holdings', {
           method: 'POST',
@@ -6358,12 +6473,17 @@
         const payload = await response.json();
         if (sequence !== mutualFundsAnalysisSequence) return;
         if (!response.ok || payload.ok !== true || !payload.analysis) throw new Error(payload.reason || 'holdings_unavailable');
+        setMutualFundProgress(92, 'Building diversification view', 'Combining fund weights, repeated securities, sectors, and AMFI size classifications');
         mutualFundsCurrentAnalysis = { ...(mutualFundsCurrentAnalysis || {}), ...payload.analysis };
         renderMutualFundAnalysis(mutualFundsCurrentAnalysis);
+        finishMutualFundProgress('Analysis ready', 'Allocation, redundancy, diversification score, and review prompts are ready');
+        showNotice('Mutual-fund portfolio overview complete.');
       } catch (_error) {
         if (sequence !== mutualFundsAnalysisSequence) return;
         document.getElementById('mutualFundsHoldingsSourceNote').textContent = 'Official holdings retrieval is temporarily unavailable. Uploaded allocation analysis remains usable; an Underlying Holdings sheet can still provide manual look-through data.';
         document.getElementById('mutualFundsHoldingsContract').textContent = 'mutual-fund-true-diversification-v3. No holdings are inferred when an official AMC source cannot be retrieved.';
+        finishMutualFundProgress('Core analysis ready', 'Uploaded allocation is ready; official holdings could not be retrieved', 'warning');
+        showNotice('Core mutual-fund analysis is ready; official holdings remain unavailable.');
       }
     }
 
@@ -6384,6 +6504,8 @@
       const suggestions = Array.isArray(result.suggestions) ? result.suggestions : [];
       const diversification = result.diversification || {};
       const disclosure = result.holdings_disclosure && typeof result.holdings_disclosure === 'object' ? result.holdings_disclosure : {};
+      const capAllocation = Array.isArray(result.market_cap_allocation) ? result.market_cap_allocation : [];
+      const capEvidence = result.market_cap_evidence && typeof result.market_cap_evidence === 'object' ? result.market_cap_evidence : {};
       const clamp = (value) => Math.max(0, Math.min(100, Number(value) || 0));
       const pct = (value) => value === null || value === undefined ? '—' : `${Number(value).toFixed(1)}%`;
       const colors = { Equity: '#2d78d4', 'Debt & arbitrage': '#28a061', 'Hybrid / multi-asset': '#8a5bd0', Commodity: '#d99113', 'Other / unclassified': '#8b929c' };
@@ -6400,6 +6522,14 @@
       document.getElementById('mutualFundsTopFunds').innerHTML = funds.length
         ? funds.slice().sort((a, b) => Number(b.weight_pct || 0) - Number(a.weight_pct || 0)).slice(0, 5).map((row) => `<div class="mutual-fund-position-row"><span title="${escapeHtml(row.scheme || '')}">${escapeHtml(row.scheme || 'Unknown fund')}</span><div class="mutual-fund-mini-track"><i style="width:${clamp(row.weight_pct)}%"></i></div><strong>${pct(row.weight_pct)}</strong></div>`).join('')
         : '<div class="mutual-fund-empty">Fund weights will appear here.</div>';
+      const capColors = { 'Large Cap': '#2d78d4', 'Mid Cap': '#8a5bd0', 'Small Cap': '#d99113', 'Unclassified / not captured': '#8b929c' };
+      const securityCapReady = ['ready', 'no_classified_holdings'].includes(String(capEvidence.status || ''));
+      document.getElementById('mutualFundsMarketCapMix').innerHTML = securityCapReady && capAllocation.length
+        ? capAllocation.map((row) => `<div class="mutual-fund-allocation-row"><span>${escapeHtml(row.bucket || 'Unclassified')}</span><div class="mutual-fund-mini-track"><i style="width:${clamp(row.portfolio_weight_pct)}%;background:${capColors[row.bucket] || capColors['Unclassified / not captured']}"></i></div><strong>${pct(row.portfolio_weight_pct)}</strong></div>`).join('')
+        : `<div class="mutual-fund-empty">${String(capEvidence.status || '') === 'source_unavailable' ? 'AMFI classification is temporarily unavailable; no stock-size exposure was inferred.' : 'Waiting for official holdings and the dated AMFI classification.'}</div>`;
+      document.getElementById('mutualFundsMarketCapNote').textContent = securityCapReady
+        ? `AMFI list as of ${formatDisplayDate(capEvidence.as_of)} · ${pct(capEvidence.classified_portfolio_weight_pct)} of the full portfolio classified by exact ISIN.`
+        : "Uses AMFI's dated half-yearly classification and exact ISIN matches; missing exposure stays unclassified.";
 
       document.getElementById('mutualFundsOverlapCards').innerHTML = overlaps.length
         ? overlaps.slice(0, 3).map((row) => `<article class="mutual-fund-overlap-card"><strong>${pct(row.overlap_pct)}</strong><span>${escapeHtml(row.fund_a || 'Fund A')} ↔ ${escapeHtml(row.fund_b || 'Fund B')}</span><small>${Number(row.common_holdings || 0).toLocaleString('en-IN')} shared securities · ${String(row.status || '').includes('partial') ? 'lower-bound estimate' : 'complete comparison'}</small></article>`).join('')
@@ -6446,12 +6576,15 @@
         ['Regime fit', regimeFit === null ? 'Pending' : Math.round(regimeFit), regimeFit === null ? 'Run EOD update' : `${pct(defensiveWeight)} estimated defensive mix`],
       ].map(([label, value, detail]) => `<article class="mutual-fund-factor"><strong>${escapeHtml(String(value))}${typeof value === 'number' ? '/100' : ''}</strong><span>${escapeHtml(label)} · ${escapeHtml(detail)}</span></article>`).join('');
 
-      const actions = [];
-      suggestions.forEach((row) => actions.push({ label: row.priority || 'Review', title: row.title || 'Review portfolio structure', detail: row.detail || '' }));
-      if (coverageRatio < .75) actions.push({ label: 'Data gap', title: 'Complete holdings coverage', detail: `Only ${readyFunds} of ${funds.length} funds have security-level holdings available. Treat overlap and the score as provisional until more official AMC sources are connected.` });
-      if (regimeFit !== null && regimeFit < 60) actions.push({ label: 'Regime check', title: 'Stress-test the current asset mix', detail: `The current ${String(regime.label || 'market').toLowerCase()} regime and the estimated defensive allocation are not closely aligned. Review downside tolerance and investment horizon before changing anything.` });
-      if (!actions.length) actions.push({ label: 'Maintain', title: 'No major structural issue detected', detail: 'Continue monitoring allocation drift, updated fund disclosures and changes in the market regime.' });
-      document.getElementById('mutualFundsActionCards').innerHTML = actions.slice(0, 3).map((row) => `<article class="mutual-fund-action-card"><span>${escapeHtml(row.label)}</span><strong>${escapeHtml(row.title)}</strong><p>${escapeHtml(row.detail)}</p></article>`).join('');
+      const fallbackActions = [
+        { label: '1 · Simplify', title: 'Give every fund one clear role', detail: 'Review whether each fund has a distinct purpose before adding more schemes.' },
+        { label: '2 · Diversify', title: 'Remove duplicated exposure', detail: 'Complete holdings coverage before assuming different fund names provide different exposure.' },
+        { label: '3 · Return efficiency', title: 'Keep the review benchmark-led', detail: 'Compare common-period rolling returns, drawdowns, consistency and costs; future returns cannot be guaranteed.' },
+      ];
+      const actions = suggestions.length === 3
+        ? suggestions.map((row) => ({ label: row.priority || 'Review', title: row.title || 'Review portfolio structure', detail: row.detail || '' }))
+        : fallbackActions;
+      document.getElementById('mutualFundsActionCards').innerHTML = actions.map((row) => `<article class="mutual-fund-action-card"><span>${escapeHtml(row.label)}</span><strong>${escapeHtml(row.title)}</strong><p>${escapeHtml(row.detail)}</p></article>`).join('');
     }
 
     function renderMutualFundAnalysis(result) {
@@ -6554,35 +6687,53 @@
         showNotice('Choose a CSV or XLSX mutual-fund holdings file first.');
         return false;
       }
+      startMutualFundProgress(file);
       if (file.size > 8 * 1024 * 1024) {
+        finishMutualFundProgress('File rejected', 'The file is larger than the 8 MB local limit', 'error');
         showNotice('The mutual-fund holdings file exceeds the 8 MB local limit.');
         return false;
       }
       document.getElementById('mutualFundsStatus').textContent = 'Reading and validating holdings…';
       document.getElementById('mutualFundsUploadStatus').textContent = 'Parsing the file and calculating category, overlap and diversification analysis.';
       try {
+        const contentBase64 = await mutualFundFileBase64WithProgress(file, sequence);
+        setMutualFundProgress(30, 'Validating holdings', 'Detecting the fund sheet, scheme names, values, weights, and optional underlying holdings');
         const response = await fetch('/api/mutual-funds/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ file_name: file.name, content_base64: await portfolioFileBase64(file) }),
+          body: JSON.stringify({ file_name: file.name, content_base64: contentBase64 }),
         });
         const result = await response.json();
+        if (sequence !== mutualFundsAnalysisSequence) return false;
         if (!response.ok || result.ok !== true) {
           const reason = String(result.reason || 'invalid file').replaceAll('_', ' ');
           document.getElementById('mutualFundsStatus').textContent = 'File could not be analyzed';
           document.getElementById('mutualFundsUploadStatus').textContent = `Upload rejected: ${reason}.`;
+          finishMutualFundProgress('Analysis stopped', `Upload rejected: ${reason}`, 'error');
           mutualFundsFileInput.value = '';
           showNotice(`Mutual-fund analysis rejected: ${reason}.`);
           return false;
         }
+        setMutualFundProgress(52, 'Core allocation ready', 'Rendering fund weights, asset allocation, and concentration checks');
         mutualFundsCurrentAnalysis = result;
         renderMutualFundAnalysis(result);
-        if (!result.underlying_sheet_name) loadMutualFundOfficialHoldings(result.funds, sequence);
-        showNotice('Mutual-fund portfolio overview complete.');
+        if (!result.underlying_sheet_name) {
+          loadMutualFundOfficialHoldings(result.funds, sequence);
+          showNotice('Core mutual-fund overview is ready. Official holdings analysis is still loading.');
+        } else {
+          finishMutualFundProgress('Analysis ready', 'The uploaded allocation and underlying-holdings analysis are ready');
+          showNotice('Mutual-fund portfolio overview complete.');
+        }
         return true;
-      } catch (_error) {
+      } catch (error) {
+        if (sequence !== mutualFundsAnalysisSequence) return false;
         document.getElementById('mutualFundsStatus').textContent = 'Analysis service unavailable';
         document.getElementById('mutualFundsUploadStatus').textContent = 'The local mutual-fund analysis service could not read the file.';
+        finishMutualFundProgress(
+          'Analysis stopped',
+          String(error && error.message) === 'file_read_failed' ? 'The browser could not read the selected file' : 'The local analysis service is unavailable',
+          'error',
+        );
         showNotice('The local mutual-fund analysis service is unavailable.');
         return false;
       }
@@ -6591,6 +6742,17 @@
     function clearMutualFundAnalysis() {
       mutualFundsAnalysisSequence += 1;
       mutualFundsCurrentAnalysis = null;
+      if (mutualFundsProgressTimer) clearInterval(mutualFundsProgressTimer);
+      mutualFundsProgressTimer = null;
+      mutualFundsProgressStartedAt = 0;
+      mutualFundsProgressBaseDetail = '';
+      mutualFundsLoadProgress.hidden = true;
+      mutualFundsLoadProgress.classList.remove('complete', 'warning', 'error');
+      mutualFundsLoadProgress.setAttribute('aria-valuenow', '0');
+      mutualFundsProgressStage.textContent = 'Waiting for a file';
+      mutualFundsProgressPercent.textContent = '0%';
+      mutualFundsProgressFill.style.width = '0%';
+      mutualFundsProgressDetail.textContent = 'Choose a file to begin.';
       mutualFundsFileInput.value = '';
       document.getElementById('mutualFundsStatus').textContent = 'Choose a CSV or XLSX file';
       document.getElementById('mutualFundsUploadStatus').textContent = 'Choose a file and the overview will build automatically. Your data remains in local memory only.';
@@ -6621,6 +6783,8 @@
       document.getElementById('mutualFundsContractNote').textContent = 'The mutual-fund holdings analysis contract has not been loaded.';
       document.getElementById('mutualFundsAssetMix').innerHTML = '<div class="mutual-fund-empty">Allocation will appear here.</div>';
       document.getElementById('mutualFundsTopFunds').innerHTML = '<div class="mutual-fund-empty">Fund weights will appear here.</div>';
+      document.getElementById('mutualFundsMarketCapMix').innerHTML = '<div class="mutual-fund-empty">Security-level classification will appear after official holdings load.</div>';
+      document.getElementById('mutualFundsMarketCapNote').textContent = "Uses AMFI's dated half-yearly classification and exact ISIN matches.";
       document.getElementById('mutualFundsOverlapCards').innerHTML = '<div class="mutual-fund-empty">The most important fund similarities will appear here.</div>';
       document.getElementById('mutualFundsRepeatedSummary').textContent = 'Repeated securities will appear after official fund holdings are available.';
       document.getElementById('mutualFundsScoreValue').textContent = '—';

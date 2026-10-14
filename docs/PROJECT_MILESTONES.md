@@ -661,6 +661,19 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   are retained; a Handbook retrieval vintage never substitutes for the date an
   investor could first know the value. Retrospective rows remain available to
   the story layer and visibly excluded from historical decision sets.
+- `historical-regimes-v12` begins the release-native evidence store with five
+  explicitly registered RBI balance-of-payments and external-debt releases.
+  Observation date, original publication date, revision state and source
+  identity are retained separately; only releases published by an episode's
+  entry date can enter that historical information set.
+- `historical-regimes-v13` adds a continuous monthly non-food bank-credit
+  vintage from RBI's official Sectoral Deployment of Bank Credit archive for
+  2024 onward. The importer discovers releases from the official year
+  catalogue, preserves each publication date, records the stated year-on-year
+  growth rate, and uses the actual last reporting Friday when the release
+  supplies it. Previously stored release IDs are not downloaded again. Missing
+  or malformed catalogue years remain visible in the EOD source audit rather
+  than being interpolated or replaced with a later Handbook value.
 - Market cycles and economic cycles are deliberately separate. Recession and
   depression sections remain visibly unclassified until a versioned definition
   and authoritative point-in-time macro history are available; an equity
@@ -670,8 +683,9 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   held-out outcome/analogue testing. Human emotion is represented only through
   measurable hypotheses such as participation, crowding, volatility, flows,
   leadership and recovery—not asserted as directly observed fact.
-- Next, add official credit and fuller balance-of-payments histories with their
-  original release dates and revisions, populate effective-dated membership,
+- Next, extend release-native coverage to fuller balance-of-payments,
+  external-debt, policy-rate and macro histories with their original release
+  dates and revisions, populate effective-dated membership,
   and expand the held-out sample. Only traits that survive coverage gates,
   multiplicity/stability checks and later unseen regimes may be proposed for
   the current classifier.
@@ -855,7 +869,7 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   Mutual Funds Comparer milestone will be started until representative user
   files can be tested.
 
-### Mutual-fund true-diversification and holdings overlap v3 — in progress
+### Mutual-fund true-diversification and holdings overlap v3 — complete
 
 - Use the uploaded scheme summary to establish the investor's allocation to
   each fund, then map Regular and Direct plan variants to their shared
@@ -884,19 +898,67 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   engine, investor-weighted combined look-through, repeated holdings, sector
   exposure, effective security count, per-fund unique/repeated contribution,
   mandate-level market-cap allocation and disclosure coverage/status tables.
-- Added automatic official month-end disclosure adapters for Nippon India and
-  Motilal Oswal. Nippon's large/mid/small acceptance example resolves all three
-  portfolios. The representative 14-fund upload now parses its `Fund` and
-  `Current Value` columns and resolves all five Motilal Oswal portfolios,
-  allowing the overlap tables to populate while unsupported AMCs remain
-  explicit adapter-pending rows.
-- Remaining v3 work is official-source coverage for Axis, ICICI Prudential,
-  SBI, WhiteOak Capital, Edelweiss and PPFAS, followed by security-level
-  large/mid/small-cap classification from a dated permitted source. No missing
-  AMC is backfilled from an aggregator.
+- Added automatic official month-end disclosure adapters for Nippon India,
+  Motilal Oswal, Axis, SBI, WhiteOak Capital, Edelweiss and PPFAS, plus a bounded ICICI Prudential official-archive
+  adapter. Nippon's large/mid/small acceptance example resolves
+  all three portfolios. The representative 14-fund upload now parses its `Fund`
+  and `Current Value` columns and resolves all five Motilal Oswal portfolios.
+  Live Axis validation selected the official 30-Sep-26 consolidated workbook,
+  parsed 79 scheme sheets, and resolved Axis Value Fund with 86 ISIN holdings
+  and 92.98% captured portfolio weight. ICICI's September 2026 archive exposes
+  one workbook per scheme; only requested schemes are parsed, with ZIP entry,
+  size and expansion limits. Because ICICI's download API rejects non-browser
+  clients, the local adapter uses the newest official archive already downloaded
+  from the disclosure page and reports a visible source failure when it is absent.
+  End-to-end validation on the representative 14-fund workbook now resolves 10
+  funds, captures 52.02% of investor-weighted look-through exposure and produces
+  a 33.73% highest observed pairwise overlap from disclosures dated 30-Sep-26.
+  SBI's public catalogue now selects the newest official consolidated workbook;
+  live validation resolved SBI Arbitrage Fund with 196 positive-ISIN positions
+  and 97.92% captured AUM. Futures rows without an ISIN are deliberately excluded,
+  and the interface warns that arbitrage-fund overlap is gross security redundancy,
+  not net directional equity exposure. Unsupported AMCs remain explicit
+  adapter-pending rows. WhiteOak's public regulatory catalogue now selects the
+  newest official scheme workbook; live validation resolved WhiteOak Capital
+  Multi Asset Allocation Fund from 30-Sep-26 with 200 positive-ISIN positions
+  and 83.97% captured weight. Non-ISIN derivatives, cash, reverse-repo and TREPS
+  balances remain outside security-level overlap and are exposed through coverage.
+- Edelweiss now has a bounded adapter for its official statutory spreadsheet
+  catalogue and a consolidated/per-scheme workbook parser. Its API rejects the
+  local server, so the adapter can use the newest official workbook downloaded
+  from the browser disclosure page and otherwise reports the source as unavailable;
+  no aggregator data is substituted. Live validation on 14-Oct-26 resolved
+  Edelweiss Multi Asset Omni Fund of Fund from the 30-Sep-26 workbook with 10
+  positive-ISIN fund-unit holdings and 99.41% captured weight. Fund-of-Funds
+  units with valid ISINs are retained, while TREPS, cash and other non-ISIN rows
+  stay outside the overlap calculation and reduce disclosed coverage.
+- PPFAS discovery now parses the official portfolio-disclosure page, selects the
+  newest consolidated monthly workbook and reads only requested scheme sheets.
+  Live validation on 14-Oct-26 resolved Parag Parikh ELSS Tax Saver Fund from
+  30-Sep-26 with 46 positive-ISIN positions and 96.82% captured weight. Cash,
+  derivatives and other non-ISIN balances remain outside security overlap.
+- Added dated security-level large/mid/small-cap classification from AMFI's
+  official 30-Jun-26 average-market-cap workbook. The parser validates all
+  5,427 rows and the required 100 large-cap / 150 mid-cap / 5,177 small-cap
+  split, then joins holdings only by exact ISIN.
+- The combined investor-weighted view now separates actual classified equity
+  exposure from `Unclassified / not captured`. Unsupported funds, missing AMC
+  disclosures, debt, cash, derivatives, foreign securities, fund units and
+  unmatched ISINs are not guessed into a market-cap bucket. The former
+  fund-category mandate allocation remains available separately for audit.
+- The simplified overview now shows the security-level stock-size mix beside
+  asset allocation and largest fund positions, with AMFI date and full-
+  portfolio classification coverage. A source failure remains visible instead
+  of falling back to the mandate view.
 - Simplified the comparer interface into a layman-facing overview: upload,
   asset/fund allocation, the three most important overlap pairs, a transparent
-  0–100 diversification score, and up to three improvement prompts. Technical
+  0–100 diversification score, and exactly three evidence-led improvement
+  paths for every valid upload: simplify the fund structure, reduce duplicated
+  exposure, and improve benchmark-relative return efficiency. Each path cites
+  the available fund-count, weight, category or overlap evidence; missing
+  holdings remain a visible data gap rather than zero overlap. Return efficiency
+  is framed through common-period rolling returns, drawdown, consistency and
+  costs, with no forecast or promise of higher future returns. Technical
   catalogue, NAV, source-audit and validation tables remain part of the local
   calculations but are no longer displayed in the primary workflow. The score
   is 80% structural diversification and 20% current-regime fit when a validated

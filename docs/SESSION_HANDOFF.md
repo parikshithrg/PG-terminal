@@ -483,24 +483,77 @@ orders or position sizing.
   signed, and only releases available by an episode start can enter its factor
   snapshot. Sparse release coverage appears as partial evidence and does not
   create a trait or unblock decision support.
+- Completed `mutual-fund-true-diversification-v3` with AMFI's official dated
+  security market-cap classification. The 30-Jun-26 workbook is fetched with
+  bounded size/host checks, validates 5,427 unique ISIN rows and the required
+  100 large / 150 mid / 5,177 small split, and joins official AMC holdings only
+  by exact ISIN. The overview shows full-portfolio large/mid/small exposure and
+  explicit unclassified/not-captured weight; no fund mandate, name match or
+  aggregator is used as a substitute.
+- Added `mutual-fund-improvement-review-v1`. Every valid holdings upload now
+  produces exactly three personalized review paths: give every fund a clear
+  role, remove duplicated exposure, and assess return efficiency against a
+  common-period benchmark using rolling return, drawdown, consistency and
+  costs. The cards use available fund weights, categories and overlap evidence;
+  missing look-through data stays explicit. They do not forecast returns or
+  issue buy/sell instructions.
+- Added `historical-regimes-v13`. EOD history refresh now discovers RBI's
+  official monthly Sectoral Deployment of Bank Credit releases from the 2024+
+  year archive, stores non-food bank-credit growth with the publication date
+  and initial-release state, and replaces catalogue month-end with the release's
+  stated last reporting Friday when available. Stored release IDs are skipped
+  on later refreshes; catalogue and release failures remain individually
+  visible in the source audit.
 
 ## Next work
 
-1. Continue `mutual-fund-true-diversification-v3`. The ISIN-normalized overlap
+1. Validate completed `mutual-fund-true-diversification-v3` against additional
+   representative user files as they become available. The ISIN-normalized overlap
    engine, plan-independent holdings identity, investor-weighted look-through,
    repeated holdings, sector exposure, effective security count, fund
    contribution and disclosure audit table are implemented. Official monthly
-   disclosure adapters are live for Nippon India and Motilal Oswal; the user's
-   14-fund workbook now parses and all five Motilal portfolios populate the
-   overlap tables. Add official-source adapters for Axis, ICICI Prudential,
-   SBI, WhiteOak Capital, Edelweiss and PPFAS, then add dated security-level
-   market-cap classification. Keep unsupported AMCs explicit and do not fill
-   them from an aggregator. The user-facing comparer is now intentionally an
+   disclosure adapters are live for Nippon India, Motilal Oswal, Axis, SBI and
+   WhiteOak Capital. Edelweiss now has a bounded official statutory-catalogue
+   adapter and workbook parser. Its API rejects the local server, so the adapter
+   can read the newest official browser-downloaded workbook and otherwise exposes
+   the outage rather than using aggregator holdings. Live validation resolved
+   Edelweiss Multi Asset Omni Fund of Fund from 30-Sep-26 with 10 positive-ISIN
+   fund-unit holdings and 99.41% captured weight. PPFAS discovery now selects
+   its newest official consolidated workbook; live validation resolved Parag
+   Parikh ELSS Tax Saver Fund from 30-Sep-26 with 46 positive-ISIN positions and
+   96.82% captured weight. An
+   ICICI Prudential adapter now reads the newest official monthly ZIP already
+   downloaded from ICICI's disclosure page, validates the archive defensively,
+   and parses only the requested per-scheme workbooks; the official API itself
+   rejects non-browser clients, so a missing local archive stays visible rather
+   than being backfilled. The 14-fund acceptance workbook now resolves 10
+   official portfolios, 52.02% of investor-weighted look-through exposure and a
+   33.73% maximum observed pairwise overlap, all from 30-Sep-26 disclosures. The
+   user's 14-fund workbook now parses and all five Motilal portfolios populate
+   the overlap tables. The Axis adapter selects the official consolidated
+   month-end workbook; live validation on 14-Oct-26 parsed 79 scheme sheets and
+   resolved Axis Value Fund with 86 ISIN holdings and 92.98% captured weight.
+   SBI discovery uses its public portfolio-catalogue endpoint and selects the
+   newest official consolidated workbook. Live validation on 14-Oct-26 resolved
+   SBI Arbitrage Fund from the 30-Sep-26 disclosure with 196 positive-ISIN
+   positions and 97.92% captured AUM. Futures hedge rows without ISINs remain
+   excluded, so arbitrage overlap is labelled as gross security redundancy rather
+   than net directional equity risk. WhiteOak discovery uses its public regulatory
+   catalogue and selects the newest requested scheme workbook. Live validation on
+   14-Oct-26 resolved WhiteOak Capital Multi Asset Allocation Fund from 30-Sep-26
+   with 200 positive-ISIN positions and 83.97% captured weight. Non-ISIN derivatives,
+   cash, reverse-repo and TREPS balances remain outside security-level overlap and
+   are visible through the coverage figure. Security-level market-cap
+   classification now comes from AMFI's official 30-Jun-26 workbook and joins
+   holdings only by exact ISIN; the source contains 5,427 companies with the
+   validated 100/150/5,177 large/mid/small split. Keep unsupported AMCs explicit
+   and do not fill them from an aggregator. The user-facing comparer is
+   intentionally an
    overview rather than a table-heavy audit page: allocation, top similarity
    pairs, a coverage-labelled structural/regime-fit score, and concise review
    prompts are the only primary outputs.
-2. Expand the audited RBI release registry into continuous balance-of-payments,
-   external-debt, credit and macro vintages while retaining every original
+2. Continue the audited RBI release registry with continuous balance-of-payments,
+   external-debt, policy-rate and macro vintages while retaining every original
    publication date and revision state, then add authoritative effective-dated
    index membership. Preserve base changes and honest frequency; never
    synthesize missing daily values or use revised actuals in an earlier

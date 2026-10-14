@@ -68,6 +68,8 @@ from server import (
     normalize_futures_eod_quotes,
     parse_daily_candles,
     parse_daily_closes,
+    parse_rbi_sectoral_credit_catalogue,
+    build_rbi_sectoral_credit_archive_post_data,
     parse_rbi_release_vintage,
     parse_dashboard_index_tokens,
     parse_equity_tokens,
@@ -97,8 +99,20 @@ from server import (
     match_mutual_fund_scheme_catalogue,
     match_mutual_fund_underlying_scheme_catalogue,
     parse_amfi_scheme_catalogue_text,
+    parse_amfi_market_cap_workbook,
     parse_nippon_portfolio_disclosure_links,
     parse_nippon_portfolio_workbook,
+    parse_axis_portfolio_document_catalogue,
+    parse_axis_portfolio_workbook,
+    parse_icici_portfolio_archive,
+    parse_sbi_portfolio_disclosure_links,
+    parse_sbi_portfolio_workbook,
+    parse_whiteoak_portfolio_catalogue,
+    parse_whiteoak_portfolio_workbook,
+    parse_edelweiss_portfolio_catalogue,
+    parse_edelweiss_portfolio_workbook,
+    parse_ppfas_portfolio_disclosure_links,
+    parse_ppfas_portfolio_workbook,
     parse_motilal_portfolio_page,
     parse_motilal_portfolio_workbook,
     parse_seasonality_index_tokens,
@@ -167,7 +181,7 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
 
         result = build_historical_regime_workspace(candles)
 
-        self.assertEqual(result["contract_version"], "historical-regimes-v12")
+        self.assertEqual(result["contract_version"], "historical-regimes-v13")
         self.assertEqual(
             result["point_in_time_readiness"]["contract_version"],
             "historical-point-in-time-readiness-v1",
@@ -261,6 +275,97 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
 
         self.assertEqual(row["value"], 570000.0)
         self.assertEqual(row["metadata"]["release_date"], "2021-06-30")
+
+    def test_rbi_credit_catalogue_discovers_release_dated_months(self):
+        rows = parse_rbi_sectoral_credit_catalogue(
+            """
+            <table>
+              <tr><th colspan="4">Apr 30, 2025</th></tr>
+              <tr><td><a href=BS_PressReleaseDisplay.aspx?prid=60332>
+                Sectoral Deployment of Bank Credit – March 2025
+              </a></td></tr>
+              <tr><th colspan="4">Mar 28, 2025</th></tr>
+              <tr><td><a href="BS_PressReleaseDisplay.aspx?prid=60101">
+                Sectoral Deployment of Bank Credit - February 2025
+              </a></td></tr>
+            </table>
+            """,
+            expected_year=2025,
+        )
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["observation_date"], date(2025, 2, 28))
+        self.assertEqual(rows[1]["release_id"], "rbi-sectoral-credit-2025-03-60332")
+        self.assertEqual(rows[1]["catalogue_release_date"], date(2025, 4, 30))
+
+    def test_rbi_credit_archive_postback_keeps_required_aspnet_state(self):
+        payload = build_rbi_sectoral_credit_archive_post_data(
+            """
+            <input name="__VIEWSTATE" value="state&amp;one" />
+            <input name="__VIEWSTATEGENERATOR" value="generator" />
+            <input name="__EVENTVALIDATION" value="validation" />
+            """,
+            year=2024,
+        ).decode("utf-8")
+
+        self.assertIn("hdnYear=2024", payload)
+        self.assertIn("__VIEWSTATE=state%26one", payload)
+        self.assertIn("UsrFontCntr%24btn=", payload)
+
+    def test_rbi_release_vintage_parser_reads_monthly_non_food_credit(self):
+        source = {
+            "release_id": "rbi-sectoral-credit-2025-03-60332",
+            "series_key": "india_non_food_credit_growth_pct",
+            "kind": "bank_credit",
+            "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=60332",
+            "title": "RBI Sectoral Deployment of Bank Credit – March 2025",
+            "observation_date": date(2025, 3, 31),
+            "period_label": "March 2025",
+            "revision_status": "initial",
+        }
+        row = parse_rbi_release_vintage(
+            """
+            <html><body><div>Date : Apr 30, 2025</div>
+            <p>On a year-on-year basis, non-food bank credit<sup>2</sup>
+            as on the fortnight ended March 21, 2025, grew<sup>3</sup>
+            by 12.0 per cent.</p></body></html>
+            """,
+            source=source,
+        )
+
+        self.assertEqual(row["date"], date(2025, 3, 21))
+        self.assertEqual(row["value"], 12.0)
+        self.assertEqual(row["frequency"], "monthly")
+        self.assertEqual(row["unit"], "Per cent year-on-year")
+        self.assertEqual(
+            row["metadata"]["observation_basis"],
+            "last reporting Friday stated in release",
+        )
+
+    def test_rbi_credit_parser_accepts_growth_remained_wording(self):
+        source = {
+            "release_id": "rbi-sectoral-credit-2024-08-58785",
+            "series_key": "india_non_food_credit_growth_pct",
+            "kind": "bank_credit",
+            "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=58785",
+            "title": "RBI Sectoral Deployment of Bank Credit – August 2024",
+            "observation_date": date(2024, 8, 31),
+            "period_label": "August 2024",
+            "revision_status": "initial",
+            "catalogue_release_date": date(2024, 9, 30),
+        }
+        row = parse_rbi_release_vintage(
+            """
+            <html><body><div>Date : Sep 30, 2024</div>
+            <p>On a year-on-year basis, the growth in non-food bank credit
+            in August 2024 remained at 15.0 per cent.</p></body></html>
+            """,
+            source=source,
+        )
+
+        self.assertEqual(row["date"], date(2024, 8, 31))
+        self.assertEqual(row["value"], 15.0)
+        self.assertEqual(row["metadata"]["observation_basis"], "catalogue month-end")
 
     def test_historical_series_summary_withholds_wpi_change_across_base_break(self):
         common = {
@@ -2906,7 +3011,14 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(result["categories"][0]["weight_pct"], 60.0)
         self.assertEqual(result["funds"][1]["category"], "Debt - Short Duration")
         self.assertEqual(result["diversification"]["effective_fund_count"], 1.92)
-        self.assertTrue(any(item["title"] == "Add underlying holdings" for item in result["suggestions"]))
+        self.assertEqual(result["improvement_contract_version"], "mutual-fund-improvement-review-v1")
+        self.assertEqual(len(result["suggestions"]), 3)
+        self.assertEqual(
+            [item["priority"] for item in result["suggestions"]],
+            ["1 · Simplify", "2 · Diversify", "3 · Return efficiency"],
+        )
+        self.assertIn("not available", result["suggestions"][1]["detail"])
+        self.assertIn("does not guarantee", result["suggestions"][2]["detail"])
 
     def test_mutual_fund_upload_accepts_broker_fund_and_current_value_headers(self):
         parsed = parse_mutual_fund_file(
@@ -2938,6 +3050,20 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(result["overlaps"][0]["status"], "complete")
         reliance = next(item for item in result["top_underlying_holdings"] if item["security"] == "Reliance")
         self.assertEqual(reliance["portfolio_weight_pct"], 35.0)
+        self.assertEqual(len(result["suggestions"]), 3)
+        self.assertIn("30.00%", result["suggestions"][1]["detail"])
+        self.assertIn("Alpha Large Cap Fund", result["suggestions"][1]["detail"])
+
+    def test_mutual_fund_improvement_review_always_returns_three_paths_for_one_fund(self):
+        result = build_mutual_fund_holdings_analysis(
+            [{"Scheme": "Alpha Equity Fund", "Weight %": 100}],
+            {"scheme": "Scheme", "weight": "Weight %", "current_value": None, "invested_value": None, "category": None},
+        )
+        self.assertEqual(len(result["suggestions"]), 3)
+        self.assertIn("already compact", result["suggestions"][0]["detail"])
+        self.assertIn("no pairwise redundancy", result["suggestions"][1]["detail"])
+        combined = " ".join(item["detail"].lower() for item in result["suggestions"])
+        self.assertNotIn("guaranteed return", combined)
 
     def test_mutual_fund_analysis_uses_the_most_complete_available_weight_basis(self):
         result = build_mutual_fund_holdings_analysis(
@@ -3133,6 +3259,300 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(scheme["holdings"][0]["isin"], "INE002A01018")
         self.assertEqual(scheme["holdings"][0]["sector"], "Petroleum Products")
 
+    def test_axis_catalogue_and_consolidated_workbook_preserve_complete_holdings(self):
+        links = parse_axis_portfolio_document_catalogue({
+            "status": "success",
+            "data": {"documentList": [
+                {
+                    "docuementURL": "https://www.axismf.com/1/5/464/560/monthly-axis-value.xlsx",
+                    "documentName": "Monthly Portfolio - Axis Value Fund - 30 September 2026",
+                    "documentPostedDate": "2026-09-30",
+                },
+                {
+                    "docuementURL": "https://www.axismf.com/1/5/464/560/Monthly_Portfolio_30_09_2026.xlsx",
+                    "documentName": "Monthly Portfolio 30-09-2026",
+                    "documentPostedDate": "2026-09-30",
+                },
+                {
+                    "docuementURL": "https://example.com/1/Monthly_Portfolio_31_08_2026.xlsx",
+                    "documentName": "Monthly Portfolio 31-08-2026",
+                    "documentPostedDate": "2026-08-31",
+                },
+            ]},
+        })
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0]["portfolio_date"], date(2026, 9, 30))
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr(
+                "xl/workbook.xml",
+                '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Index" sheetId="1" r:id="rId1"/><sheet name="AXISVF" sheetId="2" r:id="rId2"/></sheets></workbook>',
+            )
+            archive.writestr(
+                "xl/_rels/workbook.xml.rels",
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/><Relationship Id="rId2" Target="worksheets/sheet2.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/></Relationships>',
+            )
+            archive.writestr(
+                "xl/worksheets/sheet1.xml",
+                '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Sr No.</t></is></c><c r="B1" t="inlineStr"><is><t>Short Name</t></is></c><c r="C1" t="inlineStr"><is><t>Scheme Name</t></is></c></row></sheetData></worksheet>',
+            )
+            archive.writestr(
+                "xl/worksheets/sheet2.xml",
+                '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                '<row r="1"><c r="A1" t="inlineStr"><is><t>AXISVF</t></is></c><c r="B1" t="inlineStr"><is><t>Axis Value Fund</t></is></c></row>'
+                '<row r="3"><c r="B3" t="inlineStr"><is><t>Monthly Portfolio Statement as on September 30, 2026</t></is></c></row>'
+                '<row r="4"><c r="B4" t="inlineStr"><is><t>Name of the Instrument</t></is></c><c r="C4" t="inlineStr"><is><t>ISIN</t></is></c><c r="D4" t="inlineStr"><is><t>Industry</t></is></c><c r="G4" t="inlineStr"><is><t>% to Net Assets</t></is></c></row>'
+                '<row r="5"><c r="B5" t="inlineStr"><is><t>ICICI Bank Limited</t></is></c><c r="C5" t="inlineStr"><is><t>INE090A01021</t></is></c><c r="D5" t="inlineStr"><is><t>Banks</t></is></c><c r="G5"><v>0.0514</v></c></row>'
+                '<row r="6"><c r="B6" t="inlineStr"><is><t>Reliance Industries Limited</t></is></c><c r="C6" t="inlineStr"><is><t>INE002A01018</t></is></c><c r="D6" t="inlineStr"><is><t>Petroleum Products</t></is></c><c r="G6"><v>0.0338</v></c></row>'
+                '</sheetData></worksheet>',
+            )
+        parsed = parse_axis_portfolio_workbook(payload.getvalue(), source_url=str(links[0]["url"]))
+        scheme = parsed["schemes"][0]
+        self.assertEqual(parsed["provider"], "axis_mutual_fund")
+        self.assertEqual(scheme["scheme_name"], "Axis Value Fund")
+        self.assertEqual(scheme["portfolio_date"], "2026-09-30")
+        self.assertEqual(scheme["coverage_pct"], 8.52)
+        self.assertEqual(scheme["holdings"][0]["isin"], "INE090A01021")
+        self.assertEqual(scheme["holdings"][0]["sector"], "Banks")
+
+    def test_icici_archive_selects_requested_workbooks_and_preserves_nav_weights(self):
+        def workbook(scheme_name, isin, security, sector, weight):
+            payload = io.BytesIO()
+            with zipfile.ZipFile(payload, "w") as archive:
+                archive.writestr(
+                    "xl/workbook.xml",
+                    '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="PORT" sheetId="1" r:id="rId1"/></sheets></workbook>',
+                )
+                archive.writestr(
+                    "xl/_rels/workbook.xml.rels",
+                    '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/></Relationships>',
+                )
+                archive.writestr(
+                    "xl/worksheets/sheet1.xml",
+                    '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                    '<row r="1"><c r="B1" t="inlineStr"><is><t>ICICI Prudential Mutual Fund</t></is></c></row>'
+                    f'<row r="2"><c r="B2" t="inlineStr"><is><t>{scheme_name}</t></is></c></row>'
+                    '<row r="3"><c r="B3" t="inlineStr"><is><t>Portfolio as on Sep 30,2026</t></is></c></row>'
+                    '<row r="4"><c r="B4" t="inlineStr"><is><t>Company/Issuer/Instrument Name</t></is></c><c r="C4" t="inlineStr"><is><t>ISIN</t></is></c><c r="E4" t="inlineStr"><is><t>Industry/Rating</t></is></c><c r="H4" t="inlineStr"><is><t>% to Nav</t></is></c></row>'
+                    f'<row r="5"><c r="B5" t="inlineStr"><is><t>{security}</t></is></c><c r="C5" t="inlineStr"><is><t>{isin}</t></is></c><c r="E5" t="inlineStr"><is><t>{sector}</t></is></c><c r="H5"><v>{weight}</v></c></row>'
+                    '</sheetData></worksheet>',
+                )
+            return payload.getvalue()
+
+        archive_payload = io.BytesIO()
+        with zipfile.ZipFile(archive_payload, "w") as archive:
+            archive.writestr(
+                "ICICI Prudential Active Momentum Fund.xlsx",
+                workbook("ICICI Prudential Active Momentum Fund", "INE238A01034", "Axis Bank Ltd.", "Banks", 0.030038),
+            )
+            archive.writestr(
+                "ICICI Prudential Retirement Fund - Pure Equity Plan.xlsx",
+                workbook("ICICI Prudential Retirement Fund - Pure Equity Plan", "INE040A01034", "HDFC Bank Ltd.", "Banks", 0.049889),
+            )
+        parsed = parse_icici_portfolio_archive(
+            archive_payload.getvalue(),
+            source_name="Monthly-Portfolio-Disclosure-September-2026.zip",
+            scheme_names=["ICICI Prudential Active Momentum Fund - Regular Plan - Growth"],
+        )
+        self.assertEqual(parsed["provider"], "icici_prudential")
+        self.assertEqual(parsed["portfolio_date"], "2026-09-30")
+        self.assertEqual(parsed["source_archive"], "Monthly-Portfolio-Disclosure-September-2026.zip")
+        self.assertEqual(len(parsed["schemes"]), 1)
+        scheme = parsed["schemes"][0]
+        self.assertEqual(scheme["scheme_name"], "ICICI Prudential Active Momentum Fund")
+        self.assertEqual(scheme["coverage_pct"], 3.0)
+        self.assertEqual(scheme["holdings"][0]["isin"], "INE238A01034")
+        self.assertEqual(scheme["holdings"][0]["sector"], "Banks")
+
+    def test_sbi_disclosure_link_and_workbook_parser_select_requested_scheme(self):
+        links = parse_sbi_portfolio_disclosure_links(
+            '<a href="/docs/default-source/scheme-portfolios/all-schemes-monthly-portfolio---as-on-31st-august-2026.xlsx?sfvrsn=old">old</a>'
+            '<a href="/docs/default-source/scheme-portfolios/all-schemes-monthly-portfolio---as-on-30th-september-2026.xlsx?sfvrsn=new">new</a>'
+        )
+        self.assertEqual(links[0]["portfolio_date"], date(2026, 9, 30))
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr(
+                "xl/workbook.xml",
+                '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Index" sheetId="1" r:id="rId1"/><sheet name="SAOF" sheetId="2" r:id="rId2"/></sheets></workbook>',
+            )
+            archive.writestr(
+                "xl/_rels/workbook.xml.rels",
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/><Relationship Id="rId2" Target="worksheets/sheet2.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/></Relationships>',
+            )
+            archive.writestr(
+                "xl/worksheets/sheet1.xml",
+                '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Index</t></is></c></row></sheetData></worksheet>',
+            )
+            archive.writestr(
+                "xl/worksheets/sheet2.xml",
+                '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                '<row r="3"><c r="C3" t="inlineStr"><is><t>SCHEME NAME :</t></is></c><c r="D3" t="inlineStr"><is><t>SBI Arbitrage Fund (Erstwhile known as SBI Arbitrage Opportunities Fund)</t></is></c></row>'
+                '<row r="4"><c r="C4" t="inlineStr"><is><t>PORTFOLIO STATEMENT AS ON :</t></is></c><c r="D4"><v>46295</v></c></row>'
+                '<row r="6"><c r="C6" t="inlineStr"><is><t>Name of the Instrument / Issuer</t></is></c><c r="D6" t="inlineStr"><is><t>ISIN</t></is></c><c r="E6" t="inlineStr"><is><t>Rating / Industry^</t></is></c><c r="H6" t="inlineStr"><is><t>% to AUM</t></is></c></row>'
+                '<row r="11"><c r="C11" t="inlineStr"><is><t>Reliance Industries Ltd.</t></is></c><c r="D11" t="inlineStr"><is><t>INE002A01018</t></is></c><c r="E11" t="inlineStr"><is><t>Petroleum Products</t></is></c><c r="H11"><v>5.58</v></c></row>'
+                '<row r="12"><c r="C12" t="inlineStr"><is><t>NIFTY FUTURES</t></is></c><c r="H12"><v>-4.9</v></c></row>'
+                '</sheetData></worksheet>',
+            )
+        parsed = parse_sbi_portfolio_workbook(
+            payload.getvalue(),
+            source_url=str(links[0]["url"]),
+            scheme_names=["SBI Arbitrage Fund - Regular Plan - Growth"],
+        )
+        self.assertEqual(parsed["provider"], "sbi_mutual_fund")
+        self.assertEqual(parsed["portfolio_date"], "2026-09-30")
+        self.assertEqual(len(parsed["schemes"]), 1)
+        scheme = parsed["schemes"][0]
+        self.assertEqual(scheme["scheme_name"], "SBI Arbitrage Fund")
+        self.assertEqual(scheme["coverage_pct"], 5.58)
+        self.assertEqual(scheme["holdings"][0]["isin"], "INE002A01018")
+        self.assertEqual(scheme["holdings"][0]["sector"], "Petroleum Products")
+
+    def test_whiteoak_catalogue_and_workbook_parser_capture_positive_isin_holdings(self):
+        candidates = parse_whiteoak_portfolio_catalogue({
+            "data": [
+                {
+                    "attributes": {
+                        "period": "Monthly",
+                        "scheme_name": "WhiteOak Capital Multi Asset Allocation Fund",
+                        "doc_name": "WhiteOak Capital Multi Asset Allocation Fund Monthly Portfolio Disclosure - 30th September2026",
+                        "doc_file": {"data": {"attributes": {"url": "https://content.whiteoakamc.com/whiteoak-multi-asset-september-2026.xlsx"}}},
+                    }
+                },
+                {
+                    "attributes": {
+                        "period": "Fortnightly",
+                        "scheme_name": "WhiteOak Capital Multi Asset Allocation Fund",
+                        "doc_name": "WhiteOak Capital Multi Asset Allocation Fund Portfolio - 15th September2026",
+                        "doc_file": {"data": {"attributes": {"url": "https://content.whiteoakamc.com/ignored.xlsx"}}},
+                    }
+                },
+            ]
+        })
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0]["portfolio_date"], date(2026, 9, 30))
+
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr(
+                "xl/workbook.xml",
+                '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="WOMAF" sheetId="1" r:id="rId1"/></sheets></workbook>',
+            )
+            archive.writestr(
+                "xl/_rels/workbook.xml.rels",
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/></Relationships>',
+            )
+            archive.writestr(
+                "xl/worksheets/sheet1.xml",
+                '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                '<row r="1"><c r="A1" t="inlineStr"><is><t>WhiteOak Capital Multi Asset Allocation Fund</t></is></c></row>'
+                '<row r="3"><c r="A3" t="inlineStr"><is><t>Monthly Portfolio Statement as on September 30, 2026</t></is></c></row>'
+                '<row r="4"><c r="A4" t="inlineStr"><is><t>Name of the Instrument</t></is></c><c r="B4" t="inlineStr"><is><t>ISIN</t></is></c><c r="C4" t="inlineStr"><is><t>Industry / Rating</t></is></c><c r="F4" t="inlineStr"><is><t>% to Net Assets</t></is></c></row>'
+                '<row r="5"><c r="A5" t="inlineStr"><is><t>ICICI Bank Limited</t></is></c><c r="B5" t="inlineStr"><is><t>INE090A01021</t></is></c><c r="C5" t="inlineStr"><is><t>Banks</t></is></c><c r="F5"><v>0.0289</v></c></row>'
+                '<row r="6"><c r="A6" t="inlineStr"><is><t>Long FUTCOM_GOLD</t></is></c><c r="F6"><v>0.0605</v></c></row>'
+                '</sheetData></worksheet>',
+            )
+        parsed = parse_whiteoak_portfolio_workbook(
+            payload.getvalue(),
+            scheme_name_hint="WhiteOak Capital Multi Asset Allocation Fund",
+            source_url=str(candidates[0]["url"]),
+        )
+        self.assertEqual(parsed["portfolio_date"], "2026-09-30")
+        self.assertEqual(parsed["coverage_pct"], 2.89)
+        self.assertEqual(len(parsed["holdings"]), 1)
+        self.assertEqual(parsed["holdings"][0]["isin"], "INE090A01021")
+        self.assertEqual(parsed["holdings"][0]["sector"], "Banks")
+
+    def test_edelweiss_catalogue_and_workbook_parser_capture_fund_of_fund_holdings(self):
+        candidates = parse_edelweiss_portfolio_catalogue({
+            "data": {
+                "years": [{
+                    "year": 2026,
+                    "months": [{
+                        "month": "September 2026",
+                        "documents": [{
+                            "schemeName": "Edelweiss Multi Asset Omni Fund of Fund",
+                            "fileUrl": "https://www.edelweissmf.com/Files/MF/Statutory/Portfolio/Edelweiss_Multi_Asset_Omni_30_September_2026.xlsx",
+                        }],
+                    }],
+                }],
+            }
+        })
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0]["portfolio_date"], date(2026, 9, 30))
+
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr(
+                "xl/workbook.xml",
+                '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Omni FoF" sheetId="1" r:id="rId1"/></sheets></workbook>',
+            )
+            archive.writestr(
+                "xl/_rels/workbook.xml.rels",
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/></Relationships>',
+            )
+            archive.writestr(
+                "xl/worksheets/sheet1.xml",
+                '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                '<row r="1"><c r="A1" t="inlineStr"><is><t>Edelweiss Multi Asset Omni Fund of Fund</t></is></c></row>'
+                '<row r="2"><c r="A2" t="inlineStr"><is><t>Monthly Portfolio Statement as on 30 September 2026</t></is></c></row>'
+                '<row r="4"><c r="A4" t="inlineStr"><is><t>Name of the Instrument</t></is></c><c r="B4" t="inlineStr"><is><t>ISIN</t></is></c><c r="C4" t="inlineStr"><is><t>Industry / Rating</t></is></c><c r="F4" t="inlineStr"><is><t>% to Net Assets</t></is></c></row>'
+                '<row r="5"><c r="A5" t="inlineStr"><is><t>Edelweiss Nifty LargeMidcap 250 ETF</t></is></c><c r="B5" t="inlineStr"><is><t>INF754K01QX0</t></is></c><c r="C5" t="inlineStr"><is><t>Mutual Fund Units</t></is></c><c r="F5"><v>29.9</v></c></row>'
+                '<row r="6"><c r="A6" t="inlineStr"><is><t>TREPS</t></is></c><c r="F6"><v>2.1</v></c></row>'
+                '</sheetData></worksheet>',
+            )
+        parsed = parse_edelweiss_portfolio_workbook(
+            payload.getvalue(),
+            source_url=str(candidates[0]["url"]),
+            scheme_names=["Edelweiss Multi Asset Omni Fund of Fund - Regular Plan - Growth"],
+        )
+        self.assertEqual(parsed["provider"], "edelweiss_mutual_fund")
+        self.assertEqual(parsed["portfolio_date"], "2026-09-30")
+        self.assertEqual(parsed["schemes"][0]["coverage_pct"], 29.9)
+        self.assertEqual(parsed["schemes"][0]["holdings"][0]["isin"], "INF754K01QX0")
+        self.assertEqual(parsed["schemes"][0]["holdings"][0]["sector"], "Mutual Fund Units")
+
+    def test_ppfas_links_and_workbook_parser_capture_positive_isin_holdings(self):
+        links = parse_ppfas_portfolio_disclosure_links(
+            '<a href="/downloads/portfolio-disclosure/2026/PPFAS_Monthly_Portfolio_Report_September_30_2026.xls?07102026=">Consolidated</a>'
+            '<a href="/downloads/portfolio-disclosure/2026/PPTSF_PPFAS_Monthly_Portfolio_Report_September_30_2026.xlsx?07102026=">PPTSF</a>'
+            '<a href="https://example.com/PPFAS_Monthly_Portfolio_Report_October_31_2026.xls">Other host</a>'
+        )
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0]["portfolio_date"], date(2026, 9, 30))
+
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr(
+                "xl/workbook.xml",
+                '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="PPTSF" sheetId="1" r:id="rId1"/></sheets></workbook>',
+            )
+            archive.writestr(
+                "xl/_rels/workbook.xml.rels",
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/></Relationships>',
+            )
+            archive.writestr(
+                "xl/worksheets/sheet1.xml",
+                '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                '<row r="1"><c r="B1" t="inlineStr"><is><t>Parag Parikh ELSS Tax Saver Fund (An open ended equity linked savings scheme)</t></is></c></row>'
+                '<row r="3"><c r="B3" t="inlineStr"><is><t>Monthly Portfolio Statement as on September 30, 2026</t></is></c></row>'
+                '<row r="4"><c r="B4" t="inlineStr"><is><t>Name of the Instrument</t></is></c><c r="C4" t="inlineStr"><is><t>ISIN</t></is></c><c r="D4" t="inlineStr"><is><t>Industry / Rating</t></is></c><c r="G4" t="inlineStr"><is><t>% to Net Assets</t></is></c></row>'
+                '<row r="5"><c r="B5" t="inlineStr"><is><t>HDFC Bank Limited</t></is></c><c r="C5" t="inlineStr"><is><t>INE040A01034</t></is></c><c r="D5" t="inlineStr"><is><t>Banks</t></is></c><c r="G5"><v>0.0757</v></c></row>'
+                '<row r="6"><c r="B6" t="inlineStr"><is><t>Cash and cash equivalents</t></is></c><c r="G6"><v>0.02</v></c></row>'
+                '</sheetData></worksheet>',
+            )
+        parsed = parse_ppfas_portfolio_workbook(
+            payload.getvalue(),
+            source_url=str(links[0]["url"]),
+            scheme_names=["Parag Parikh ELSS Tax Saver Fund - Regular Plan - Growth"],
+        )
+        self.assertEqual(parsed["provider"], "ppfas_mutual_fund")
+        self.assertEqual(parsed["portfolio_date"], "2026-09-30")
+        self.assertEqual(len(parsed["schemes"]), 1)
+        self.assertEqual(parsed["schemes"][0]["coverage_pct"], 7.57)
+        self.assertEqual(parsed["schemes"][0]["holdings"][0]["isin"], "INE040A01034")
+        self.assertEqual(parsed["schemes"][0]["holdings"][0]["sector"], "Banks")
+
     def test_true_diversification_joins_regular_plans_and_reports_repeated_exposure(self):
         catalogue = {
             "rows": [
@@ -3169,6 +3589,57 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(result["repeated_holdings"][0]["fund_count"], 2)
         self.assertEqual(result["diversification"]["repeated_lookthrough_pct"], 40.0)
         self.assertEqual(result["market_cap_allocation"][0]["bucket"], "Large Cap")
+
+    def test_amfi_market_cap_workbook_and_isin_lookthrough_classification(self):
+        rows = []
+        for rank in range(1, 253):
+            category = "Large Cap" if rank <= 100 else "Mid Cap" if rank <= 250 else "Small Cap"
+            isin = f"INE{rank:09d}"
+            rows.append(
+                f'<row r="{rank + 2}"><c r="A{rank + 2}"><v>{rank}</v></c>'
+                f'<c r="B{rank + 2}" t="inlineStr"><is><t>Company {rank}</t></is></c>'
+                f'<c r="C{rank + 2}" t="inlineStr"><is><t>{isin}</t></is></c>'
+                f'<c r="J{rank + 2}"><v>{1000000 - rank}</v></c>'
+                f'<c r="K{rank + 2}" t="inlineStr"><is><t>{category}</t></is></c></row>'
+            )
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr(
+                "xl/workbook.xml",
+                '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="FINAL" sheetId="1" r:id="rId1"/></sheets></workbook>',
+            )
+            archive.writestr(
+                "xl/_rels/workbook.xml.rels",
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/></Relationships>',
+            )
+            archive.writestr(
+                "xl/worksheets/sheet1.xml",
+                '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                '<row r="1"><c r="A1" t="inlineStr"><is><t>Average Market Capitalization of listed companies during the six months ended 30 June 2026</t></is></c></row>'
+                '<row r="2"><c r="A2" t="inlineStr"><is><t>Sr. No.</t></is></c><c r="B2" t="inlineStr"><is><t>Company name</t></is></c><c r="C2" t="inlineStr"><is><t>ISIN</t></is></c><c r="J2" t="inlineStr"><is><t>Average of All Exchanges (Rs. Cr.)</t></is></c><c r="K2" t="inlineStr"><is><t>Categorization as per SEBI Circular dated Oct 6, 2017</t></is></c></row>'
+                + "".join(rows)
+                + '</sheetData></worksheet>',
+            )
+        classification = parse_amfi_market_cap_workbook(payload.getvalue())
+        self.assertEqual(classification["companies"], 252)
+        self.assertEqual(classification["category_counts"], {"Large Cap": 100, "Mid Cap": 150, "Small Cap": 2})
+        result = build_mutual_fund_holdings_analysis(
+            [{"Fund": "Example Equity Fund", "Value": 100}],
+            {"scheme": "Fund", "current_value": "Value", "invested_value": None, "weight": None, "category": None},
+            underlying_rows=[
+                {"Scheme": "Example Equity Fund", "Security": "Large", "ISIN": "INE000000001", "Weight": 50},
+                {"Scheme": "Example Equity Fund", "Security": "Mid", "ISIN": "INE000000101", "Weight": 30},
+                {"Scheme": "Example Equity Fund", "Security": "Unknown", "ISIN": "US0000000001", "Weight": 20},
+            ],
+            underlying_mapping={"scheme": "Scheme", "security": "Security", "isin": "ISIN", "sector": None, "weight": "Weight"},
+            market_cap_classification=classification,
+        )
+        self.assertEqual(
+            [(row["bucket"], row["portfolio_weight_pct"]) for row in result["market_cap_allocation"]],
+            [("Large Cap", 50.0), ("Mid Cap", 30.0), ("Unclassified / not captured", 20.0)],
+        )
+        self.assertEqual(result["market_cap_evidence"]["classified_securities"], 2)
+        self.assertEqual(result["market_cap_evidence"]["classified_portfolio_weight_pct"], 80.0)
 
     def test_motilal_page_and_workbook_parser_preserve_official_holdings(self):
         page_url = "https://www.motilaloswalmf.com/mutual-funds/motilal-oswal-digital-india-fund"

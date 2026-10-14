@@ -59,11 +59,26 @@ NIFTY_GSEC_INDEX_NAME = "Nifty 10 yr Benchmark G-Sec"
 AMFI_NAV_HISTORY_URL = "https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx"
 AMFI_NAV_SOURCE_URL = "https://www.amfiindia.com/net-asset-value/nav-download"
 AMFI_LATEST_NAV_URL = "https://portal.amfiindia.com/spages/NAVAll.txt"
+AMFI_MARKET_CAP_SOURCE_PAGE_URL = "https://www.amfiindia.com/otherdata/categorisation-of-stocks"
+AMFI_MARKET_CAP_XLSX_URL = "https://portal.amfiindia.com/spages/AverageMarketCapitalization30Jun2026.xlsx"
+AMFI_MARKET_CAP_AS_OF = date(2026, 6, 30)
+AMFI_MARKET_CAP_CONTRACT_VERSION = "amfi-security-market-cap-classification-v1"
 AMFI_SCHEME_CATALOGUE_CONTRACT_VERSION = "amfi-direct-growth-catalogue-v1"
 AMFI_CATEGORY_SCHEMA_VERSION = "amfi-category-map-v1"
 MUTUAL_FUND_DIVERSIFICATION_CONTRACT_VERSION = "mutual-fund-true-diversification-v3"
 NIPPON_PORTFOLIO_DISCLOSURE_PAGE_URL = "https://mf.nipponindiaim.com/investor-service/downloads/factsheet-portfolio-and-other-disclosures/"
 MOTILAL_OSWAL_FUND_PAGE_BASE_URL = "https://www.motilaloswalmf.com/mutual-funds/"
+AXIS_PORTFOLIO_DISCLOSURE_PAGE_URL = "https://www.axismf.com/statutory-disclosures"
+AXIS_CMS_TOKEN_URL = "https://www.axismf.com/cms/token"
+AXIS_CMS_SCHEME_DOCUMENTS_URL = "https://www.axismf.com/cms/get-scheme-documents"
+ICICI_PORTFOLIO_DISCLOSURE_PAGE_URL = "https://www.icicipruamc.com/media-center/downloads?currentTabFilter=Other%20SchemeDisclosures&subCatTabFilter=Monthly%20Portfolio%20Disclosures"
+SBI_PORTFOLIO_DISCLOSURE_PAGE_URL = "https://www.sbimf.com/portfolios?Portfoliotype=Monthly"
+SBI_PORTFOLIO_CATALOGUE_URL = "https://www.sbimf.com/ajaxcall/CMS/GetSchemePortfolioSheets"
+WHITEOAK_PORTFOLIO_DISCLOSURE_PAGE_URL = "https://mf.whiteoakamc.com/regulatory-disclosures/scheme-portfolios"
+WHITEOAK_PORTFOLIO_CATALOGUE_URL = "https://cms.whiteoakamc.com/api/scheme-portfolios?pagination%5Bpage%5D=1&pagination%5BpageSize%5D=100&sort%5B0%5D=published_date%3Adesc&sort%5B1%5D=id%3Adesc&populate=*"
+EDELWEISS_PORTFOLIO_DISCLOSURE_PAGE_URL = "https://www.edelweissmf.com/statutory/portfolio-of-schemes"
+EDELWEISS_PORTFOLIO_CATALOGUE_URL = "https://api.edelweissmf.com/edelweissmf/api/v1/mf/statutory-menus/single"
+PPFAS_PORTFOLIO_DISCLOSURE_PAGE_URL = "https://amc.ppfas.com/downloads/portfolio-disclosure/"
 AMFI_PORTFOLIO_SCHEMES = (
     {
         "scheme_code": "120754",
@@ -118,7 +133,7 @@ FRED_GLOBAL_SERIES = {
 }
 SENTIMENT_EVIDENCE_MODEL_VERSION = "market-sentiment-evidence-v1"
 REGIME_RULE_VERSION = "market-regime-candidate-v1"
-HISTORICAL_REGIME_CONTRACT_VERSION = "historical-regimes-v12"
+HISTORICAL_REGIME_CONTRACT_VERSION = "historical-regimes-v13"
 HISTORICAL_FINGERPRINT_CONTRACT_VERSION = "historical-episode-fingerprint-v1"
 HISTORICAL_ENTRY_VALIDATION_CONTRACT_VERSION = "historical-entry-validation-v1"
 HISTORICAL_POINT_IN_TIME_CONTRACT_VERSION = "historical-point-in-time-readiness-v1"
@@ -565,6 +580,10 @@ RBI_HISTORICAL_SERIES_SOURCES = (
 )
 RBI_HISTORICAL_SERIES_SOURCE = "Reserve Bank of India Handbook of Statistics on Indian Economy"
 RBI_RELEASE_VINTAGE_CONTRACT_VERSION = "rbi-release-vintage-import-v1"
+RBI_SECTORAL_CREDIT_CATALOGUE_URL = (
+    "https://www.rbi.org.in/Scripts/Data_Sectoral_Deployment.aspx"
+)
+RBI_SECTORAL_CREDIT_START_YEAR = 2024
 RBI_RELEASE_VINTAGE_SOURCES = (
     {
         "release_id": "rbi-bop-q2-2023-24",
@@ -692,8 +711,13 @@ MAX_GOOGLE_FINANCE_SYMBOLS = 100
 MAX_NIFTY_GSEC_RESPONSE_BYTES = 512 * 1024
 MAX_AMFI_NAV_RESPONSE_BYTES = 8 * 1024 * 1024
 MAX_AMFI_CATALOGUE_RESPONSE_BYTES = 16 * 1024 * 1024
+MAX_AMFI_MARKET_CAP_RESPONSE_BYTES = 8 * 1024 * 1024
+MAX_AMFI_MARKET_CAP_ROWS = 6000
 MAX_AMC_PORTFOLIO_PAGE_BYTES = 2 * 1024 * 1024
 MAX_AMC_PORTFOLIO_RESPONSE_BYTES = 16 * 1024 * 1024
+MAX_ICICI_PORTFOLIO_ARCHIVE_BYTES = 48 * 1024 * 1024
+MAX_ICICI_PORTFOLIO_ARCHIVE_ENTRIES = 250
+MAX_ICICI_PORTFOLIO_UNCOMPRESSED_BYTES = 64 * 1024 * 1024
 REQUEST_TIMEOUT_SECONDS = 10
 BREADTH_CACHE_SECONDS = 15 * 60
 SEASONALITY_CACHE_SECONDS = 15 * 60
@@ -756,6 +780,7 @@ _NIFTY_GSEC_HISTORY_CACHE: dict[str, object] = {}
 _GOOGLE_FINANCE_QUOTE_CACHE: dict[str, dict[str, object]] = {}
 _AMFI_NAV_HISTORY_CACHE: dict[str, object] = {}
 _AMFI_SCHEME_CATALOGUE_CACHE: dict[str, object] = {}
+_AMFI_MARKET_CAP_CACHE: dict[str, object] = {}
 _AMC_PORTFOLIO_CACHE: dict[str, object] = {}
 _SESSION_LOCK = threading.Lock()
 _BREADTH_BUILD_LOCK = threading.Lock()
@@ -2812,6 +2837,89 @@ class _RbiReleaseTextParser(HTMLParser):
             self.parts.append(data)
 
 
+def parse_rbi_sectoral_credit_catalogue(
+    html_payload: str,
+    *,
+    expected_year: int | None = None,
+) -> list[dict[str, object]]:
+    """Discover release-dated monthly credit vintages from RBI's official index."""
+    if not isinstance(html_payload, str) or not html_payload.strip():
+        raise ValueError("invalid_rbi_sectoral_credit_catalogue")
+    row_pattern = re.compile(
+        r"<th\b[^>]*>\s*([A-Z][a-z]{2}\s+\d{1,2},\s+\d{4})\s*</th>"
+        r"\s*</tr>\s*<tr\b[^>]*>.*?"
+        r"<a\b[^>]*href\s*=\s*[\"']?[^>\"']*?prid=(\d+)[^>\"']*[\"']?[^>]*>"
+        r"\s*Sectoral\s+Deployment\s+of\s+Bank\s+Credit\s*[–-]\s*"
+        r"([A-Z][a-z]+)\s+(\d{4})\s*</a>",
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    releases: list[dict[str, object]] = []
+    seen_release_ids: set[str] = set()
+    for match in row_pattern.finditer(html_payload):
+        try:
+            release_date = datetime.strptime(match.group(1), "%b %d, %Y").date()
+            observation_month = datetime.strptime(
+                f"{match.group(3)} {match.group(4)}", "%B %Y"
+            ).date()
+        except ValueError:
+            continue
+        if expected_year is not None and release_date.year != expected_year:
+            continue
+        next_month = (
+            date(observation_month.year + 1, 1, 1)
+            if observation_month.month == 12
+            else date(observation_month.year, observation_month.month + 1, 1)
+        )
+        observation_date = next_month - timedelta(days=1)
+        prid = match.group(2)
+        release_id = f"rbi-sectoral-credit-{observation_month:%Y-%m}-{prid}"
+        if release_id in seen_release_ids or observation_date > release_date:
+            continue
+        seen_release_ids.add(release_id)
+        period_label = observation_month.strftime("%B %Y")
+        releases.append(
+            {
+                "release_id": release_id,
+                "series_key": "india_non_food_credit_growth_pct",
+                "kind": "bank_credit",
+                "url": (
+                    "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx"
+                    f"?prid={prid}"
+                ),
+                "title": f"RBI Sectoral Deployment of Bank Credit – {period_label}",
+                "observation_date": observation_date,
+                "period_label": period_label,
+                "revision_status": "initial",
+                "catalogue_release_date": release_date,
+            }
+        )
+    if not releases:
+        raise ValueError("invalid_rbi_sectoral_credit_catalogue")
+    return sorted(releases, key=lambda item: (item["observation_date"], item["release_id"]))
+
+
+def build_rbi_sectoral_credit_archive_post_data(
+    html_payload: str,
+    *,
+    year: int,
+) -> bytes:
+    """Build the bounded ASP.NET postback used by RBI's official year archive."""
+    if year < 2010 or year > datetime.now(INDIA_TIMEZONE).year:
+        raise ValueError("invalid_rbi_sectoral_credit_archive_year")
+    fields: dict[str, str] = {}
+    for name in ("__VIEWSTATE", "__VIEWSTATEGENERATOR", "__EVENTVALIDATION"):
+        match = re.search(
+            rf'<input\b[^>]*name=["\']{re.escape(name)}["\'][^>]*value=["\']([^"\']*)["\']',
+            html_payload,
+            flags=re.IGNORECASE,
+        )
+        if match is None:
+            raise ValueError("invalid_rbi_sectoral_credit_catalogue")
+        fields[name] = html_module.unescape(match.group(1))
+    fields.update({"__EVENTTARGET": "", "__EVENTARGUMENT": "", "hdnYear": str(year), "UsrFontCntr$btn": ""})
+    return urllib.parse.urlencode(fields).encode("utf-8")
+
+
 def parse_rbi_release_vintage(
     html_payload: str,
     *,
@@ -2839,6 +2947,12 @@ def parse_rbi_release_vintage(
             continue
     if release_date is None:
         raise ValueError("invalid_rbi_release_vintage")
+    catalogue_release_date = source.get("catalogue_release_date")
+    if (
+        isinstance(catalogue_release_date, date)
+        and catalogue_release_date != release_date
+    ):
+        raise ValueError("invalid_rbi_release_vintage")
 
     kind = str(source.get("kind") or "")
     if kind == "current_account":
@@ -2863,10 +2977,44 @@ def parse_rbi_release_vintage(
             raise ValueError("invalid_rbi_release_vintage")
         value = float(value_match.group(1)) * 1000
         unit = "US dollar million"
+    elif kind == "bank_credit":
+        value_match = None
+        for pattern in (
+            r"non-food bank credit(?:\s*\d+)?[^.]{0,260}?"
+            r"(?:grew|increased|expanded|registered(?:\s+a)?\s+growth)"
+            r"(?:\s*\d+)?(?:\s+by|\s+at|\s+of)?[^0-9.]{0,30}"
+            r"([0-9]+(?:\.[0-9]+)?)\s*per cent",
+            r"growth in non-food bank credit(?:\s*\d+)?[^.]{0,120}?"
+            r"(?:remained|stood|was)\s+at\s+([0-9]+(?:\.[0-9]+)?)"
+            r"\s*per cent",
+        ):
+            value_match = re.search(pattern, text, flags=re.IGNORECASE)
+            if value_match is not None:
+                break
+        if value_match is None:
+            raise ValueError("invalid_rbi_release_vintage")
+        value = float(value_match.group(1))
+        unit = "Per cent year-on-year"
     else:
         raise ValueError("invalid_rbi_release_vintage")
 
     observation_date = source.get("observation_date")
+    observation_basis = "registered observation date"
+    if kind == "bank_credit":
+        observation_basis = "catalogue month-end"
+        observation_match = re.search(
+            r"as on(?:\s+the)?(?:\s+fortnight ended)?\s+"
+            r"([A-Z][a-z]+\s+\d{1,2},\s+\d{4})",
+            text,
+        )
+        if observation_match is not None:
+            try:
+                observation_date = datetime.strptime(
+                    observation_match.group(1), "%B %d, %Y"
+                ).date()
+                observation_basis = "last reporting Friday stated in release"
+            except ValueError:
+                pass
     if not isinstance(observation_date, date) or observation_date > release_date:
         raise ValueError("invalid_rbi_release_vintage")
     revision_status = str(source.get("revision_status") or "").lower()
@@ -2876,7 +3024,7 @@ def parse_rbi_release_vintage(
         "series_key": str(source.get("series_key") or ""),
         "date": observation_date,
         "period_label": str(source.get("period_label") or observation_date.isoformat()),
-        "frequency": "quarterly",
+        "frequency": "monthly" if kind == "bank_credit" else "quarterly",
         "value": value,
         "unit": unit,
         "base_period": "Not applicable",
@@ -2890,6 +3038,7 @@ def parse_rbi_release_vintage(
             "release_id": str(source.get("release_id") or ""),
             "release_contract_version": RBI_RELEASE_VINTAGE_CONTRACT_VERSION,
             "allows_non_positive": kind == "current_account",
+            "observation_basis": observation_basis,
         },
     }
 
@@ -4547,7 +4696,7 @@ def build_historical_point_in_time_readiness(
             },
             "required_keys": 3,
             "use": "Measure financing conditions, policy transmission and currency pressure without hindsight.",
-            "missing_requirement": "Add official release-dated credit histories alongside rates and currency vintages.",
+            "missing_requirement": "Add release-dated policy-rate and currency vintages, and extend monthly credit coverage before 2024.",
         },
         {
             "key": "external_balance",
@@ -10369,6 +10518,1352 @@ def fetch_nippon_portfolio_disclosure() -> dict[str, object]:
     return package
 
 
+def parse_axis_portfolio_document_catalogue(payload: dict[str, object]) -> list[dict[str, object]]:
+    """Return newest-first official Axis consolidated monthly workbook links."""
+    if payload.get("status") != "success" or not isinstance(payload.get("data"), dict):
+        raise ValueError("invalid_axis_portfolio_catalogue")
+    documents = payload["data"].get("documentList")
+    if not isinstance(documents, list):
+        raise ValueError("invalid_axis_portfolio_catalogue")
+    candidates: list[dict[str, object]] = []
+    for document in documents:
+        if not isinstance(document, dict):
+            continue
+        name = html_module.unescape(str(document.get("documentName") or "")).strip()
+        url = str(document.get("docuementURL") or document.get("documentURL") or "").strip()
+        posted = str(document.get("documentPostedDate") or "").strip()
+        parsed = urllib.parse.urlsplit(url)
+        if (
+            not re.fullmatch(r"monthly\s+portfolio(?:\s+statement)?\s*-?\s*\d{1,2}[- _]\d{1,2}[- _]\d{2,4}", name, re.IGNORECASE)
+            or (parsed.hostname or "").lower() not in {"axismf.com", "www.axismf.com"}
+            or not parsed.path.startswith("/1/")
+            or not parsed.path.lower().endswith(".xlsx")
+        ):
+            continue
+        try:
+            portfolio_date = date.fromisoformat(posted)
+        except ValueError:
+            date_match = re.search(r"(\d{1,2})[- _](\d{1,2})[- _](\d{2,4})$", name)
+            if not date_match:
+                continue
+            day, month, year = (int(value) for value in date_match.groups())
+            if year < 100:
+                year += 2000
+            try:
+                portfolio_date = date(year, month, day)
+            except ValueError:
+                continue
+        candidates.append({"url": url, "name": name, "portfolio_date": portfolio_date})
+    candidates.sort(key=lambda item: item["portfolio_date"], reverse=True)
+    if not candidates:
+        raise ValueError("axis_portfolio_link_unavailable")
+    return candidates
+
+
+def parse_axis_portfolio_workbook(payload: bytes, *, source_url: str) -> dict[str, object]:
+    """Parse Axis Mutual Fund's official consolidated monthly workbook."""
+    if not payload or len(payload) > MAX_AMC_PORTFOLIO_RESPONSE_BYTES:
+        raise ValueError("invalid_axis_portfolio_workbook")
+    try:
+        matrices = _xlsx_sheet_matrices(payload)
+    except ValueError as error:
+        raise ValueError("invalid_axis_portfolio_workbook") from error
+    schemes: list[dict[str, object]] = []
+    dates: list[date] = []
+    for sheet_name, matrix in matrices:
+        if sheet_name.strip().lower() == "index" or len(matrix) < 5:
+            continue
+        scheme_name = str(matrix[0][1] if len(matrix[0]) > 1 else "").strip()
+        if not scheme_name:
+            continue
+        portfolio_date: date | None = None
+        for row in matrix[:10]:
+            text = " ".join(str(cell) for cell in row if str(cell).strip())
+            match = re.search(r"as\s+on\s+([A-Za-z]+\s+\d{1,2},\s*\d{4})", text, re.IGNORECASE)
+            if match:
+                try:
+                    normalized_date = re.sub(r",\s*", ", ", re.sub(r"\s+", " ", match.group(1)))
+                    portfolio_date = datetime.strptime(normalized_date, "%B %d, %Y").date()
+                except ValueError:
+                    portfolio_date = None
+                break
+        header_index = -1
+        columns: dict[str, int] = {}
+        for index, row in enumerate(matrix[:20]):
+            keys = {re.sub(r"[^a-z0-9%]", "", str(cell).lower()): column for column, cell in enumerate(row)}
+            isin_column = next((column for key, column in keys.items() if key == "isin"), None)
+            name_column = next((column for key, column in keys.items() if "nameoftheinstrument" in key), None)
+            weight_column = next((column for key, column in keys.items() if "%tonetassets" in key or "%tonav" in key), None)
+            if isin_column is not None and name_column is not None and weight_column is not None:
+                header_index = index
+                columns = {
+                    "isin": isin_column,
+                    "security": name_column,
+                    "weight": weight_column,
+                    "sector": next((column for key, column in keys.items() if "industry" in key or key == "rating"), -1),
+                }
+                break
+        if header_index < 0 or portfolio_date is None:
+            continue
+        holdings: list[dict[str, object]] = []
+        for row in matrix[header_index + 1:]:
+            def cell(column: int) -> object:
+                return row[column] if 0 <= column < len(row) else ""
+
+            isin = re.sub(r"[^A-Z0-9]", "", str(cell(columns["isin"])).upper())
+            security = re.sub(r"\*+$", "", str(cell(columns["security"])).strip()).strip()
+            weight = _portfolio_number(cell(columns["weight"]))
+            if not re.fullmatch(r"IN[A-Z0-9]{10}", isin) or not security or weight is None or weight <= 0:
+                continue
+            holdings.append({
+                "isin": isin,
+                "security": security,
+                "sector": str(cell(columns["sector"])).strip() or "Unclassified",
+                "weight": float(weight),
+            })
+        if not holdings:
+            continue
+        raw_total = sum(float(item["weight"]) for item in holdings)
+        scale = 100.0 if raw_total <= 1.5 else 1.0
+        for item in holdings:
+            item["weight_pct"] = round(float(item.pop("weight")) * scale, 6)
+        schemes.append({
+            "scheme_name": scheme_name,
+            "scheme_keys": sorted(_underlying_scheme_keys(scheme_name)),
+            "sheet_name": sheet_name,
+            "portfolio_date": portfolio_date.isoformat(),
+            "coverage_pct": round(sum(float(item["weight_pct"]) for item in holdings), 2),
+            "holdings": holdings,
+        })
+        dates.append(portfolio_date)
+    if not schemes or not dates:
+        raise ValueError("invalid_axis_portfolio_workbook")
+    return {
+        "provider": "axis_mutual_fund",
+        "amc_name": "Axis Mutual Fund",
+        "source": "Axis Mutual Fund consolidated monthly portfolio disclosure",
+        "source_page_url": AXIS_PORTFOLIO_DISCLOSURE_PAGE_URL,
+        "source_url": source_url,
+        "portfolio_date": max(dates).isoformat(),
+        "schemes": schemes,
+    }
+
+
+def _fetch_axis_cms_json(url: str, payload: dict[str, object], *, authorization: str | None = None) -> dict[str, object]:
+    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    headers = {
+        "Accept": "application/json",
+        "Accept-Encoding": "identity",
+        "Content-Type": "application/json",
+        "Origin": "https://www.axismf.com",
+        "Referer": AXIS_PORTFOLIO_DISCLOSURE_PAGE_URL,
+        "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+    }
+    if authorization:
+        headers["Authorization"] = authorization
+    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    with urllib.request.urlopen(request, timeout=AMFI_NAV_REQUEST_TIMEOUT_SECONDS) as response:
+        final_url = urllib.parse.urlsplit(response.geturl())
+        if response.status != HTTPStatus.OK or (final_url.hostname or "").lower() not in {"axismf.com", "www.axismf.com"}:
+            raise ValueError("axis_portfolio_source_unavailable")
+        raw = response.read(MAX_AMC_PORTFOLIO_PAGE_BYTES + 1)
+        if len(raw) > MAX_AMC_PORTFOLIO_PAGE_BYTES:
+            raise ValueError("axis_portfolio_catalogue_too_large")
+    try:
+        result = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("invalid_axis_portfolio_catalogue") from error
+    if not isinstance(result, dict):
+        raise ValueError("invalid_axis_portfolio_catalogue")
+    return result
+
+
+def fetch_axis_portfolio_disclosure() -> dict[str, object]:
+    """Fetch and cache the newest official Axis consolidated monthly workbook."""
+    with _SESSION_LOCK:
+        cached = _AMC_PORTFOLIO_CACHE.get("axis_mutual_fund")
+        if cached and time.monotonic() - float(cached.get("created_at", 0)) < AMC_PORTFOLIO_CACHE_SECONDS:
+            package = cached.get("package")
+            if isinstance(package, dict):
+                return package
+    try:
+        token_response = _fetch_axis_cms_json(AXIS_CMS_TOKEN_URL, {})
+        token_data = token_response.get("data")
+        authorization = str(token_data.get("token") if isinstance(token_data, dict) else "")
+        if not re.fullmatch(r"Bearer\s+[A-Fa-f0-9]{64,1024}", authorization):
+            raise ValueError("axis_portfolio_source_unavailable")
+        catalogue = _fetch_axis_cms_json(
+            AXIS_CMS_SCHEME_DOCUMENTS_URL,
+            {"sdType": "yearMonthSchemeDocs", "sdID": "sdMonthSchemePortfolio", "schemeCode": "Consolidated"},
+            authorization=authorization,
+        )
+        links = parse_axis_portfolio_document_catalogue(catalogue)
+        package: dict[str, object] | None = None
+        last_error: ValueError | None = None
+        for link in links[:3]:
+            disclosure_url = str(link["url"])
+            request = urllib.request.Request(
+                disclosure_url,
+                headers={
+                    "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*;q=0.8",
+                    "Accept-Encoding": "identity",
+                    "Referer": AXIS_PORTFOLIO_DISCLOSURE_PAGE_URL,
+                    "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+                },
+                method="GET",
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=AMFI_NAV_REQUEST_TIMEOUT_SECONDS) as response:
+                    final_url = urllib.parse.urlsplit(response.geturl())
+                    if response.status != HTTPStatus.OK or (final_url.hostname or "").lower() not in {"axismf.com", "www.axismf.com"}:
+                        raise ValueError("axis_portfolio_source_unavailable")
+                    workbook = response.read(MAX_AMC_PORTFOLIO_RESPONSE_BYTES + 1)
+                    if len(workbook) > MAX_AMC_PORTFOLIO_RESPONSE_BYTES:
+                        raise ValueError("axis_portfolio_response_too_large")
+                package = parse_axis_portfolio_workbook(workbook, source_url=disclosure_url)
+                break
+            except ValueError as error:
+                last_error = error
+        if package is None:
+            raise last_error or ValueError("axis_portfolio_source_unavailable")
+    except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout, TimeoutError, OSError) as error:
+        raise ValueError("axis_portfolio_source_unavailable") from error
+    with _SESSION_LOCK:
+        _AMC_PORTFOLIO_CACHE["axis_mutual_fund"] = {"created_at": time.monotonic(), "package": package}
+    return package
+
+
+def _parse_icici_portfolio_date(value: str) -> date | None:
+    match = re.search(r"as\s+on\s+([A-Za-z]{3,9}\s+\d{1,2},\s*\d{4})", value, re.IGNORECASE)
+    if not match:
+        return None
+    normalized = re.sub(r",\s*", ", ", re.sub(r"\s+", " ", match.group(1))).strip()
+    for format_string in ("%B %d, %Y", "%b %d, %Y"):
+        try:
+            return datetime.strptime(normalized, format_string).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _parse_icici_scheme_workbook(
+    payload: bytes,
+    *,
+    scheme_name_hint: str,
+) -> dict[str, object]:
+    if not payload or len(payload) > MAX_AMC_PORTFOLIO_RESPONSE_BYTES:
+        raise ValueError("invalid_icici_portfolio_workbook")
+    try:
+        matrices = _xlsx_sheet_matrices(payload)
+    except ValueError as error:
+        raise ValueError("invalid_icici_portfolio_workbook") from error
+    for sheet_name, matrix in matrices:
+        if len(matrix) < 5:
+            continue
+        scheme_name = ""
+        portfolio_date: date | None = None
+        for row in matrix[:12]:
+            text = " ".join(str(cell) for cell in row if str(cell).strip())
+            if not portfolio_date:
+                portfolio_date = _parse_icici_portfolio_date(text)
+            for cell in row:
+                candidate = re.sub(r"\s+", " ", str(cell)).strip()
+                if re.match(r"^ICICI\s+Prudential\b", candidate, re.IGNORECASE) and "mutual fund" not in candidate.lower():
+                    scheme_name = candidate
+                    break
+            if scheme_name and portfolio_date:
+                break
+        scheme_name = scheme_name or scheme_name_hint
+        header_index = -1
+        columns: dict[str, int] = {}
+        for index, row in enumerate(matrix[:25]):
+            keys = {re.sub(r"[^a-z0-9%]", "", str(cell).lower()): column for column, cell in enumerate(row)}
+            isin_column = next((column for key, column in keys.items() if key == "isin"), None)
+            name_column = next((column for key, column in keys.items() if "companyissuerinstrumentname" in key or "nameoftheinstrument" in key), None)
+            weight_column = next((column for key, column in keys.items() if "%tonav" in key or "%tonetassets" in key), None)
+            if isin_column is not None and name_column is not None and weight_column is not None:
+                header_index = index
+                columns = {
+                    "isin": isin_column,
+                    "security": name_column,
+                    "weight": weight_column,
+                    "sector": next((column for key, column in keys.items() if "industry" in key or "rating" in key), -1),
+                }
+                break
+        if header_index < 0 or portfolio_date is None or not scheme_name:
+            continue
+        holdings: list[dict[str, object]] = []
+        for row in matrix[header_index + 1:]:
+            def cell(column: int) -> object:
+                return row[column] if 0 <= column < len(row) else ""
+
+            isin = re.sub(r"[^A-Z0-9]", "", str(cell(columns["isin"])).upper())
+            security = re.sub(r"\*+$", "", str(cell(columns["security"])).strip()).strip()
+            weight = _portfolio_number(cell(columns["weight"]))
+            if not re.fullmatch(r"IN[A-Z0-9]{10}", isin) or not security or weight is None or weight <= 0:
+                continue
+            holdings.append({
+                "isin": isin,
+                "security": security,
+                "sector": str(cell(columns["sector"])).strip() or "Unclassified",
+                "weight": float(weight),
+            })
+        if not holdings:
+            continue
+        raw_total = sum(float(item["weight"]) for item in holdings)
+        scale = 100.0 if raw_total <= 1.5 else 1.0
+        for item in holdings:
+            item["weight_pct"] = round(float(item.pop("weight")) * scale, 6)
+        return {
+            "scheme_name": scheme_name,
+            "scheme_keys": sorted(_underlying_scheme_keys(scheme_name)),
+            "sheet_name": sheet_name,
+            "portfolio_date": portfolio_date.isoformat(),
+            "coverage_pct": round(sum(float(item["weight_pct"]) for item in holdings), 2),
+            "holdings": holdings,
+        }
+    raise ValueError("invalid_icici_portfolio_workbook")
+
+
+def parse_icici_portfolio_archive(
+    payload: bytes,
+    *,
+    source_name: str,
+    scheme_names: list[str] | None = None,
+) -> dict[str, object]:
+    """Parse ICICI Prudential's official monthly ZIP of per-scheme workbooks."""
+    if not payload or len(payload) > MAX_ICICI_PORTFOLIO_ARCHIVE_BYTES:
+        raise ValueError("invalid_icici_portfolio_archive")
+    requested_keys = {
+        key
+        for scheme_name in (scheme_names or [])
+        for key in _underlying_scheme_keys(str(scheme_name))
+    }
+    schemes: list[dict[str, object]] = []
+    dates: list[date] = []
+    try:
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            entries = [entry for entry in archive.infolist() if not entry.is_dir()]
+            if not entries or len(entries) > MAX_ICICI_PORTFOLIO_ARCHIVE_ENTRIES:
+                raise ValueError("invalid_icici_portfolio_archive")
+            total_uncompressed = 0
+            for entry in entries:
+                entry_path = Path(entry.filename)
+                if (
+                    entry.flag_bits & 0x1
+                    or entry_path.name != entry.filename
+                    or ".." in entry_path.parts
+                    or entry_path.suffix.lower() != ".xlsx"
+                    or entry.file_size <= 0
+                    or entry.file_size > MAX_AMC_PORTFOLIO_RESPONSE_BYTES
+                ):
+                    raise ValueError("invalid_icici_portfolio_archive")
+                total_uncompressed += entry.file_size
+                if total_uncompressed > MAX_ICICI_PORTFOLIO_UNCOMPRESSED_BYTES:
+                    raise ValueError("invalid_icici_portfolio_archive")
+            for entry in entries:
+                scheme_hint = Path(entry.filename).stem.strip()
+                if requested_keys and not requested_keys.intersection(_underlying_scheme_keys(scheme_hint)):
+                    continue
+                try:
+                    scheme = _parse_icici_scheme_workbook(
+                        archive.read(entry),
+                        scheme_name_hint=scheme_hint,
+                    )
+                except ValueError:
+                    continue
+                schemes.append(scheme)
+                dates.append(date.fromisoformat(str(scheme["portfolio_date"])))
+    except (zipfile.BadZipFile, OSError) as error:
+        raise ValueError("invalid_icici_portfolio_archive") from error
+    if not schemes or not dates:
+        raise ValueError("icici_portfolio_scheme_unavailable" if requested_keys else "invalid_icici_portfolio_archive")
+    return {
+        "provider": "icici_prudential",
+        "amc_name": "ICICI Prudential Mutual Fund",
+        "source": "ICICI Prudential Mutual Fund monthly portfolio disclosure",
+        "source_page_url": ICICI_PORTFOLIO_DISCLOSURE_PAGE_URL,
+        "source_url": ICICI_PORTFOLIO_DISCLOSURE_PAGE_URL,
+        "source_archive": Path(source_name).name,
+        "portfolio_date": max(dates).isoformat(),
+        "schemes": schemes,
+    }
+
+
+def _latest_icici_portfolio_archive() -> Path:
+    candidates: list[tuple[date, float, Path]] = []
+    for path in (Path.home() / "Downloads").glob("Monthly-Portfolio-Disclosure-*.zip"):
+        match = re.fullmatch(r"Monthly-Portfolio-Disclosure-([A-Za-z]+)-(\d{4})\.zip", path.name, re.IGNORECASE)
+        if not match or not path.is_file():
+            continue
+        try:
+            month = datetime.strptime(match.group(1), "%B").month
+            disclosure_month = date(int(match.group(2)), month, 1)
+            candidates.append((disclosure_month, path.stat().st_mtime, path))
+        except (OSError, ValueError):
+            continue
+    if not candidates:
+        raise ValueError("icici_portfolio_archive_not_downloaded")
+    return max(candidates)[2]
+
+
+def fetch_icici_portfolio_disclosures(scheme_names: list[str]) -> dict[str, object]:
+    """Read the newest browser-downloaded official ICICI monthly archive."""
+    archive_path = _latest_icici_portfolio_archive()
+    cache_key = "icici_prudential:" + hashlib.sha256(
+        (str(archive_path.resolve()) + "\n" + "\n".join(sorted(set(scheme_names)))).encode("utf-8")
+    ).hexdigest()
+    with _SESSION_LOCK:
+        cached = _AMC_PORTFOLIO_CACHE.get(cache_key)
+        if cached and time.monotonic() - float(cached.get("created_at", 0)) < AMC_PORTFOLIO_CACHE_SECONDS:
+            package = cached.get("package")
+            if isinstance(package, dict):
+                return package
+    try:
+        archive_size = archive_path.stat().st_size
+        if archive_size <= 0 or archive_size > MAX_ICICI_PORTFOLIO_ARCHIVE_BYTES:
+            raise ValueError("invalid_icici_portfolio_archive")
+        package = parse_icici_portfolio_archive(
+            archive_path.read_bytes(),
+            source_name=archive_path.name,
+            scheme_names=scheme_names,
+        )
+    except OSError as error:
+        raise ValueError("icici_portfolio_archive_unavailable") from error
+    with _SESSION_LOCK:
+        _AMC_PORTFOLIO_CACHE[cache_key] = {"created_at": time.monotonic(), "package": package}
+    return package
+
+
+def parse_sbi_portfolio_disclosure_links(html: str) -> list[dict[str, object]]:
+    """Return newest-first official SBI consolidated monthly workbook links."""
+    candidates: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for raw_url in re.findall(r"href\s*=\s*[\"']([^\"']+\.xlsx(?:\?[^\"']*)?)[\"']", html, re.IGNORECASE):
+        url = urllib.parse.urljoin(SBI_PORTFOLIO_DISCLOSURE_PAGE_URL, html_module.unescape(raw_url))
+        parsed = urllib.parse.urlsplit(url)
+        filename = urllib.parse.unquote(Path(parsed.path).name)
+        match = re.fullmatch(
+            r"all-schemes?-monthly-portfolio---as-on-(\d{1,2})(?:st|nd|rd|th)-([a-z]+)-(\d{4})\.xlsx",
+            filename,
+            re.IGNORECASE,
+        )
+        if (
+            not match
+            or (parsed.hostname or "").lower() not in {"sbimf.com", "www.sbimf.com"}
+            or not parsed.path.startswith("/docs/default-source/scheme-portfolios/")
+            or url in seen
+        ):
+            continue
+        try:
+            portfolio_date = datetime.strptime(
+                f"{match.group(1)} {match.group(2)} {match.group(3)}",
+                "%d %B %Y",
+            ).date()
+        except ValueError:
+            continue
+        seen.add(url)
+        candidates.append({"url": url, "portfolio_date": portfolio_date})
+    candidates.sort(key=lambda item: item["portfolio_date"], reverse=True)
+    if not candidates:
+        raise ValueError("sbi_portfolio_link_unavailable")
+    return candidates
+
+
+def parse_sbi_portfolio_workbook(
+    payload: bytes,
+    *,
+    source_url: str,
+    scheme_names: list[str] | None = None,
+) -> dict[str, object]:
+    """Parse SBI Mutual Fund's official consolidated monthly workbook."""
+    if not payload or len(payload) > MAX_AMC_PORTFOLIO_RESPONSE_BYTES:
+        raise ValueError("invalid_sbi_portfolio_workbook")
+    requested_keys = {
+        key
+        for scheme_name in (scheme_names or [])
+        for key in _underlying_scheme_keys(str(scheme_name))
+    }
+    try:
+        matrices = _xlsx_sheet_matrices(payload)
+    except ValueError as error:
+        raise ValueError("invalid_sbi_portfolio_workbook") from error
+    schemes: list[dict[str, object]] = []
+    dates: list[date] = []
+    for sheet_name, matrix in matrices:
+        if len(matrix) < 3 or sheet_name.strip().lower() == "index":
+            continue
+        scheme_name = ""
+        portfolio_date: date | None = None
+        for row in matrix[:10]:
+            for index, value in enumerate(row):
+                label = re.sub(r"\s+", " ", str(value)).strip()
+                if label.upper().startswith("SCHEME NAME") and index + 1 < len(row):
+                    scheme_name = re.sub(r"\s+", " ", str(row[index + 1])).strip()
+                elif label.upper().startswith("PORTFOLIO STATEMENT AS ON") and index + 1 < len(row):
+                    portfolio_date = _portfolio_date(row[index + 1])
+        scheme_name = re.sub(r"\s*\(Erstwhile\s+known\s+as\b.*\)\s*$", "", scheme_name, flags=re.IGNORECASE).strip()
+        if not scheme_name or portfolio_date is None:
+            continue
+        scheme_keys = _underlying_scheme_keys(scheme_name)
+        if requested_keys and not requested_keys.intersection(scheme_keys):
+            continue
+        header_index = -1
+        columns: dict[str, int] = {}
+        for index, row in enumerate(matrix[:20]):
+            keys = {re.sub(r"[^a-z0-9%]", "", str(cell).lower()): column for column, cell in enumerate(row)}
+            isin_column = next((column for key, column in keys.items() if key == "isin"), None)
+            name_column = next((column for key, column in keys.items() if "nameoftheinstrumentissuer" in key), None)
+            weight_column = next((column for key, column in keys.items() if "%toaum" in key), None)
+            if isin_column is not None and name_column is not None and weight_column is not None:
+                header_index = index
+                columns = {
+                    "isin": isin_column,
+                    "security": name_column,
+                    "weight": weight_column,
+                    "sector": next((column for key, column in keys.items() if "ratingindustry" in key), -1),
+                }
+                break
+        if header_index < 0:
+            continue
+        holdings: list[dict[str, object]] = []
+        for row in matrix[header_index + 1:]:
+            def cell(column: int) -> object:
+                return row[column] if 0 <= column < len(row) else ""
+
+            isin = re.sub(r"[^A-Z0-9]", "", str(cell(columns["isin"])).upper())
+            security = re.sub(r"\*+$", "", str(cell(columns["security"])).strip()).strip()
+            weight = _portfolio_number(cell(columns["weight"]))
+            if not re.fullmatch(r"IN[A-Z0-9]{10}", isin) or not security or weight is None or weight <= 0:
+                continue
+            holdings.append({
+                "isin": isin,
+                "security": security,
+                "sector": str(cell(columns["sector"])).strip() or "Unclassified",
+                "weight_pct": round(float(weight), 6),
+            })
+        if not holdings:
+            continue
+        schemes.append({
+            "scheme_name": scheme_name,
+            "scheme_keys": sorted(scheme_keys),
+            "sheet_name": sheet_name,
+            "portfolio_date": portfolio_date.isoformat(),
+            "coverage_pct": round(sum(float(item["weight_pct"]) for item in holdings), 2),
+            "holdings": holdings,
+        })
+        dates.append(portfolio_date)
+    if not schemes or not dates:
+        raise ValueError("sbi_portfolio_scheme_unavailable" if requested_keys else "invalid_sbi_portfolio_workbook")
+    return {
+        "provider": "sbi_mutual_fund",
+        "amc_name": "SBI Mutual Fund",
+        "source": "SBI Mutual Fund consolidated monthly portfolio disclosure",
+        "source_page_url": SBI_PORTFOLIO_DISCLOSURE_PAGE_URL,
+        "source_url": source_url,
+        "portfolio_date": max(dates).isoformat(),
+        "schemes": schemes,
+    }
+
+
+def fetch_sbi_portfolio_disclosures(scheme_names: list[str]) -> dict[str, object]:
+    """Fetch and cache the newest parseable official SBI monthly workbook."""
+    cache_key = "sbi_mutual_fund:" + hashlib.sha256("\n".join(sorted(set(scheme_names))).encode("utf-8")).hexdigest()
+    with _SESSION_LOCK:
+        cached = _AMC_PORTFOLIO_CACHE.get(cache_key)
+        if cached and time.monotonic() - float(cached.get("created_at", 0)) < AMC_PORTFOLIO_CACHE_SECONDS:
+            package = cached.get("package")
+            if isinstance(package, dict):
+                return package
+    try:
+        catalogue_fragments: list[str] = []
+        for year in (date.today().year, date.today().year - 1):
+            catalogue_body = json.dumps({
+                "FundId": 0,
+                "PSYear": str(year),
+                "PSMonth": "",
+                "PSFrequency": "Monthly",
+            }).encode("utf-8")
+            catalogue_request = urllib.request.Request(
+                SBI_PORTFOLIO_CATALOGUE_URL,
+                data=catalogue_body,
+                headers={
+                    "Accept": "text/html,*/*;q=0.8",
+                    "Accept-Encoding": "identity",
+                    "Content-Type": "application/json;charset=utf-8",
+                    "Origin": "https://www.sbimf.com",
+                    "Referer": SBI_PORTFOLIO_DISCLOSURE_PAGE_URL,
+                    "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(catalogue_request, timeout=AMFI_NAV_REQUEST_TIMEOUT_SECONDS) as response:
+                final_page = urllib.parse.urlsplit(response.geturl())
+                if response.status != HTTPStatus.OK or (final_page.hostname or "").lower() not in {"sbimf.com", "www.sbimf.com"}:
+                    raise ValueError("sbi_portfolio_source_unavailable")
+                body = response.read(MAX_AMC_PORTFOLIO_PAGE_BYTES + 1)
+                if len(body) > MAX_AMC_PORTFOLIO_PAGE_BYTES:
+                    raise ValueError("sbi_portfolio_page_too_large")
+                catalogue_fragments.append(body.decode("utf-8", errors="replace"))
+        links = parse_sbi_portfolio_disclosure_links("\n".join(catalogue_fragments))
+        package: dict[str, object] | None = None
+        last_error: ValueError | None = None
+        for link in links[:3]:
+            disclosure_url = str(link["url"])
+            request = urllib.request.Request(
+                disclosure_url,
+                headers={
+                    "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*;q=0.8",
+                    "Accept-Encoding": "identity",
+                    "Referer": SBI_PORTFOLIO_DISCLOSURE_PAGE_URL,
+                    "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+                },
+                method="GET",
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=AMFI_NAV_REQUEST_TIMEOUT_SECONDS) as response:
+                    final_url = urllib.parse.urlsplit(response.geturl())
+                    if response.status != HTTPStatus.OK or (final_url.hostname or "").lower() not in {"sbimf.com", "www.sbimf.com"}:
+                        raise ValueError("sbi_portfolio_source_unavailable")
+                    workbook = response.read(MAX_AMC_PORTFOLIO_RESPONSE_BYTES + 1)
+                    if len(workbook) > MAX_AMC_PORTFOLIO_RESPONSE_BYTES:
+                        raise ValueError("sbi_portfolio_response_too_large")
+                package = parse_sbi_portfolio_workbook(
+                    workbook,
+                    source_url=disclosure_url,
+                    scheme_names=scheme_names,
+                )
+                break
+            except ValueError as error:
+                last_error = error
+        if package is None:
+            raise last_error or ValueError("sbi_portfolio_source_unavailable")
+    except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout, TimeoutError, OSError) as error:
+        raise ValueError("sbi_portfolio_source_unavailable") from error
+    with _SESSION_LOCK:
+        _AMC_PORTFOLIO_CACHE[cache_key] = {"created_at": time.monotonic(), "package": package}
+    return package
+
+
+def parse_whiteoak_portfolio_catalogue(payload: dict[str, object]) -> list[dict[str, object]]:
+    """Return newest-first official WhiteOak monthly workbook records."""
+    records = payload.get("data")
+    if not isinstance(records, list):
+        raise ValueError("invalid_whiteoak_portfolio_catalogue")
+    candidates: list[dict[str, object]] = []
+    for record in records:
+        attributes = record.get("attributes") if isinstance(record, dict) else None
+        if not isinstance(attributes, dict) or str(attributes.get("period") or "").strip().lower() != "monthly":
+            continue
+        scheme_name = re.sub(r"\s+", " ", str(attributes.get("scheme_name") or "")).strip()
+        document_name = re.sub(r"\s+", " ", str(attributes.get("doc_name") or "")).strip()
+        file_data = attributes.get("doc_file")
+        file_record = file_data.get("data") if isinstance(file_data, dict) else None
+        file_attributes = file_record.get("attributes") if isinstance(file_record, dict) else None
+        url = str(file_attributes.get("url") if isinstance(file_attributes, dict) else "").strip()
+        parsed_url = urllib.parse.urlsplit(url)
+        date_match = re.search(
+            r"(\d{1,2})(?:st|nd|rd|th)\s+([A-Za-z]+)\s*(\d{4})\s*$",
+            document_name,
+            re.IGNORECASE,
+        )
+        if (
+            not scheme_name
+            or not date_match
+            or (parsed_url.hostname or "").lower() != "content.whiteoakamc.com"
+            or not parsed_url.path.lower().endswith(".xlsx")
+        ):
+            continue
+        try:
+            portfolio_date = datetime.strptime(
+                f"{date_match.group(1)} {date_match.group(2)} {date_match.group(3)}",
+                "%d %B %Y",
+            ).date()
+        except ValueError:
+            continue
+        candidates.append({
+            "scheme_name": scheme_name,
+            "scheme_keys": sorted(_underlying_scheme_keys(scheme_name)),
+            "document_name": document_name,
+            "url": url,
+            "portfolio_date": portfolio_date,
+        })
+    candidates.sort(key=lambda item: (item["portfolio_date"], item["scheme_name"]), reverse=True)
+    if not candidates:
+        raise ValueError("whiteoak_portfolio_link_unavailable")
+    return candidates
+
+
+def parse_whiteoak_portfolio_workbook(
+    payload: bytes,
+    *,
+    scheme_name_hint: str,
+    source_url: str,
+) -> dict[str, object]:
+    """Parse one official WhiteOak monthly scheme workbook."""
+    if not payload or len(payload) > MAX_AMC_PORTFOLIO_RESPONSE_BYTES:
+        raise ValueError("invalid_whiteoak_portfolio_workbook")
+    try:
+        matrices = _xlsx_sheet_matrices(payload)
+    except ValueError as error:
+        raise ValueError("invalid_whiteoak_portfolio_workbook") from error
+    for sheet_name, matrix in matrices:
+        if len(matrix) < 5:
+            continue
+        scheme_name = ""
+        portfolio_date: date | None = None
+        for row in matrix[:12]:
+            for value in row:
+                text = re.sub(r"\s+", " ", str(value)).strip()
+                if text.lower().startswith("whiteoak capital") and "monthly portfolio" not in text.lower():
+                    scheme_name = text
+                match = re.search(r"as\s+on\s+([A-Za-z]+\s+\d{1,2},\s*\d{4})", text, re.IGNORECASE)
+                if match:
+                    normalized = re.sub(r",\s*", ", ", re.sub(r"\s+", " ", match.group(1)))
+                    try:
+                        portfolio_date = datetime.strptime(normalized, "%B %d, %Y").date()
+                    except ValueError:
+                        portfolio_date = None
+        scheme_name = scheme_name or scheme_name_hint
+        header_index = -1
+        columns: dict[str, int] = {}
+        for index, row in enumerate(matrix[:20]):
+            keys = {re.sub(r"[^a-z0-9%]", "", str(cell).lower()): column for column, cell in enumerate(row)}
+            isin_column = next((column for key, column in keys.items() if key == "isin"), None)
+            name_column = next((column for key, column in keys.items() if key == "nameoftheinstrument"), None)
+            weight_column = next((column for key, column in keys.items() if "%tonetassets" in key), None)
+            if isin_column is not None and name_column is not None and weight_column is not None:
+                header_index = index
+                columns = {
+                    "isin": isin_column,
+                    "security": name_column,
+                    "weight": weight_column,
+                    "sector": next((column for key, column in keys.items() if "industryrating" in key), -1),
+                }
+                break
+        if not scheme_name or portfolio_date is None or header_index < 0:
+            continue
+        holdings: list[dict[str, object]] = []
+        for row in matrix[header_index + 1:]:
+            def cell(column: int) -> object:
+                return row[column] if 0 <= column < len(row) else ""
+
+            isin = re.sub(r"[^A-Z0-9]", "", str(cell(columns["isin"])).upper())
+            security = re.sub(r"\*+$", "", str(cell(columns["security"])).strip()).strip()
+            weight = _portfolio_number(cell(columns["weight"]))
+            if not re.fullmatch(r"IN[A-Z0-9]{10}", isin) or not security or weight is None or weight <= 0:
+                continue
+            holdings.append({
+                "isin": isin,
+                "security": security,
+                "sector": str(cell(columns["sector"])).strip() or "Unclassified",
+                "weight": float(weight),
+            })
+        if not holdings:
+            continue
+        raw_total = sum(float(item["weight"]) for item in holdings)
+        scale = 100.0 if raw_total <= 1.5 else 1.0
+        for item in holdings:
+            item["weight_pct"] = round(float(item.pop("weight")) * scale, 6)
+        return {
+            "scheme_name": scheme_name,
+            "scheme_keys": sorted(_underlying_scheme_keys(scheme_name)),
+            "sheet_name": sheet_name,
+            "source_url": source_url,
+            "portfolio_date": portfolio_date.isoformat(),
+            "coverage_pct": round(sum(float(item["weight_pct"]) for item in holdings), 2),
+            "holdings": holdings,
+        }
+    raise ValueError("invalid_whiteoak_portfolio_workbook")
+
+
+def fetch_whiteoak_portfolio_disclosures(scheme_names: list[str]) -> dict[str, object]:
+    """Fetch requested schemes from WhiteOak's newest official monthly files."""
+    cache_key = "whiteoak_capital:" + hashlib.sha256("\n".join(sorted(set(scheme_names))).encode("utf-8")).hexdigest()
+    with _SESSION_LOCK:
+        cached = _AMC_PORTFOLIO_CACHE.get(cache_key)
+        if cached and time.monotonic() - float(cached.get("created_at", 0)) < AMC_PORTFOLIO_CACHE_SECONDS:
+            package = cached.get("package")
+            if isinstance(package, dict):
+                return package
+    headers = {
+        "Accept-Encoding": "identity",
+        "Origin": "https://mf.whiteoakamc.com",
+        "Referer": WHITEOAK_PORTFOLIO_DISCLOSURE_PAGE_URL,
+        "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+    }
+    catalogue_request = urllib.request.Request(
+        WHITEOAK_PORTFOLIO_CATALOGUE_URL,
+        headers={**headers, "Accept": "application/json"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(catalogue_request, timeout=AMFI_NAV_REQUEST_TIMEOUT_SECONDS) as response:
+            final_url = urllib.parse.urlsplit(response.geturl())
+            if response.status != HTTPStatus.OK or (final_url.hostname or "").lower() != "cms.whiteoakamc.com":
+                raise ValueError("whiteoak_portfolio_source_unavailable")
+            raw = response.read(MAX_AMC_PORTFOLIO_PAGE_BYTES + 1)
+            if len(raw) > MAX_AMC_PORTFOLIO_PAGE_BYTES:
+                raise ValueError("whiteoak_portfolio_catalogue_too_large")
+        try:
+            catalogue_payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("invalid_whiteoak_portfolio_catalogue") from error
+        if not isinstance(catalogue_payload, dict):
+            raise ValueError("invalid_whiteoak_portfolio_catalogue")
+        candidates = parse_whiteoak_portfolio_catalogue(catalogue_payload)
+        requested_key_sets = [_underlying_scheme_keys(name) for name in scheme_names]
+        selected: list[dict[str, object]] = []
+        for requested_keys in requested_key_sets:
+            match = next(
+                (candidate for candidate in candidates if requested_keys.intersection(set(candidate["scheme_keys"]))),
+                None,
+            )
+            if match is not None and str(match["url"]) not in {str(item["url"]) for item in selected}:
+                selected.append(match)
+        schemes: list[dict[str, object]] = []
+        for candidate in selected:
+            disclosure_url = str(candidate["url"])
+            workbook_request = urllib.request.Request(
+                disclosure_url,
+                headers={
+                    **headers,
+                    "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*;q=0.8",
+                },
+                method="GET",
+            )
+            with urllib.request.urlopen(workbook_request, timeout=AMFI_NAV_REQUEST_TIMEOUT_SECONDS) as response:
+                final_url = urllib.parse.urlsplit(response.geturl())
+                if response.status != HTTPStatus.OK or (final_url.hostname or "").lower() != "content.whiteoakamc.com":
+                    raise ValueError("whiteoak_portfolio_source_unavailable")
+                workbook = response.read(MAX_AMC_PORTFOLIO_RESPONSE_BYTES + 1)
+                if len(workbook) > MAX_AMC_PORTFOLIO_RESPONSE_BYTES:
+                    raise ValueError("whiteoak_portfolio_response_too_large")
+            schemes.append(parse_whiteoak_portfolio_workbook(
+                workbook,
+                scheme_name_hint=str(candidate["scheme_name"]),
+                source_url=disclosure_url,
+            ))
+        if not schemes:
+            raise ValueError("whiteoak_portfolio_scheme_unavailable")
+        dates = [date.fromisoformat(str(scheme["portfolio_date"])) for scheme in schemes]
+        package = {
+            "provider": "whiteoak_capital",
+            "amc_name": "WhiteOak Capital Mutual Fund",
+            "source": "WhiteOak Capital Mutual Fund monthly portfolio disclosure",
+            "source_page_url": WHITEOAK_PORTFOLIO_DISCLOSURE_PAGE_URL,
+            "source_url": WHITEOAK_PORTFOLIO_DISCLOSURE_PAGE_URL,
+            "portfolio_date": max(dates).isoformat(),
+            "schemes": schemes,
+        }
+    except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout, TimeoutError, OSError) as error:
+        raise ValueError("whiteoak_portfolio_source_unavailable") from error
+    with _SESSION_LOCK:
+        _AMC_PORTFOLIO_CACHE[cache_key] = {"created_at": time.monotonic(), "package": package}
+    return package
+
+
+def _edelweiss_catalogue_date(text: str) -> date | None:
+    normalized = re.sub(r"[_/,-]+", " ", urllib.parse.unquote(str(text)))
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    patterns = (
+        (r"\b(\d{1,2})\s+([A-Za-z]+)\s+(20\d{2})\b", "%d %B %Y"),
+        (r"(\d{1,2})([A-Za-z]+)(20\d{2})", "%d %b %Y"),
+        (r"\b([A-Za-z]+)\s+(\d{1,2})\s+(20\d{2})\b", "%B %d %Y"),
+    )
+    for pattern, format_string in patterns:
+        match = re.search(pattern, normalized, re.IGNORECASE)
+        if not match:
+            continue
+        try:
+            return datetime.strptime(" ".join(match.groups()), format_string).date()
+        except ValueError:
+            continue
+    month_match = re.search(r"\b([A-Za-z]+)\s+(20\d{2})\b", normalized, re.IGNORECASE)
+    if month_match:
+        try:
+            month_start = datetime.strptime(" ".join(month_match.groups()), "%B %Y").date()
+            return (month_start.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+        except ValueError:
+            pass
+    return None
+
+
+def parse_edelweiss_portfolio_catalogue(payload: object) -> list[dict[str, object]]:
+    """Return newest-first official Edelweiss spreadsheet records from its API."""
+    candidates: list[dict[str, object]] = []
+    seen: set[str] = set()
+
+    def visit(node: object, inherited_text: str = "") -> None:
+        if isinstance(node, list):
+            for item in node:
+                visit(item, inherited_text)
+            return
+        if not isinstance(node, dict):
+            return
+        scalar_text = " ".join(str(value) for value in node.values() if isinstance(value, (str, int, float)))
+        context = re.sub(r"\s+", " ", f"{inherited_text} {scalar_text}").strip()
+        for value in node.values():
+            if not isinstance(value, str):
+                continue
+            url = urllib.parse.urljoin(EDELWEISS_PORTFOLIO_DISCLOSURE_PAGE_URL, html_module.unescape(value.strip()))
+            parsed = urllib.parse.urlsplit(url)
+            if (
+                url in seen
+                or (parsed.hostname or "").lower() not in {"edelweissmf.com", "www.edelweissmf.com"}
+                or not parsed.path.lower().endswith((".xlsx", ".xls"))
+            ):
+                continue
+            portfolio_date = _edelweiss_catalogue_date(f"{context} {parsed.path}")
+            if portfolio_date is None:
+                continue
+            name = next(
+                (
+                    re.sub(r"\s+", " ", str(node.get(key) or "")).strip()
+                    for key in ("schemeName", "scheme_name", "fundName", "fund_name", "title", "name", "documentName")
+                    if str(node.get(key) or "").strip()
+                ),
+                "",
+            )
+            seen.add(url)
+            candidates.append({
+                "scheme_name": name,
+                "scheme_keys": sorted(_underlying_scheme_keys(name)) if name else [],
+                "url": url,
+                "portfolio_date": portfolio_date,
+            })
+        for value in node.values():
+            if isinstance(value, (dict, list)):
+                visit(value, context)
+
+    visit(payload)
+    candidates.sort(key=lambda item: (item["portfolio_date"], item["scheme_name"]), reverse=True)
+    if not candidates:
+        raise ValueError("edelweiss_portfolio_link_unavailable")
+    return candidates
+
+
+def parse_edelweiss_portfolio_workbook(
+    payload: bytes,
+    *,
+    source_url: str,
+    scheme_names: list[str] | None = None,
+) -> dict[str, object]:
+    """Parse an official Edelweiss monthly scheme or consolidated workbook."""
+    if not payload or len(payload) > MAX_AMC_PORTFOLIO_RESPONSE_BYTES:
+        raise ValueError("invalid_edelweiss_portfolio_workbook")
+    requested_keys = {
+        key
+        for scheme_name in (scheme_names or [])
+        for key in _underlying_scheme_keys(str(scheme_name))
+    }
+    try:
+        matrices = _xlsx_sheet_matrices(payload)
+    except ValueError as error:
+        raise ValueError("invalid_edelweiss_portfolio_workbook") from error
+    schemes: list[dict[str, object]] = []
+    dates: list[date] = []
+    for sheet_name, matrix in matrices:
+        if len(matrix) < 4 or sheet_name.strip().lower() in {"index", "contents"}:
+            continue
+        scheme_name = ""
+        portfolio_date: date | None = None
+        for row in matrix[:15]:
+            row_text = re.sub(r"\s+", " ", " ".join(str(cell) for cell in row if str(cell).strip())).strip()
+            if not scheme_name and "edelweiss" in row_text.lower() and "fund" in row_text.lower():
+                scheme_name = re.sub(r"^portfolio\s+statement\s+of\s+", "", row_text, flags=re.IGNORECASE)
+                scheme_name = re.sub(
+                    r"\s*(?:monthly\s+)?portfolio(?:\s+statement)?\s*(?:as\s+on)?.*$",
+                    "",
+                    scheme_name,
+                    flags=re.IGNORECASE,
+                ).strip()
+                scheme_name = re.sub(r"\s+as\s+on\s+.*$", "", scheme_name, flags=re.IGNORECASE).strip()
+            portfolio_date = portfolio_date or _edelweiss_catalogue_date(row_text)
+        if not scheme_name and "edelweiss" in sheet_name.lower():
+            scheme_name = re.sub(r"\s+", " ", sheet_name).strip()
+        scheme_keys = _underlying_scheme_keys(scheme_name)
+        if not scheme_name or portfolio_date is None or (requested_keys and not requested_keys.intersection(scheme_keys)):
+            continue
+        header_index = -1
+        columns: dict[str, int] = {}
+        for index, row in enumerate(matrix[:25]):
+            keys = {re.sub(r"[^a-z0-9%]", "", str(cell).lower()): column for column, cell in enumerate(row)}
+            isin_column = next((column for key, column in keys.items() if key == "isin" or key.startswith("isinno")), None)
+            name_column = next((column for key, column in keys.items() if "nameoftheinstrument" in key or "nameofissuer" in key), None)
+            weight_column = next((column for key, column in keys.items() if "%tonetassets" in key or "%tonav" in key or "%ofaum" in key), None)
+            if isin_column is not None and name_column is not None and weight_column is not None:
+                header_index = index
+                columns = {
+                    "isin": isin_column,
+                    "security": name_column,
+                    "weight": weight_column,
+                    "sector": next((column for key, column in keys.items() if "industry" in key or "rating" in key), -1),
+                }
+                break
+        if header_index < 0:
+            continue
+        holdings: list[dict[str, object]] = []
+        for row in matrix[header_index + 1:]:
+            def cell(column: int) -> object:
+                return row[column] if 0 <= column < len(row) else ""
+
+            isin = re.sub(r"[^A-Z0-9]", "", str(cell(columns["isin"])).upper())
+            security = re.sub(r"\*+$", "", str(cell(columns["security"])).strip()).strip()
+            weight = _portfolio_number(cell(columns["weight"]))
+            if not re.fullmatch(r"IN[A-Z0-9]{10}", isin) or not security or weight is None or weight <= 0:
+                continue
+            holdings.append({
+                "isin": isin,
+                "security": security,
+                "sector": str(cell(columns["sector"])).strip() or "Unclassified",
+                "weight": float(weight),
+            })
+        if not holdings:
+            continue
+        raw_total = sum(float(item["weight"]) for item in holdings)
+        scale = 100.0 if raw_total <= 1.5 else 1.0
+        for item in holdings:
+            item["weight_pct"] = round(float(item.pop("weight")) * scale, 6)
+        schemes.append({
+            "scheme_name": scheme_name,
+            "scheme_keys": sorted(scheme_keys),
+            "sheet_name": sheet_name,
+            "source_url": source_url,
+            "portfolio_date": portfolio_date.isoformat(),
+            "coverage_pct": round(sum(float(item["weight_pct"]) for item in holdings), 2),
+            "holdings": holdings,
+        })
+        dates.append(portfolio_date)
+    if not schemes or not dates:
+        raise ValueError("edelweiss_portfolio_scheme_unavailable" if requested_keys else "invalid_edelweiss_portfolio_workbook")
+    return {
+        "provider": "edelweiss_mutual_fund",
+        "amc_name": "Edelweiss Mutual Fund",
+        "source": "Edelweiss Mutual Fund monthly portfolio disclosure",
+        "source_page_url": EDELWEISS_PORTFOLIO_DISCLOSURE_PAGE_URL,
+        "source_url": source_url,
+        "portfolio_date": max(dates).isoformat(),
+        "schemes": schemes,
+    }
+
+
+def _latest_edelweiss_portfolio_workbook() -> Path:
+    candidates: list[tuple[date, float, Path]] = []
+    for path in (Path.home() / "Downloads").glob("EDEL_Portfolio_Monthly_Notes_*.xlsx"):
+        if not path.is_file():
+            continue
+        portfolio_date = _edelweiss_catalogue_date(path.stem)
+        if portfolio_date is None:
+            continue
+        try:
+            candidates.append((portfolio_date, path.stat().st_mtime, path))
+        except OSError:
+            continue
+    if not candidates:
+        raise ValueError("edelweiss_portfolio_workbook_not_downloaded")
+    return max(candidates)[2]
+
+
+def fetch_edelweiss_portfolio_disclosures(scheme_names: list[str]) -> dict[str, object]:
+    """Fetch requested schemes from Edelweiss's official statutory catalogue."""
+    cache_key = "edelweiss_mutual_fund:" + hashlib.sha256("\n".join(sorted(set(scheme_names))).encode("utf-8")).hexdigest()
+    with _SESSION_LOCK:
+        cached = _AMC_PORTFOLIO_CACHE.get(cache_key)
+        if cached and time.monotonic() - float(cached.get("created_at", 0)) < AMC_PORTFOLIO_CACHE_SECONDS:
+            package = cached.get("package")
+            if isinstance(package, dict):
+                return package
+    query = urllib.parse.urlencode({
+        "type": "STATUTORY",
+        "fundType": "MF",
+        "menuName": "Portfolio of scheme(s)",
+    })
+    request = urllib.request.Request(
+        f"{EDELWEISS_PORTFOLIO_CATALOGUE_URL}?{query}",
+        headers={
+            "Accept": "application/json",
+            "Accept-Encoding": "identity",
+            "Origin": "https://www.edelweissmf.com",
+            "Referer": EDELWEISS_PORTFOLIO_DISCLOSURE_PAGE_URL,
+            "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=AMFI_NAV_REQUEST_TIMEOUT_SECONDS) as response:
+            final_url = urllib.parse.urlsplit(response.geturl())
+            if response.status != HTTPStatus.OK or (final_url.hostname or "").lower() != "api.edelweissmf.com":
+                raise ValueError("edelweiss_portfolio_source_unavailable")
+            raw = response.read(MAX_AMC_PORTFOLIO_PAGE_BYTES + 1)
+            if len(raw) > MAX_AMC_PORTFOLIO_PAGE_BYTES:
+                raise ValueError("edelweiss_portfolio_catalogue_too_large")
+        try:
+            catalogue = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("invalid_edelweiss_portfolio_catalogue") from error
+        candidates = parse_edelweiss_portfolio_catalogue(catalogue)
+        requested_key_sets = [_underlying_scheme_keys(name) for name in scheme_names]
+        selected = [
+            candidate for candidate in candidates
+            if not candidate["scheme_keys"]
+            or any(keys.intersection(set(candidate["scheme_keys"])) for keys in requested_key_sets)
+        ][:3]
+        package: dict[str, object] | None = None
+        last_error: ValueError | None = None
+        for candidate in selected:
+            disclosure_url = str(candidate["url"])
+            workbook_request = urllib.request.Request(
+                disclosure_url,
+                headers={
+                    "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*;q=0.8",
+                    "Accept-Encoding": "identity",
+                    "Referer": EDELWEISS_PORTFOLIO_DISCLOSURE_PAGE_URL,
+                    "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+                },
+                method="GET",
+            )
+            try:
+                with urllib.request.urlopen(workbook_request, timeout=AMFI_NAV_REQUEST_TIMEOUT_SECONDS) as response:
+                    final_url = urllib.parse.urlsplit(response.geturl())
+                    if response.status != HTTPStatus.OK or (final_url.hostname or "").lower() not in {"edelweissmf.com", "www.edelweissmf.com"}:
+                        raise ValueError("edelweiss_portfolio_source_unavailable")
+                    workbook = response.read(MAX_AMC_PORTFOLIO_RESPONSE_BYTES + 1)
+                    if len(workbook) > MAX_AMC_PORTFOLIO_RESPONSE_BYTES:
+                        raise ValueError("edelweiss_portfolio_response_too_large")
+                package = parse_edelweiss_portfolio_workbook(
+                    workbook,
+                    source_url=disclosure_url,
+                    scheme_names=scheme_names,
+                )
+                break
+            except ValueError as error:
+                last_error = error
+        if package is None:
+            raise last_error or ValueError("edelweiss_portfolio_scheme_unavailable")
+    except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout, TimeoutError, OSError) as error:
+        try:
+            workbook_path = _latest_edelweiss_portfolio_workbook()
+            workbook_size = workbook_path.stat().st_size
+            if workbook_size <= 0 or workbook_size > MAX_AMC_PORTFOLIO_RESPONSE_BYTES:
+                raise ValueError("invalid_edelweiss_portfolio_workbook")
+            package = parse_edelweiss_portfolio_workbook(
+                workbook_path.read_bytes(),
+                source_url=EDELWEISS_PORTFOLIO_DISCLOSURE_PAGE_URL,
+                scheme_names=scheme_names,
+            )
+            package["source_archive"] = workbook_path.name
+        except (OSError, ValueError) as fallback_error:
+            raise ValueError("edelweiss_portfolio_source_unavailable") from fallback_error
+    with _SESSION_LOCK:
+        _AMC_PORTFOLIO_CACHE[cache_key] = {"created_at": time.monotonic(), "package": package}
+    return package
+
+
+def parse_ppfas_portfolio_disclosure_links(html: str) -> list[dict[str, object]]:
+    """Return newest-first official PPFAS consolidated monthly workbooks."""
+    candidates: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for raw_url in re.findall(r"href\s*=\s*[\"']([^\"']+)[\"']", html, re.IGNORECASE):
+        url = urllib.parse.urljoin(PPFAS_PORTFOLIO_DISCLOSURE_PAGE_URL, html_module.unescape(raw_url.strip()))
+        parsed = urllib.parse.urlsplit(url)
+        filename = urllib.parse.unquote(Path(parsed.path).name)
+        match = re.fullmatch(
+            r"PPFAS_Monthly_Portfolio_Report_([A-Za-z]+)_(\d{1,2})_(20\d{2})\.xls[x]?",
+            filename,
+            re.IGNORECASE,
+        )
+        if (
+            not match
+            or url in seen
+            or (parsed.hostname or "").lower() != "amc.ppfas.com"
+            or not parsed.path.startswith("/downloads/portfolio-disclosure/")
+        ):
+            continue
+        try:
+            portfolio_date = datetime.strptime(
+                f"{match.group(1)} {match.group(2)} {match.group(3)}",
+                "%B %d %Y",
+            ).date()
+        except ValueError:
+            continue
+        seen.add(url)
+        candidates.append({"url": url, "portfolio_date": portfolio_date})
+    candidates.sort(key=lambda item: item["portfolio_date"], reverse=True)
+    if not candidates:
+        raise ValueError("ppfas_portfolio_link_unavailable")
+    return candidates
+
+
+def parse_ppfas_portfolio_workbook(
+    payload: bytes,
+    *,
+    source_url: str,
+    scheme_names: list[str] | None = None,
+) -> dict[str, object]:
+    """Parse PPFAS Mutual Fund's official consolidated monthly workbook."""
+    if not payload or len(payload) > MAX_AMC_PORTFOLIO_RESPONSE_BYTES:
+        raise ValueError("invalid_ppfas_portfolio_workbook")
+    requested_keys = {
+        key
+        for scheme_name in (scheme_names or [])
+        for key in _underlying_scheme_keys(str(scheme_name))
+    }
+    try:
+        matrices = _xlsx_sheet_matrices(payload)
+    except ValueError as error:
+        raise ValueError("invalid_ppfas_portfolio_workbook") from error
+    schemes: list[dict[str, object]] = []
+    dates: list[date] = []
+    for sheet_name, matrix in matrices:
+        if len(matrix) < 4:
+            continue
+        scheme_name = ""
+        portfolio_date: date | None = None
+        for row in matrix[:12]:
+            row_text = re.sub(r"\s+", " ", " ".join(str(cell) for cell in row if str(cell).strip())).strip()
+            if not scheme_name and row_text.lower().startswith("parag parikh") and "fund" in row_text.lower():
+                scheme_name = re.sub(r"\s*\([^)]*(?:scheme|fund)[^)]*\)\s*$", "", row_text, flags=re.IGNORECASE).strip()
+            match = re.search(r"as\s+on\s+([A-Za-z]+\s+\d{1,2},\s*20\d{2})", row_text, re.IGNORECASE)
+            if match:
+                try:
+                    portfolio_date = datetime.strptime(
+                        re.sub(r",\s*", ", ", match.group(1)),
+                        "%B %d, %Y",
+                    ).date()
+                except ValueError:
+                    portfolio_date = None
+        scheme_keys = _underlying_scheme_keys(scheme_name)
+        if not scheme_name or portfolio_date is None or (requested_keys and not requested_keys.intersection(scheme_keys)):
+            continue
+        header_index = -1
+        columns: dict[str, int] = {}
+        for index, row in enumerate(matrix[:20]):
+            keys = {re.sub(r"[^a-z0-9%]", "", str(cell).lower()): column for column, cell in enumerate(row)}
+            isin_column = next((column for key, column in keys.items() if key == "isin"), None)
+            name_column = next((column for key, column in keys.items() if "nameoftheinstrument" in key), None)
+            weight_column = next((column for key, column in keys.items() if "%tonetassets" in key), None)
+            if isin_column is not None and name_column is not None and weight_column is not None:
+                header_index = index
+                columns = {
+                    "isin": isin_column,
+                    "security": name_column,
+                    "weight": weight_column,
+                    "sector": next((column for key, column in keys.items() if "industryrating" in key), -1),
+                }
+                break
+        if header_index < 0:
+            continue
+        holdings: list[dict[str, object]] = []
+        for row in matrix[header_index + 1:]:
+            def cell(column: int) -> object:
+                return row[column] if 0 <= column < len(row) else ""
+
+            isin = re.sub(r"[^A-Z0-9]", "", str(cell(columns["isin"])).upper())
+            security = re.sub(r"\*+$", "", str(cell(columns["security"])).strip()).strip()
+            weight = _portfolio_number(cell(columns["weight"]))
+            if not re.fullmatch(r"IN[A-Z0-9]{10}", isin) or not security or weight is None or weight <= 0:
+                continue
+            holdings.append({
+                "isin": isin,
+                "security": security,
+                "sector": str(cell(columns["sector"])).strip() or "Unclassified",
+                "weight": float(weight),
+            })
+        if not holdings:
+            continue
+        raw_total = sum(float(item["weight"]) for item in holdings)
+        scale = 100.0 if raw_total <= 1.5 else 1.0
+        for item in holdings:
+            item["weight_pct"] = round(float(item.pop("weight")) * scale, 6)
+        schemes.append({
+            "scheme_name": scheme_name,
+            "scheme_keys": sorted(scheme_keys),
+            "sheet_name": sheet_name,
+            "source_url": source_url,
+            "portfolio_date": portfolio_date.isoformat(),
+            "coverage_pct": round(sum(float(item["weight_pct"]) for item in holdings), 2),
+            "holdings": holdings,
+        })
+        dates.append(portfolio_date)
+    if not schemes or not dates:
+        raise ValueError("ppfas_portfolio_scheme_unavailable" if requested_keys else "invalid_ppfas_portfolio_workbook")
+    return {
+        "provider": "ppfas_mutual_fund",
+        "amc_name": "PPFAS Mutual Fund",
+        "source": "PPFAS Mutual Fund consolidated monthly portfolio disclosure",
+        "source_page_url": PPFAS_PORTFOLIO_DISCLOSURE_PAGE_URL,
+        "source_url": source_url,
+        "portfolio_date": max(dates).isoformat(),
+        "schemes": schemes,
+    }
+
+
+def fetch_ppfas_portfolio_disclosures(scheme_names: list[str]) -> dict[str, object]:
+    """Fetch and cache the newest parseable official PPFAS monthly workbook."""
+    cache_key = "ppfas_mutual_fund:" + hashlib.sha256("\n".join(sorted(set(scheme_names))).encode("utf-8")).hexdigest()
+    with _SESSION_LOCK:
+        cached = _AMC_PORTFOLIO_CACHE.get(cache_key)
+        if cached and time.monotonic() - float(cached.get("created_at", 0)) < AMC_PORTFOLIO_CACHE_SECONDS:
+            package = cached.get("package")
+            if isinstance(package, dict):
+                return package
+    headers = {
+        "Accept-Encoding": "identity",
+        "Referer": PPFAS_PORTFOLIO_DISCLOSURE_PAGE_URL,
+        "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+    }
+    try:
+        page_request = urllib.request.Request(
+            PPFAS_PORTFOLIO_DISCLOSURE_PAGE_URL,
+            headers={**headers, "Accept": "text/html,*/*;q=0.8"},
+            method="GET",
+        )
+        with urllib.request.urlopen(page_request, timeout=AMFI_NAV_REQUEST_TIMEOUT_SECONDS) as response:
+            final_page = urllib.parse.urlsplit(response.geturl())
+            if response.status != HTTPStatus.OK or (final_page.hostname or "").lower() != "amc.ppfas.com":
+                raise ValueError("ppfas_portfolio_source_unavailable")
+            raw_page = response.read(MAX_AMC_PORTFOLIO_PAGE_BYTES + 1)
+            if len(raw_page) > MAX_AMC_PORTFOLIO_PAGE_BYTES:
+                raise ValueError("ppfas_portfolio_page_too_large")
+        links = parse_ppfas_portfolio_disclosure_links(raw_page.decode("utf-8", errors="replace"))
+        package: dict[str, object] | None = None
+        last_error: ValueError | None = None
+        for link in links[:3]:
+            disclosure_url = str(link["url"])
+            workbook_request = urllib.request.Request(
+                disclosure_url,
+                headers={
+                    **headers,
+                    "Accept": "application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*;q=0.8",
+                },
+                method="GET",
+            )
+            try:
+                with urllib.request.urlopen(workbook_request, timeout=AMFI_NAV_REQUEST_TIMEOUT_SECONDS) as response:
+                    final_url = urllib.parse.urlsplit(response.geturl())
+                    if response.status != HTTPStatus.OK or (final_url.hostname or "").lower() != "amc.ppfas.com":
+                        raise ValueError("ppfas_portfolio_source_unavailable")
+                    workbook = response.read(MAX_AMC_PORTFOLIO_RESPONSE_BYTES + 1)
+                    if len(workbook) > MAX_AMC_PORTFOLIO_RESPONSE_BYTES:
+                        raise ValueError("ppfas_portfolio_response_too_large")
+                package = parse_ppfas_portfolio_workbook(
+                    workbook,
+                    source_url=disclosure_url,
+                    scheme_names=scheme_names,
+                )
+                break
+            except ValueError as error:
+                last_error = error
+        if package is None:
+            raise last_error or ValueError("ppfas_portfolio_source_unavailable")
+    except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout, TimeoutError, OSError) as error:
+        raise ValueError("ppfas_portfolio_source_unavailable") from error
+    with _SESSION_LOCK:
+        _AMC_PORTFOLIO_CACHE[cache_key] = {"created_at": time.monotonic(), "package": package}
+    return package
+
+
 def parse_motilal_portfolio_page(html: str, *, page_url: str) -> str:
     """Resolve the official month-end portfolio workbook advertised on a fund page."""
     parsed_page = urllib.parse.urlsplit(page_url)
@@ -10605,7 +12100,12 @@ def _mutual_fund_headers_and_rows(
     return headers, rows
 
 
-def _xlsx_sheet_matrices(payload: bytes) -> list[tuple[str, list[list[object]]]]:
+def _xlsx_sheet_matrices(
+    payload: bytes,
+    *,
+    maximum_rows: int = MAX_PORTFOLIO_ROWS + 25,
+    maximum_columns: int = MAX_PORTFOLIO_COLUMNS,
+) -> list[tuple[str, list[list[object]]]]:
     """Return bounded worksheet matrices without executing workbook formulas or macros."""
     try:
         archive = zipfile.ZipFile(io.BytesIO(payload))
@@ -10613,7 +12113,10 @@ def _xlsx_sheet_matrices(payload: bytes) -> list[tuple[str, list[list[object]]]]
         raise ValueError("invalid_mutual_fund_xlsx") from error
     with archive:
         members = archive.infolist()
-        if len(members) > 500 or sum(item.file_size for item in members) > 50 * 1024 * 1024:
+        # Consolidated AMC workbooks can legitimately contain one worksheet plus
+        # print settings per scheme (SBI's current file has just over 600 ZIP
+        # members). Keep the archive bounded while allowing those disclosures.
+        if len(members) > 750 or sum(item.file_size for item in members) > 50 * 1024 * 1024:
             raise ValueError("mutual_fund_xlsx_too_large")
         names = {item.filename for item in members}
         try:
@@ -10650,7 +12153,16 @@ def _xlsx_sheet_matrices(payload: bytes) -> list[tuple[str, list[list[object]]]]
                 row: list[object] = []
                 for cell in row_node.findall("{*}c"):
                     column = _excel_column_index(cell.attrib.get("r", ""))
-                    if column >= MAX_PORTFOLIO_COLUMNS:
+                    if column >= maximum_columns:
+                        # Official consolidated disclosures can carry formatting
+                        # cells far beyond the populated table. Ignore those
+                        # empty styled cells, but still reject real wide data.
+                        value_node = cell.find("{*}v")
+                        inline = cell.find("{*}is")
+                        if (value_node is None or not (value_node.text or "").strip()) and (
+                            inline is None or not "".join(inline.itertext()).strip()
+                        ):
+                            continue
                         raise ValueError("mutual_fund_file_too_many_columns")
                     row.extend([""] * (column + 1 - len(row)))
                     cell_type = cell.attrib.get("t", "")
@@ -10675,12 +12187,134 @@ def _xlsx_sheet_matrices(payload: bytes) -> list[tuple[str, list[list[object]]]]
                                 value = raw_value
                     row[column] = value
                 matrix.append(row)
-                if len(matrix) > MAX_PORTFOLIO_ROWS + 25:
+                if len(matrix) > maximum_rows:
                     raise ValueError("mutual_fund_file_too_many_rows")
             result.append((sheet.attrib.get("name") or f"Sheet {len(result) + 1}", matrix))
         if not result:
             raise ValueError("invalid_mutual_fund_xlsx")
         return result
+
+
+def parse_amfi_market_cap_workbook(
+    payload: bytes,
+    *,
+    source_url: str = AMFI_MARKET_CAP_XLSX_URL,
+) -> dict[str, object]:
+    """Parse AMFI's dated large-, mid- and small-cap classification by ISIN."""
+    if not payload or len(payload) > MAX_AMFI_MARKET_CAP_RESPONSE_BYTES:
+        raise ValueError("invalid_amfi_market_cap_workbook")
+    sheets = _xlsx_sheet_matrices(
+        payload,
+        maximum_rows=MAX_AMFI_MARKET_CAP_ROWS,
+        maximum_columns=20,
+    )
+    matrix = next(
+        (
+            rows
+            for _name, rows in sheets
+            if rows
+            and "average market capitalization" in " ".join(str(cell) for cell in rows[0]).lower()
+        ),
+        None,
+    )
+    if matrix is None or len(matrix) < 3:
+        raise ValueError("invalid_amfi_market_cap_workbook")
+    header_index = next(
+        (
+            index
+            for index, row in enumerate(matrix[:10])
+            if any(str(cell).strip().lower() == "isin" for cell in row)
+            and any("categorization" in str(cell).lower() for cell in row)
+        ),
+        -1,
+    )
+    if header_index < 0:
+        raise ValueError("invalid_amfi_market_cap_workbook")
+    headers = [re.sub(r"[^a-z0-9]+", "", str(cell).lower()) for cell in matrix[header_index]]
+
+    def column(predicate) -> int:
+        return next((index for index, header in enumerate(headers) if predicate(header)), -1)
+
+    rank_column = column(lambda value: value in {"srno", "serialno"})
+    company_column = column(lambda value: value == "companyname")
+    isin_column = column(lambda value: value == "isin")
+    average_column = column(lambda value: value.startswith("averageofallexchanges"))
+    category_column = column(lambda value: value.startswith("categorizationasper"))
+    if min(rank_column, company_column, isin_column, average_column, category_column) < 0:
+        raise ValueError("invalid_amfi_market_cap_workbook")
+    by_isin: dict[str, dict[str, object]] = {}
+    counts: dict[str, int] = defaultdict(int)
+    categories = {"Large Cap", "Mid Cap", "Small Cap"}
+    for row in matrix[header_index + 1:]:
+        if max(rank_column, company_column, isin_column, average_column, category_column) >= len(row):
+            continue
+        isin = re.sub(r"[^A-Z0-9]", "", str(row[isin_column]).upper())
+        category = str(row[category_column]).strip()
+        rank = _portfolio_number(row[rank_column])
+        average_market_cap = _portfolio_number(row[average_column])
+        company = str(row[company_column]).strip()
+        if not re.fullmatch(r"IN[A-Z0-9]{10}", isin):
+            continue
+        if category not in categories or rank is None or rank <= 0 or average_market_cap is None or average_market_cap <= 0 or not company:
+            raise ValueError("invalid_amfi_market_cap_row")
+        if isin in by_isin:
+            raise ValueError("duplicate_amfi_market_cap_isin")
+        by_isin[isin] = {
+            "rank": int(rank),
+            "company": company,
+            "category": category,
+            "average_market_cap_crore": round(float(average_market_cap), 2),
+        }
+        counts[category] += 1
+    if counts != {"Large Cap": 100, "Mid Cap": 150, "Small Cap": len(by_isin) - 250} or len(by_isin) < 250:
+        raise ValueError("invalid_amfi_market_cap_counts")
+    return {
+        "contract_version": AMFI_MARKET_CAP_CONTRACT_VERSION,
+        "source": "AMFI average market capitalization of listed companies",
+        "source_page_url": AMFI_MARKET_CAP_SOURCE_PAGE_URL,
+        "source_url": source_url,
+        "as_of": AMFI_MARKET_CAP_AS_OF.isoformat(),
+        "companies": len(by_isin),
+        "category_counts": dict(counts),
+        "by_isin": by_isin,
+    }
+
+
+def fetch_amfi_market_cap_classification() -> dict[str, object]:
+    """Fetch and cache the current dated AMFI security market-cap classification."""
+    with _SESSION_LOCK:
+        cached = _AMFI_MARKET_CAP_CACHE.get("current")
+        if cached and time.monotonic() - float(cached.get("created_at", 0)) < AMFI_NAV_CACHE_SECONDS:
+            classification = cached.get("classification")
+            if isinstance(classification, dict):
+                return classification
+    request = urllib.request.Request(
+        AMFI_MARKET_CAP_XLSX_URL,
+        headers={
+            "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*;q=0.8",
+            "Accept-Encoding": "identity",
+            "Referer": AMFI_MARKET_CAP_SOURCE_PAGE_URL,
+            "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=AMFI_NAV_REQUEST_TIMEOUT_SECONDS) as response:
+            final_url = urllib.parse.urlsplit(response.geturl())
+            if response.status != HTTPStatus.OK or (final_url.hostname or "").lower() != "portal.amfiindia.com":
+                raise ValueError("amfi_market_cap_source_unavailable")
+            body = response.read(MAX_AMFI_MARKET_CAP_RESPONSE_BYTES + 1)
+            if len(body) > MAX_AMFI_MARKET_CAP_RESPONSE_BYTES:
+                raise ValueError("amfi_market_cap_response_too_large")
+        classification = parse_amfi_market_cap_workbook(body, source_url=response.geturl())
+    except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout, TimeoutError, OSError) as error:
+        raise ValueError("amfi_market_cap_source_unavailable") from error
+    with _SESSION_LOCK:
+        _AMFI_MARKET_CAP_CACHE["current"] = {
+            "created_at": time.monotonic(),
+            "classification": classification,
+        }
+    return classification
 
 
 def _infer_mutual_fund_mapping(headers: list[str], *, underlying: bool = False) -> dict[str, str | None]:
@@ -10823,6 +12457,7 @@ def build_mutual_fund_holdings_analysis(
     *,
     underlying_rows: list[dict[str, object]] | None = None,
     underlying_mapping: dict[str, object] | None = None,
+    market_cap_classification: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Build category, concentration and optional look-through overlap analysis."""
     if not rows or len(rows) > MAX_PORTFOLIO_ROWS:
@@ -11015,13 +12650,73 @@ def build_mutual_fund_holdings_analysis(
             return "Blended / Other Equity"
         return "Non-equity / Unclassified"
 
-    cap_totals: dict[str, float] = defaultdict(float)
+    mandate_cap_totals: dict[str, float] = defaultdict(float)
     for fund in funds:
-        cap_totals[cap_bucket(str(fund["category"]))] += float(fund["weight_pct"])
-    market_cap_allocation = [
+        mandate_cap_totals[cap_bucket(str(fund["category"]))] += float(fund["weight_pct"])
+    mandate_market_cap_allocation = [
         {"bucket": bucket, "portfolio_weight_pct": round(weight, 2), "basis": "fund_category_mandate"}
-        for bucket, weight in sorted(cap_totals.items(), key=lambda item: (-item[1], item[0]))
+        for bucket, weight in sorted(mandate_cap_totals.items(), key=lambda item: (-item[1], item[0]))
     ]
+    classification_by_isin = (
+        market_cap_classification.get("by_isin")
+        if isinstance(market_cap_classification, dict)
+        and isinstance(market_cap_classification.get("by_isin"), dict)
+        else None
+    )
+    classified_cap_totals: dict[str, float] = defaultdict(float)
+    classified_securities = 0
+    if classification_by_isin is not None:
+        for security_key, weight in lookthrough.items():
+            isin = underlying_isins.get(security_key)
+            evidence = classification_by_isin.get(str(isin)) if isin else None
+            if isinstance(evidence, dict) and evidence.get("category") in {"Large Cap", "Mid Cap", "Small Cap"}:
+                classified_cap_totals[str(evidence["category"])] += weight
+                classified_securities += 1
+        classified_weight = sum(classified_cap_totals.values())
+        unclassified_weight = max(0.0, 100.0 - classified_weight)
+        market_cap_allocation = [
+            {
+                "bucket": bucket,
+                "portfolio_weight_pct": round(classified_cap_totals.get(bucket, 0.0), 2),
+                "basis": "AMFI security classification by ISIN",
+            }
+            for bucket in ("Large Cap", "Mid Cap", "Small Cap")
+            if classified_cap_totals.get(bucket, 0.0) > 0
+        ]
+        if unclassified_weight > 0.005:
+            market_cap_allocation.append({
+                "bucket": "Unclassified / not captured",
+                "portfolio_weight_pct": round(unclassified_weight, 2),
+                "basis": "not matched to dated AMFI security list",
+            })
+        market_cap_evidence = {
+            "status": "ready" if classified_securities else "no_classified_holdings",
+            "contract_version": market_cap_classification.get("contract_version"),
+            "source": market_cap_classification.get("source"),
+            "source_page_url": market_cap_classification.get("source_page_url"),
+            "source_url": market_cap_classification.get("source_url"),
+            "as_of": market_cap_classification.get("as_of"),
+            "companies": market_cap_classification.get("companies"),
+            "classified_securities": classified_securities,
+            "lookthrough_securities": len(lookthrough),
+            "classified_portfolio_weight_pct": round(classified_weight, 2),
+            "unclassified_or_uncaptured_weight_pct": round(unclassified_weight, 2),
+        }
+    else:
+        market_cap_allocation = mandate_market_cap_allocation
+        market_cap_evidence = {
+            "status": "classification_not_loaded",
+            "contract_version": AMFI_MARKET_CAP_CONTRACT_VERSION,
+            "source": "AMFI average market capitalization of listed companies",
+            "source_page_url": AMFI_MARKET_CAP_SOURCE_PAGE_URL,
+            "source_url": AMFI_MARKET_CAP_XLSX_URL,
+            "as_of": AMFI_MARKET_CAP_AS_OF.isoformat(),
+            "companies": None,
+            "classified_securities": 0,
+            "lookthrough_securities": len(lookthrough),
+            "classified_portfolio_weight_pct": 0.0,
+            "unclassified_or_uncaptured_weight_pct": 100.0,
+        }
 
     contribution_by_fund: list[dict[str, object]] = []
     overlap_by_fund: dict[str, float] = defaultdict(float)
@@ -11063,23 +12758,88 @@ def build_mutual_fund_holdings_analysis(
         sum((weight / captured_lookthrough) ** 2 for weight in lookthrough.values())
         if captured_lookthrough > 0 else None
     )
-    suggestions: list[dict[str, str]] = []
-    if largest_fund > 40:
-        suggestions.append({"priority": "Review", "title": "Single-fund concentration", "detail": f"The largest fund is {largest_fund:.2f}% of the portfolio. Check whether that concentration is intentional and consistent with the fund's mandate."})
-    if largest_category > 70:
-        suggestions.append({"priority": "Review", "title": "Category concentration", "detail": f"The largest category is {largest_category:.2f}% of the portfolio. Consider whether another asset class is needed for the intended risk profile."})
-    if maximum_overlap is not None and maximum_overlap >= 50:
-        suggestions.append({"priority": "Review", "title": "High holdings overlap", "detail": f"The highest observed pair overlap is {maximum_overlap:.2f}%. Review whether both funds add distinct exposure after fees and mandate differences."})
-    if len(category_totals) <= 1:
-        suggestions.append({"priority": "Review", "title": "Limited category diversification", "detail": "All classified weight sits in one category. Confirm that this matches the portfolio's time horizon and risk capacity."})
-    if any(fund["category"] == "Unclassified" for fund in funds):
-        suggestions.append({"priority": "Data", "title": "Complete missing categories", "detail": "One or more schemes could not be classified confidently. Add a Category column before relying on category diversification."})
-    if not overlaps:
-        suggestions.append({"priority": "Data", "title": "Add underlying holdings", "detail": "Pairwise overlap is unavailable. Add an Underlying Holdings sheet with Scheme, Security and Weight % columns."})
+    # Keep the user-facing improvement section predictable: every valid upload
+    # receives the same three review lenses, tailored to the evidence available.
+    # These deliberately improve decision quality rather than forecast returns.
+    small_positions = [fund for fund in funds if float(fund["weight_pct"]) < 5.0]
     if len(funds) > 8:
-        suggestions.append({"priority": "Review", "title": "Portfolio complexity", "detail": f"The portfolio contains {len(funds)} funds. Review whether every fund has a distinct role and whether overlap makes the structure harder to monitor."})
-    if not suggestions:
-        suggestions.append({"priority": "Monitor", "title": "No rule-based concentration flag", "detail": "No configured concentration or overlap threshold was crossed. Continue reviewing mandate, costs, taxes and changes in underlying holdings."})
+        simplify_detail = (
+            f"The portfolio has {len(funds)} funds"
+            f"{f', including {len(small_positions)} below 5% weight' if small_positions else ''}. "
+            "Give every fund one job—core exposure, diversifier or tactical satellite—and review funds "
+            "that do not change the portfolio meaningfully. Fewer distinct roles make monitoring and rebalancing easier."
+        )
+    elif len(funds) >= 4:
+        simplify_detail = (
+            f"The portfolio has {len(funds)} funds. Write down one distinct role for each and compare funds "
+            "with similar mandates before adding another scheme. Consolidation is worth reviewing where two funds "
+            "serve the same role without materially changing risk."
+        )
+    else:
+        simplify_detail = (
+            f"The {len(funds)}-fund structure is already compact. Keep it understandable by assigning each fund "
+            "a clear role and a rebalancing rule; avoid adding another scheme unless it introduces genuinely different exposure."
+        )
+
+    if overlaps:
+        highest_overlap = overlaps[0]
+        overlap_quality = (
+            "a lower-bound estimate because at least one disclosure is incomplete"
+            if highest_overlap.get("status") == "partial_lower_bound"
+            else "a complete holdings comparison"
+        )
+        overlap_detail = (
+            f"The highest observed similarity is {float(highest_overlap['overlap_pct']):.2f}% between "
+            f"{highest_overlap['fund_a']} and {highest_overlap['fund_b']} ({overlap_quality}). "
+            "Review whether both provide distinct security, sector and market-cap exposure after costs; similarity "
+            "is not diversification merely because the scheme names differ."
+        )
+    elif len(funds) > 1:
+        overlap_detail = (
+            f"The upload contains {len(funds)} funds, but security-level holdings are not available for a reliable "
+            "pair comparison. Complete official holdings coverage before assuming the schemes diversify one another; "
+            "missing evidence is not treated as zero overlap."
+        )
+    else:
+        overlap_detail = (
+            "A one-fund portfolio has no pairwise redundancy to measure. Review that fund's underlying stock, sector "
+            "and market-cap concentration before treating it as fully diversified."
+        )
+
+    largest_category_name = str(categories[0]["category"]) if categories else "Unclassified"
+    if largest_category >= 70:
+        efficiency_context = (
+            f"{largest_category:.2f}% is concentrated in {largest_category_name}, while the largest fund is "
+            f"{largest_fund:.2f}% of the portfolio. "
+        )
+    else:
+        efficiency_context = (
+            f"The largest category is {largest_category_name} at {largest_category:.2f}%, and the largest fund is "
+            f"{largest_fund:.2f}% of the portfolio. "
+        )
+    efficiency_detail = (
+        efficiency_context
+        + "Compare every fund over the same period on benchmark-relative rolling return, drawdown, consistency and "
+        "expense ratio. Review funds that add neither distinct exposure nor better risk-adjusted results; this can "
+        "reduce fee drag and improve return efficiency, but it does not guarantee higher future returns."
+    )
+    suggestions: list[dict[str, str]] = [
+        {
+            "priority": "1 · Simplify",
+            "title": "Give every fund one clear role",
+            "detail": simplify_detail,
+        },
+        {
+            "priority": "2 · Diversify",
+            "title": "Remove duplicated exposure",
+            "detail": overlap_detail,
+        },
+        {
+            "priority": "3 · Return efficiency",
+            "title": "Keep the review benchmark-led",
+            "detail": efficiency_detail,
+        },
+    ]
 
     for fund in funds:
         fund["weight_pct"] = round(float(fund["weight_pct"]), 2)
@@ -11088,6 +12848,7 @@ def build_mutual_fund_holdings_analysis(
     return {
         "ok": True,
         "contract_version": MUTUAL_FUND_DIVERSIFICATION_CONTRACT_VERSION,
+        "improvement_contract_version": "mutual-fund-improvement-review-v1",
         "weight_basis": basis_field,
         "funds": funds,
         "categories": categories,
@@ -11096,6 +12857,8 @@ def build_mutual_fund_holdings_analysis(
         "repeated_holdings": repeated_holdings,
         "sector_exposure": sector_exposure,
         "market_cap_allocation": market_cap_allocation,
+        "mandate_market_cap_allocation": mandate_market_cap_allocation,
+        "market_cap_evidence": market_cap_evidence,
         "contribution_by_fund": contribution_by_fund,
         "diversification": {
             "fund_count": len(funds),
@@ -11117,7 +12880,7 @@ def build_mutual_fund_holdings_analysis(
         "limitations": [
             "Category labels supplied in the upload take precedence; otherwise only reviewed exact mappings and transparent name rules are used.",
             "Overlap is calculated from security-level weights using ISIN when available, otherwise a normalized security name. It is a lower bound when either fund has less than 95% holdings coverage.",
-            "Market-cap allocation is currently a fund-category mandate view; constituent-level market-cap classification requires a separate dated market-cap source.",
+            "Security-level market-cap allocation uses exact ISIN matches to AMFI's dated half-yearly classification. Unsupported funds, cash, derivatives, debt, foreign securities, fund units and holdings without an exact AMFI ISIN remain in Unclassified / not captured.",
             "The analysis does not include expense ratios, exit loads, taxes, investment horizon, risk capacity or transaction-level cash flows.",
             "Improvement suggestions are deterministic review prompts, not personalized investment recommendations or buy/sell instructions.",
         ],
@@ -11130,6 +12893,18 @@ def _mutual_fund_holdings_provider(amc_name: str) -> str | None:
         return "nippon_india"
     if "motilal oswal" in normalized:
         return "motilal_oswal"
+    if "axis mutual fund" in normalized:
+        return "axis_mutual_fund"
+    if "icici prudential" in normalized:
+        return "icici_prudential"
+    if normalized == "sbi mutual fund" or normalized.startswith("sbi funds management"):
+        return "sbi_mutual_fund"
+    if "whiteoak capital" in normalized and ("mutual fund" in normalized or "asset management" in normalized):
+        return "whiteoak_capital"
+    if "edelweiss" in normalized and ("mutual fund" in normalized or "asset management" in normalized):
+        return "edelweiss_mutual_fund"
+    if "ppfas" in normalized or "parag parikh financial advisory" in normalized:
+        return "ppfas_mutual_fund"
     return None
 
 
@@ -11139,6 +12914,7 @@ def build_mutual_fund_true_diversification(
     provider_packages: dict[str, dict[str, object]],
     *,
     provider_failures: dict[str, str] | None = None,
+    market_cap_classification: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Join investor allocations to dated official security-level disclosures."""
     catalogue_rows = catalogue.get("rows")
@@ -11224,6 +13000,7 @@ def build_mutual_fund_true_diversification(
         {"scheme": "Scheme", "weight": "Weight %", "current_value": None, "invested_value": None, "category": "Category"},
         underlying_rows=underlying_rows,
         underlying_mapping={"scheme": "Scheme", "security": "Security", "isin": "ISIN", "sector": "Sector", "weight": "Weight %"},
+        market_cap_classification=market_cap_classification,
     )
     ready_rows = [row for row in source_rows if row["status"] == "official_holdings_ready"]
     dates = sorted({str(row["portfolio_date"]) for row in ready_rows if row.get("portfolio_date")})
@@ -11250,8 +13027,12 @@ def build_mutual_fund_true_diversification(
         "rows": source_rows,
         "limitations": [
             "Regular and Direct Growth plan labels map to one underlying scheme portfolio only for holdings analysis; plan-specific NAV performance remains separate.",
-            "Automatic retrieval currently supports official monthly disclosures from Nippon India and Motilal Oswal. Other AMCs remain explicit adapter-pending rows and are not filled from an aggregator.",
+            "Official monthly-disclosure coverage currently supports Nippon India, Motilal Oswal, Axis, ICICI Prudential, SBI, WhiteOak Capital, Edelweiss and PPFAS Mutual Fund. ICICI and Edelweiss can use the newest official archive already downloaded from their browser-only disclosure pages; missing files remain visible instead of being filled from an aggregator. Other AMCs remain explicit adapter-pending rows.",
             "Disclosures can have different month-end dates. Pairwise overlap should be compared only after checking each row's portfolio date and captured weight.",
+            "For arbitrage funds, positive ISIN holdings describe gross disclosed securities and do not infer net equity exposure after futures hedges; use overlap as a redundancy check, not as a directional-risk measure.",
+            "WhiteOak security overlap includes positive-weight ISIN holdings. Non-ISIN derivatives, cash, reverse-repo and TREPS balances remain outside the security-level overlap calculation and are reflected in captured coverage.",
+            "Edelweiss holdings are accepted only from its official statutory spreadsheet catalogue or the newest official workbook downloaded from that page. If both are unavailable, the fund remains visibly unresolved and does not affect the overlap score.",
+            "PPFAS holdings come from its newest official consolidated monthly workbook. Positive ISIN rows measure disclosed security redundancy; derivatives, cash and non-ISIN balances remain outside that overlap calculation.",
         ],
     }
     return analysis
@@ -13261,6 +15042,14 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
     def _send_historical_series_refresh(self) -> None:
         observations: list[dict[str, object]] = []
         release_source_results: list[dict[str, object]] = []
+        try:
+            existing_release_ids = {
+                str((row.get("metadata") or {}).get("release_id") or "")
+                for row in _get_eod_store().load_historical_series_observations()
+                if isinstance(row.get("metadata"), dict)
+            }
+        except (OSError, ValueError):
+            existing_release_ids = set()
         for source in RBI_HISTORICAL_SERIES_SOURCES:
             request = urllib.request.Request(
                 str(source["url"]),
@@ -13335,7 +15124,103 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                     {"ok": False, "reason": "invalid_rbi_historical_series_response"},
                 )
                 return
-        for source in RBI_RELEASE_VINTAGE_SOURCES:
+        release_sources: list[dict[str, object]] = [
+            dict(source) for source in RBI_RELEASE_VINTAGE_SOURCES
+        ]
+        catalogue_request = urllib.request.Request(
+            RBI_SECTORAL_CREDIT_CATALOGUE_URL,
+            headers={
+                "Accept": "text/html,application/xhtml+xml",
+                "Referer": "https://www.rbi.org.in/",
+                "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+            },
+            method="GET",
+        )
+        catalogue_payload, catalogue_reason = self._request_provider_text(
+            catalogue_request, RBI_MAX_RESPONSE_BYTES
+        )
+        if catalogue_reason is not None:
+            release_source_results.append(
+                {
+                    "release_id": "rbi-sectoral-credit-catalogue",
+                    "status": "unavailable",
+                    "reason": catalogue_reason,
+                }
+            )
+        else:
+            current_year = datetime.now(INDIA_TIMEZONE).year
+            catalogue_pages: list[tuple[int, str]] = [
+                (current_year, catalogue_payload or "")
+            ]
+            for archive_year in range(RBI_SECTORAL_CREDIT_START_YEAR, current_year):
+                try:
+                    post_data = build_rbi_sectoral_credit_archive_post_data(
+                        catalogue_payload or "", year=archive_year
+                    )
+                except ValueError:
+                    release_source_results.append(
+                        {
+                            "release_id": f"rbi-sectoral-credit-catalogue-{archive_year}",
+                            "status": "invalid_response",
+                        }
+                    )
+                    continue
+                archive_request = urllib.request.Request(
+                    RBI_SECTORAL_CREDIT_CATALOGUE_URL,
+                    data=post_data,
+                    headers={
+                        "Accept": "text/html,application/xhtml+xml",
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Referer": RBI_SECTORAL_CREDIT_CATALOGUE_URL,
+                        "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+                    },
+                    method="POST",
+                )
+                archive_payload, archive_reason = self._request_provider_text(
+                    archive_request, RBI_MAX_RESPONSE_BYTES
+                )
+                if archive_reason is not None:
+                    release_source_results.append(
+                        {
+                            "release_id": f"rbi-sectoral-credit-catalogue-{archive_year}",
+                            "status": "unavailable",
+                            "reason": archive_reason,
+                        }
+                    )
+                    continue
+                catalogue_pages.append((archive_year, archive_payload or ""))
+            for catalogue_year, page in catalogue_pages:
+                try:
+                    release_sources.extend(
+                        parse_rbi_sectoral_credit_catalogue(
+                            page, expected_year=catalogue_year
+                        )
+                    )
+                    release_source_results.append(
+                        {
+                            "release_id": f"rbi-sectoral-credit-catalogue-{catalogue_year}",
+                            "status": "parsed",
+                        }
+                    )
+                except ValueError:
+                    release_source_results.append(
+                        {
+                            "release_id": f"rbi-sectoral-credit-catalogue-{catalogue_year}",
+                            "status": "invalid_response",
+                        }
+                    )
+
+        unique_release_sources: dict[str, dict[str, object]] = {}
+        for source in release_sources:
+            release_id = str(source.get("release_id") or "")
+            if release_id:
+                unique_release_sources[release_id] = source
+        for release_id, source in unique_release_sources.items():
+            if release_id in existing_release_ids:
+                release_source_results.append(
+                    {"release_id": release_id, "status": "already_stored"}
+                )
+                continue
             request = urllib.request.Request(
                 str(source["url"]),
                 headers={
@@ -13349,7 +15234,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             if reason is not None:
                 release_source_results.append(
                     {
-                        "release_id": source["release_id"],
+                        "release_id": release_id,
                         "status": "unavailable",
                         "reason": reason,
                     }
@@ -13360,12 +15245,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                     parse_rbi_release_vintage(text_payload or "", source=source)
                 )
                 release_source_results.append(
-                    {"release_id": source["release_id"], "status": "parsed"}
+                    {"release_id": release_id, "status": "parsed"}
                 )
             except ValueError:
                 release_source_results.append(
                     {
-                        "release_id": source["release_id"],
+                        "release_id": release_id,
                         "status": "invalid_response",
                     }
                 )
@@ -15841,16 +17726,58 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 packages["motilal_oswal"] = fetch_motilal_portfolio_disclosures(requested_providers["motilal_oswal"])
             except ValueError as error:
                 failures["motilal_oswal"] = str(error)
+        if "axis_mutual_fund" in requested_providers:
+            try:
+                packages["axis_mutual_fund"] = fetch_axis_portfolio_disclosure()
+            except ValueError as error:
+                failures["axis_mutual_fund"] = str(error)
+        if "icici_prudential" in requested_providers:
+            try:
+                packages["icici_prudential"] = fetch_icici_portfolio_disclosures(requested_providers["icici_prudential"])
+            except ValueError as error:
+                failures["icici_prudential"] = str(error)
+        if "sbi_mutual_fund" in requested_providers:
+            try:
+                packages["sbi_mutual_fund"] = fetch_sbi_portfolio_disclosures(requested_providers["sbi_mutual_fund"])
+            except ValueError as error:
+                failures["sbi_mutual_fund"] = str(error)
+        if "whiteoak_capital" in requested_providers:
+            try:
+                packages["whiteoak_capital"] = fetch_whiteoak_portfolio_disclosures(requested_providers["whiteoak_capital"])
+            except ValueError as error:
+                failures["whiteoak_capital"] = str(error)
+        if "edelweiss_mutual_fund" in requested_providers:
+            try:
+                packages["edelweiss_mutual_fund"] = fetch_edelweiss_portfolio_disclosures(requested_providers["edelweiss_mutual_fund"])
+            except ValueError as error:
+                failures["edelweiss_mutual_fund"] = str(error)
+        if "ppfas_mutual_fund" in requested_providers:
+            try:
+                packages["ppfas_mutual_fund"] = fetch_ppfas_portfolio_disclosures(requested_providers["ppfas_mutual_fund"])
+            except ValueError as error:
+                failures["ppfas_mutual_fund"] = str(error)
+        market_cap_classification: dict[str, object] | None = None
+        market_cap_failure: str | None = None
+        try:
+            market_cap_classification = fetch_amfi_market_cap_classification()
+        except ValueError as error:
+            market_cap_failure = str(error)
         try:
             analysis = build_mutual_fund_true_diversification(
                 normalized_funds,
                 catalogue,
                 packages,
                 provider_failures=failures,
+                market_cap_classification=market_cap_classification,
             )
         except ValueError as error:
             self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": str(error)})
             return
+        if market_cap_failure:
+            evidence = analysis.get("market_cap_evidence")
+            if isinstance(evidence, dict):
+                evidence["status"] = "source_unavailable"
+                evidence["reason"] = market_cap_failure
         self._send_json(HTTPStatus.OK, {"ok": True, "analysis": analysis})
 
     def _send_portfolio_analysis(self, payload: dict[str, object]) -> None:
