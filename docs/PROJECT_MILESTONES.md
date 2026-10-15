@@ -722,6 +722,34 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   date. Earlier policy cycles and post-February-2023 decisions remain visibly
   incomplete, so the rates/currency/credit family is still partial rather than
   promoted to a complete historical classifier input.
+- `historical-regimes-v15` records the first post-tightening decision from the
+  RBI's original 6 April 2023 MPC resolution. The 6.50% observation is stored as
+  an explicit zero-basis-point `hold`, not inferred by carrying February's rate
+  forward. Its decision date, publication date, initial-release state and source
+  identity are retained under the same strict rate/date checks as the tightening
+  events. Later hold meetings and subsequent policy changes remain visibly
+  incomplete until their original releases are registered and validated.
+- `historical-regimes-v16` completes the remaining 2023 MPC pause sequence with
+  the original 8 June, 10 August, 6 October and 8 December RBI publications.
+  Every meeting remains a separate event-level 6.50% observation with a
+  zero-basis-point `hold`; no intervening rate is manufactured by carrying a
+  prior value forward. The registered date, initial-release state and source
+  identity remain subject to the same strict date/rate checks. Policy decisions
+  before May 2022 and after December 2023 are still visibly incomplete.
+- `historical-regimes-v17` extends the release-native policy timeline through
+  every 2024 MPC decision: 8 February, 5 April, 7 June, 8 August, 9 October and
+  6 December. Each original RBI resolution contributes a distinct 6.50%
+  zero-basis-point `hold`, so the long pause remains an auditable decision
+  sequence rather than a filled rate line. The August 2023 source is also
+  tightened from the Governor's statement to the corresponding MPC resolution.
+  Decisions before May 2022 and after December 2024 remain visibly incomplete.
+- `historical-regimes-v18` completes the 2025 policy cycle from the RBI's six
+  original MPC resolutions. It records the February and April 25-basis-point
+  cuts, June's 50-basis-point cut, the August and October holds, and December's
+  25-basis-point cut as signed event-level changes from 6.50% to 5.25%. The
+  easing path is therefore available to regime stories as a sequence of actual
+  decisions rather than a reconstructed end-period rate. Decisions before May
+  2022 and after December 2025 remain visibly incomplete.
 - Market cycles and economic cycles are deliberately separate. Recession and
   depression sections remain visibly unclassified until a versioned definition
   and authoritative point-in-time macro history are available; an equity
@@ -731,7 +759,7 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   held-out outcome/analogue testing. Human emotion is represented only through
   measurable hypotheses such as participation, crowding, volatility, flows,
   leadership and recovery—not asserted as directly observed fact.
-- Next, extend release-native coverage to pre-May-2022 and post-February-2023
+- Next, extend release-native coverage to pre-May-2022 and post-December-2025
   policy decisions, fuller balance-of-payments, external-debt and macro histories with their original release
   dates and revisions, populate effective-dated membership,
   and expand the held-out sample. Only traits that survive coverage gates,

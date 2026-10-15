@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from server import (
     NIFTY_INDICES_PUBLIC_USER_AGENT,
     OFFICIAL_SECTORAL_INDICES,
+    RBI_RELEASE_VINTAGE_SOURCES,
     build_checksum,
     candles_after_last_stored_session,
     calculate_seasonality,
@@ -183,7 +184,7 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
 
         result = build_historical_regime_workspace(candles)
 
-        self.assertEqual(result["contract_version"], "historical-regimes-v14")
+        self.assertEqual(result["contract_version"], "historical-regimes-v18")
         self.assertEqual(
             result["point_in_time_readiness"]["contract_version"],
             "historical-point-in-time-readiness-v1",
@@ -426,6 +427,143 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         wrong_date = "<div>Date : Dec 08, 2022</div><p>The policy repo rate was increased to 6.25 per cent.</p>"
         with self.assertRaisesRegex(ValueError, "invalid_rbi_release_vintage"):
             parse_rbi_release_vintage(wrong_date, source=source)
+
+    def test_rbi_policy_repo_parser_preserves_first_post_tightening_hold(self):
+        source = {
+            "release_id": "rbi-policy-repo-2023-04-06",
+            "series_key": "india_policy_repo_rate_pct",
+            "kind": "policy_repo_rate",
+            "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=55472",
+            "title": "RBI MPC resolution: 6 April 2023",
+            "observation_date": date(2023, 4, 6),
+            "period_label": "6 April 2023",
+            "revision_status": "initial",
+            "expected_value": 6.50,
+            "decision": "hold",
+            "change_bps": 0,
+        }
+        row = parse_rbi_release_vintage(
+            """
+            <html><body><div>Date : Apr 06, 2023</div>
+            <p>Keep the policy repo rate under the liquidity adjustment
+            facility (LAF) unchanged at 6.50 per cent.</p></body></html>
+            """,
+            source=source,
+        )
+
+        self.assertEqual(row["date"], date(2023, 4, 6))
+        self.assertEqual(row["value"], 6.5)
+        self.assertEqual(row["metadata"]["decision"], "hold")
+        self.assertEqual(row["metadata"]["change_bps"], 0)
+        self.assertEqual(row["metadata"]["revision_status"], "initial")
+
+    def test_rbi_policy_repo_registry_preserves_remaining_2023_hold_meetings(self):
+        expected_meetings = (
+            (date(2023, 6, 8), "55814"),
+            (date(2023, 8, 10), "56173"),
+            (date(2023, 10, 6), "56502"),
+            (date(2023, 12, 8), "56888"),
+        )
+        policy_sources = {
+            source["observation_date"]: source
+            for source in RBI_RELEASE_VINTAGE_SOURCES
+            if source["kind"] == "policy_repo_rate"
+        }
+
+        for meeting_date, press_release_id in expected_meetings:
+            source = policy_sources[meeting_date]
+            self.assertEqual(source["expected_value"], 6.50)
+            self.assertEqual(source["decision"], "hold")
+            self.assertEqual(source["change_bps"], 0)
+            self.assertIn(press_release_id, source["url"])
+
+            row = parse_rbi_release_vintage(
+                f"""
+                <html><body><div>Date : {meeting_date.strftime('%b %d, %Y')}</div>
+                <p>The Monetary Policy Committee decided unanimously to keep
+                the policy repo rate unchanged at 6.50 per cent.</p></body></html>
+                """,
+                source=source,
+            )
+            self.assertEqual(row["date"], meeting_date)
+            self.assertEqual(row["value"], 6.5)
+            self.assertEqual(row["metadata"]["decision"], "hold")
+            self.assertEqual(row["metadata"]["change_bps"], 0)
+
+    def test_rbi_policy_repo_registry_preserves_all_2024_hold_meetings(self):
+        expected_meetings = (
+            (date(2024, 2, 8), "57275"),
+            (date(2024, 4, 5), "57637"),
+            (date(2024, 6, 7), "58050"),
+            (date(2024, 8, 8), "58447"),
+            (date(2024, 10, 9), "58850"),
+            (date(2024, 12, 6), "59244"),
+        )
+        policy_sources = {
+            source["observation_date"]: source
+            for source in RBI_RELEASE_VINTAGE_SOURCES
+            if source["kind"] == "policy_repo_rate"
+        }
+
+        for meeting_date, press_release_id in expected_meetings:
+            source = policy_sources[meeting_date]
+            self.assertEqual(source["expected_value"], 6.50)
+            self.assertEqual(source["decision"], "hold")
+            self.assertEqual(source["change_bps"], 0)
+            self.assertIn(press_release_id, source["url"])
+
+            row = parse_rbi_release_vintage(
+                f"""
+                <html><body><div>Date : {meeting_date.strftime('%b %d, %Y')}</div>
+                <p>The Monetary Policy Committee decided to keep the policy
+                repo rate unchanged at 6.50 per cent.</p></body></html>
+                """,
+                source=source,
+            )
+            self.assertEqual(row["date"], meeting_date)
+            self.assertEqual(row["value"], 6.5)
+            self.assertEqual(row["metadata"]["decision"], "hold")
+            self.assertEqual(row["metadata"]["change_bps"], 0)
+
+    def test_rbi_policy_repo_registry_preserves_complete_2025_easing_cycle(self):
+        expected_meetings = (
+            (date(2025, 2, 7), "59692", 6.25, "decrease", -25),
+            (date(2025, 4, 9), "60176", 6.00, "decrease", -25),
+            (date(2025, 6, 6), "60604", 5.50, "decrease", -50),
+            (date(2025, 8, 6), "60957", 5.50, "hold", 0),
+            (date(2025, 10, 1), "61332", 5.50, "hold", 0),
+            (date(2025, 12, 5), "61749", 5.25, "decrease", -25),
+        )
+        policy_sources = {
+            source["observation_date"]: source
+            for source in RBI_RELEASE_VINTAGE_SOURCES
+            if source["kind"] == "policy_repo_rate"
+        }
+
+        for meeting_date, press_release_id, rate, decision, change_bps in expected_meetings:
+            source = policy_sources[meeting_date]
+            self.assertEqual(source["expected_value"], rate)
+            self.assertEqual(source["decision"], decision)
+            self.assertEqual(source["change_bps"], change_bps)
+            self.assertIn(press_release_id, source["url"])
+
+            decision_wording = (
+                f"reduce the policy repo rate by {abs(change_bps)} basis points to {rate:.2f} per cent"
+                if decision == "decrease"
+                else f"keep the policy repo rate unchanged at {rate:.2f} per cent"
+            )
+            row = parse_rbi_release_vintage(
+                f"""
+                <html><body><div>Date : {meeting_date.strftime('%b %d, %Y')}</div>
+                <p>The Monetary Policy Committee voted to {decision_wording}
+                with immediate effect.</p></body></html>
+                """,
+                source=source,
+            )
+            self.assertEqual(row["date"], meeting_date)
+            self.assertEqual(row["value"], rate)
+            self.assertEqual(row["metadata"]["decision"], decision)
+            self.assertEqual(row["metadata"]["change_bps"], change_bps)
 
     def test_historical_series_summary_withholds_wpi_change_across_base_break(self):
         common = {

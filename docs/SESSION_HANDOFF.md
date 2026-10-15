@@ -512,6 +512,26 @@ orders or position sizing.
   recognizes `india_policy_repo_rate_pct`, but the evidence family remains
   partial until earlier and later policy cycles plus release-dated currency
   history are connected.
+- Added `historical-regimes-v15`. The original RBI MPC resolution dated
+  6-Apr-23 now records the first post-tightening pause at 6.50% as a dated
+  zero-basis-point `hold`. The importer validates the visible date and rate,
+  preserves the initial-release state, and does not manufacture a hold by
+  carrying February's observation forward. Subsequent decisions remain pending.
+- Added `historical-regimes-v16`. The remaining 2023 RBI MPC pause meetings on
+  8-Jun, 10-Aug, 6-Oct and 8-Dec are registered from their original official
+  publications as four distinct 6.50% zero-basis-point `hold` events. Their
+  decision/publication dates and initial-release identity are preserved; the
+  importer does not create synthetic observations between meetings.
+- Added `historical-regimes-v17`. All six 2024 RBI MPC meetings are now stored
+  from their original resolutions as distinct 6.50% zero-basis-point `hold`
+  events. The 2023 August source now points to the MPC resolution rather than
+  the Governor's statement. Policy coverage is continuous from May 2022 through
+  December 2024, while earlier and later decisions remain explicitly pending.
+- Added `historical-regimes-v18`. The complete 2025 RBI MPC sequence is now
+  stored from original resolutions: four easing decisions totalling 125 basis
+  points and two intervening holds, taking the policy repo rate from 6.50% to
+  5.25%. Reductions use signed negative basis-point changes; holds remain zero.
+  Release date, effective date and expected rate continue to be validated.
 - Consolidated Mutual Funds Comparer into Portfolio Analysis as a third tab
   beside Holdings Analysis and Home Loan Tracker. The standalone sidebar item
   is removed, while the existing local upload and comparer calculations remain
@@ -594,7 +614,7 @@ orders or position sizing.
    pairs, a coverage-labelled structural/regime-fit score, and concise review
    prompts are the only primary outputs.
 2. Continue the audited RBI release registry with pre-May-2022 and
-   post-February-2023 policy decisions, continuous balance-of-payments,
+   post-December-2025 policy decisions, continuous balance-of-payments,
    external-debt and macro vintages while retaining every original
    publication date and revision state, then add authoritative effective-dated
    index membership. Preserve base changes and honest frequency; never
