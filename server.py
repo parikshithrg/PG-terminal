@@ -14,6 +14,7 @@ import math
 import re
 import socket
 import ssl
+import subprocess
 import threading
 import time
 import http.cookiejar
@@ -133,7 +134,7 @@ FRED_GLOBAL_SERIES = {
 }
 SENTIMENT_EVIDENCE_MODEL_VERSION = "market-sentiment-evidence-v1"
 REGIME_RULE_VERSION = "market-regime-candidate-v1"
-HISTORICAL_REGIME_CONTRACT_VERSION = "historical-regimes-v13"
+HISTORICAL_REGIME_CONTRACT_VERSION = "historical-regimes-v14"
 HISTORICAL_FINGERPRINT_CONTRACT_VERSION = "historical-episode-fingerprint-v1"
 HISTORICAL_ENTRY_VALIDATION_CONTRACT_VERSION = "historical-entry-validation-v1"
 HISTORICAL_POINT_IN_TIME_CONTRACT_VERSION = "historical-point-in-time-readiness-v1"
@@ -634,6 +635,84 @@ RBI_RELEASE_VINTAGE_SOURCES = (
         "observation_date": date(2021, 3, 31),
         "period_label": "End-March 2021",
         "revision_status": "provisional",
+    },
+    {
+        "release_id": "rbi-policy-repo-2022-05-04",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/scripts/FS_Notification.aspx?Id=12311&Mode=0",
+        "title": "RBI policy repo-rate decision: 4 May 2022",
+        "observation_date": date(2022, 5, 4),
+        "period_label": "4 May 2022",
+        "revision_status": "initial",
+        "expected_value": 4.40,
+        "decision": "increase",
+        "change_bps": 40,
+    },
+    {
+        "release_id": "rbi-policy-repo-2022-06-08",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=53833",
+        "title": "RBI MPC resolution: 8 June 2022",
+        "observation_date": date(2022, 6, 8),
+        "period_label": "8 June 2022",
+        "revision_status": "initial",
+        "expected_value": 4.90,
+        "decision": "increase",
+        "change_bps": 50,
+    },
+    {
+        "release_id": "rbi-policy-repo-2022-08-05",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=54148",
+        "title": "RBI MPC resolution: 5 August 2022",
+        "observation_date": date(2022, 8, 5),
+        "period_label": "5 August 2022",
+        "revision_status": "initial",
+        "expected_value": 5.40,
+        "decision": "increase",
+        "change_bps": 50,
+    },
+    {
+        "release_id": "rbi-policy-repo-2022-09-30",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=54465",
+        "title": "RBI MPC resolution: 30 September 2022",
+        "observation_date": date(2022, 9, 30),
+        "period_label": "30 September 2022",
+        "revision_status": "initial",
+        "expected_value": 5.90,
+        "decision": "increase",
+        "change_bps": 50,
+    },
+    {
+        "release_id": "rbi-policy-repo-2022-12-07",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/FS_Notification.aspx?Id=12419&fn=2752&Mode=0",
+        "title": "RBI policy repo-rate decision: 7 December 2022",
+        "observation_date": date(2022, 12, 7),
+        "period_label": "7 December 2022",
+        "revision_status": "initial",
+        "expected_value": 6.25,
+        "decision": "increase",
+        "change_bps": 35,
+    },
+    {
+        "release_id": "rbi-policy-repo-2023-02-08",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=55178",
+        "title": "RBI MPC resolution: 8 February 2023",
+        "observation_date": date(2023, 2, 8),
+        "period_label": "8 February 2023",
+        "revision_status": "initial",
+        "expected_value": 6.50,
+        "decision": "increase",
+        "change_bps": 25,
     },
 )
 KITE_FUTURES_SOURCE = "Kite Connect NFO completed daily price and open interest"
@@ -2995,6 +3074,24 @@ def parse_rbi_release_vintage(
             raise ValueError("invalid_rbi_release_vintage")
         value = float(value_match.group(1))
         unit = "Per cent year-on-year"
+    elif kind == "policy_repo_rate":
+        value_match = re.search(
+            r"policy repo rate.{0,260}?(?:to|at)\s+"
+            r"([0-9]+(?:\.[0-9]+)?)\s*per cent",
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if value_match is None:
+            raise ValueError("invalid_rbi_release_vintage")
+        value = float(value_match.group(1))
+        expected_value = source.get("expected_value")
+        if (
+            not isinstance(expected_value, (int, float))
+            or isinstance(expected_value, bool)
+            or not math.isclose(value, float(expected_value), abs_tol=0.0001)
+        ):
+            raise ValueError("invalid_rbi_release_vintage")
+        unit = "Per cent per annum"
     else:
         raise ValueError("invalid_rbi_release_vintage")
 
@@ -3015,6 +3112,10 @@ def parse_rbi_release_vintage(
                 observation_basis = "last reporting Friday stated in release"
             except ValueError:
                 pass
+    elif kind == "policy_repo_rate":
+        if observation_date != release_date:
+            raise ValueError("invalid_rbi_release_vintage")
+        observation_basis = "release date; decision effective immediately"
     if not isinstance(observation_date, date) or observation_date > release_date:
         raise ValueError("invalid_rbi_release_vintage")
     revision_status = str(source.get("revision_status") or "").lower()
@@ -3024,7 +3125,11 @@ def parse_rbi_release_vintage(
         "series_key": str(source.get("series_key") or ""),
         "date": observation_date,
         "period_label": str(source.get("period_label") or observation_date.isoformat()),
-        "frequency": "monthly" if kind == "bank_credit" else "quarterly",
+        "frequency": (
+            "monthly" if kind == "bank_credit"
+            else "event" if kind == "policy_repo_rate"
+            else "quarterly"
+        ),
         "value": value,
         "unit": unit,
         "base_period": "Not applicable",
@@ -3039,6 +3144,8 @@ def parse_rbi_release_vintage(
             "release_contract_version": RBI_RELEASE_VINTAGE_CONTRACT_VERSION,
             "allows_non_positive": kind == "current_account",
             "observation_basis": observation_basis,
+            "decision": str(source.get("decision") or "") if kind == "policy_repo_rate" else None,
+            "change_bps": int(source["change_bps"]) if kind == "policy_repo_rate" else None,
         },
     }
 
@@ -4483,6 +4590,7 @@ def build_historical_entry_snapshot_validation(
                 key="rates_currency_credit",
                 label="Rates, currency, credit and external balance",
                 series_keys=(
+                    "india_policy_repo_rate_pct",
                     "india_call_money_rate_annual",
                     "inr_usd_annual_average",
                     "india_bank_credit_growth_pct",
@@ -4689,6 +4797,7 @@ def build_historical_point_in_time_readiness(
             "key": "rates_currency_credit",
             "label": "Rates, currency and credit",
             "series_keys": {
+                "india_policy_repo_rate_pct",
                 "india_call_money_rate_annual",
                 "inr_usd_annual_average",
                 "india_bank_credit_growth_pct",
@@ -4696,7 +4805,7 @@ def build_historical_point_in_time_readiness(
             },
             "required_keys": 3,
             "use": "Measure financing conditions, policy transmission and currency pressure without hindsight.",
-            "missing_requirement": "Add release-dated policy-rate and currency vintages, and extend monthly credit coverage before 2024.",
+            "missing_requirement": "Extend release-dated policy-rate history beyond May 2022–February 2023, add currency vintages, and extend monthly credit coverage before 2024.",
         },
         {
             "key": "external_balance",
@@ -12419,6 +12528,271 @@ def parse_mutual_fund_file(file_name: str, payload: bytes) -> dict[str, object]:
     }
 
 
+def _portfolio_pdf_matrices(payload: bytes) -> list[tuple[str, list[list[object]]]]:
+    """Extract bounded, layout-preserving tables from a text-based PDF."""
+    try:
+        completed = subprocess.run(
+            ["pdftotext", "-layout", "-nopgbrk", "-", "-"],
+            input=payload,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=20,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as error:
+        raise ValueError("portfolio_pdf_extractor_unavailable") from error
+    if completed.returncode != 0:
+        raise ValueError("invalid_portfolio_pdf")
+    text = completed.stdout.decode("utf-8", errors="replace").strip()
+    if len(text) < 20:
+        raise ValueError("portfolio_pdf_has_no_extractable_text")
+    matrix: list[list[object]] = []
+    for line in text.splitlines():
+        cleaned = line.strip()
+        if not cleaned:
+            matrix.append([])
+            continue
+        cells = [cell.strip() for cell in re.split(r"\s{2,}", cleaned) if cell.strip()]
+        matrix.append(cells)
+        if len(matrix) > MAX_PORTFOLIO_ROWS + 100:
+            raise ValueError("portfolio_file_too_many_rows")
+    return [("PDF text", matrix)]
+
+
+def _looks_like_mutual_fund_row(
+    row: dict[str, object], mapping: dict[str, str | None]
+) -> bool:
+    label_columns = [mapping.get("name"), mapping.get("symbol")]
+    label = " ".join(
+        str(row.get(column) or "") for column in label_columns if isinstance(column, str)
+    ).strip()
+    normalized = re.sub(r"[^a-z0-9]+", " ", label.lower()).strip()
+    symbol = str(row.get(str(mapping.get("symbol") or "")) or "").strip().upper()
+    fund_terms = (
+        "mutual fund", " fund ", "scheme", "direct growth", "regular plan",
+        "growth option", "dividend option", "elss", "fof", "fund of fund",
+        "index fund", "liquid fund", "arbitrage fund", "retirement fund",
+    )
+    padded = f" {normalized} "
+    return symbol == "MF" or any(term in padded for term in fund_terms)
+
+
+def parse_universal_portfolio_file(file_name: str, payload: bytes) -> dict[str, object]:
+    """Detect stocks and mutual funds from one CSV, XLSX, or text-based PDF."""
+    if not payload or len(payload) > MAX_PORTFOLIO_FILE_BYTES:
+        raise ValueError("invalid_portfolio_file_size")
+    suffix = Path(file_name).suffix.lower()
+    if suffix not in {".csv", ".xlsx", ".pdf"}:
+        raise ValueError("unsupported_portfolio_file")
+
+    stock_preview: dict[str, object] | None = None
+    mutual_parsed: dict[str, object] | None = None
+    parser_notes: list[str] = []
+
+    if suffix in {".csv", ".xlsx"}:
+        try:
+            stock_preview = parse_portfolio_file(file_name, payload)
+        except ValueError as error:
+            parser_notes.append(f"stock_parser:{error}")
+        try:
+            mutual_parsed = parse_mutual_fund_file(file_name, payload)
+        except ValueError as error:
+            parser_notes.append(f"mutual_fund_parser:{error}")
+    else:
+        matrices = _portfolio_pdf_matrices(payload)
+        for sheet_name, matrix in matrices:
+            if mutual_parsed is None:
+                try:
+                    headers, rows = _mutual_fund_headers_and_rows(matrix)
+                    mapping = _infer_mutual_fund_mapping(headers)
+                    mutual_parsed = {
+                        "file_name": file_name,
+                        "sheet_name": sheet_name,
+                        "headers": headers,
+                        "rows": rows,
+                        "mapping": mapping,
+                        "underlying_sheet_name": None,
+                        "underlying_rows": [],
+                        "underlying_mapping": None,
+                    }
+                except ValueError as error:
+                    parser_notes.append(f"mutual_fund_parser:{error}")
+            if stock_preview is None:
+                try:
+                    headers, rows = _portfolio_headers_and_rows(matrix)
+                    mapping = infer_portfolio_mapping(headers, rows)
+                    stock_preview = {
+                        "ok": True,
+                        "contract_version": "portfolio-upload-preview-v1",
+                        "file_name": file_name,
+                        "sheet_name": sheet_name,
+                        "headers": headers,
+                        "row_count": len(rows),
+                        "sample_rows": rows[:8],
+                        "rows": rows,
+                        "detected_mapping": mapping,
+                        "loan_tracker": None,
+                        "persistence": "browser_memory_only",
+                    }
+                except ValueError as error:
+                    parser_notes.append(f"stock_parser:{error}")
+
+    fund_rows_from_stock: list[dict[str, object]] = []
+    unclassified_rows: list[dict[str, object]] = []
+    loan_tracker = stock_preview.get("loan_tracker") if stock_preview else None
+    if (
+        stock_preview is not None
+        and mutual_parsed is not None
+        and list(stock_preview.get("headers") or []) == list(mutual_parsed.get("headers") or [])
+    ):
+        # Both parsers found the same table. A scheme-specific header is stronger
+        # evidence than the generic symbol heuristic, so do not duplicate those
+        # fund rows as stocks.
+        stock_preview = None
+    if stock_preview is not None:
+        mapping = dict(stock_preview["detected_mapping"])
+        source_rows = list(stock_preview["rows"])
+        stock_rows: list[dict[str, object]] = []
+        for row in source_rows:
+            if _looks_like_mutual_fund_row(row, mapping):
+                fund_rows_from_stock.append(row)
+            else:
+                stock_rows.append(row)
+        if stock_rows:
+            stock_preview["rows"] = stock_rows
+            stock_preview["row_count"] = len(stock_rows)
+            stock_preview["sample_rows"] = stock_rows[:8]
+        else:
+            stock_preview = None
+
+        if mutual_parsed is None and fund_rows_from_stock:
+            scheme_column = mapping.get("name") or mapping.get("symbol")
+            fund_mapping = {
+                "scheme": scheme_column,
+                "category": mapping.get("sector"),
+                "weight": mapping.get("weight"),
+                "current_value": mapping.get("current_value"),
+                "invested_value": mapping.get("invested_value"),
+                "security": None,
+                "isin": None,
+                "sector": mapping.get("sector"),
+            }
+            if scheme_column and any(fund_mapping[field] for field in ("weight", "current_value", "invested_value")):
+                mutual_parsed = {
+                    "file_name": file_name,
+                    "sheet_name": stock_preview.get("sheet_name") if stock_preview else None,
+                    "headers": list(source_rows[0].keys()) if source_rows else [],
+                    "rows": fund_rows_from_stock,
+                    "mapping": fund_mapping,
+                    "underlying_sheet_name": None,
+                    "underlying_rows": [],
+                    "underlying_mapping": None,
+                }
+            else:
+                unclassified_rows.extend(fund_rows_from_stock)
+
+    mutual_result: dict[str, object] | None = None
+    if mutual_parsed is not None:
+        mutual_result = build_mutual_fund_holdings_analysis(
+            mutual_parsed["rows"],
+            mutual_parsed["mapping"],
+            underlying_rows=mutual_parsed["underlying_rows"],
+            underlying_mapping=mutual_parsed["underlying_mapping"],
+        )
+        mutual_result.update({
+            "file_name": file_name,
+            "sheet_name": mutual_parsed["sheet_name"],
+            "underlying_sheet_name": mutual_parsed["underlying_sheet_name"],
+            "performance_comparison": build_mutual_fund_performance_comparison(mutual_result["funds"], {}),
+            "persistence": "browser_memory_only",
+        })
+
+    combined_rows: list[dict[str, object]] = []
+    if stock_preview is not None:
+        stock_mapping = dict(stock_preview["detected_mapping"])
+        for row in stock_preview["rows"]:
+            symbol_column = str(stock_mapping.get("symbol") or "")
+            name_column = str(stock_mapping.get("name") or "")
+            combined_rows.append({
+                "Instrument": row.get(name_column) or row.get(symbol_column),
+                "Symbol": row.get(symbol_column),
+                "Quantity": row.get(str(stock_mapping.get("quantity") or "")),
+                "Average Cost": row.get(str(stock_mapping.get("average_cost") or "")),
+                "Current Value": row.get(str(stock_mapping.get("current_value") or "")),
+                "LTP": row.get(str(stock_mapping.get("latest_price") or "")),
+                "Entry Date": row.get(str(stock_mapping.get("entry_date") or "")),
+                "Invested Value": row.get(str(stock_mapping.get("invested_value") or "")),
+                "Sector": row.get(str(stock_mapping.get("sector") or "")),
+            })
+    mutual_has_current_values = bool(
+        mutual_parsed is not None and isinstance(mutual_parsed["mapping"].get("current_value"), str)
+    )
+    if mutual_parsed is not None and mutual_has_current_values:
+        fund_mapping = mutual_parsed["mapping"]
+        for row in mutual_parsed["rows"]:
+            combined_rows.append({
+                "Instrument": row.get(str(fund_mapping.get("scheme") or "")),
+                "Symbol": "MF",
+                "Quantity": None,
+                "Average Cost": None,
+                "Current Value": row.get(str(fund_mapping.get("current_value") or "")),
+                "LTP": None,
+                "Entry Date": None,
+                "Invested Value": row.get(str(fund_mapping.get("invested_value") or "")),
+                "Sector": row.get(str(fund_mapping.get("category") or "")),
+            })
+    combined_preview: dict[str, object] | None = None
+    if combined_rows and (mutual_parsed is None or mutual_has_current_values):
+        combined_headers = [
+            "Instrument", "Symbol", "Quantity", "Average Cost", "Current Value",
+            "LTP", "Entry Date", "Invested Value", "Sector",
+        ]
+        combined_preview = {
+            "ok": True,
+            "contract_version": "combined-portfolio-preview-v1",
+            "file_name": file_name,
+            "sheet_name": "Detected holdings",
+            "headers": combined_headers,
+            "row_count": len(combined_rows),
+            "sample_rows": combined_rows[:8],
+            "rows": combined_rows,
+            "detected_mapping": {
+                "symbol": "Symbol", "quantity": "Quantity", "weight": None,
+                "average_cost": "Average Cost", "current_value": "Current Value",
+                "latest_price": "LTP", "entry_date": "Entry Date",
+                "invested_value": "Invested Value", "sector": "Sector", "name": "Instrument",
+            },
+            "loan_tracker": loan_tracker,
+            "persistence": "browser_memory_only",
+        }
+
+    stock_count = len(stock_preview["rows"]) if stock_preview else 0
+    fund_count = len(mutual_result["funds"]) if mutual_result else 0
+    if stock_count == 0 and fund_count == 0:
+        raise ValueError("no_supported_holdings_detected")
+    return {
+        "ok": True,
+        "contract_version": "universal-portfolio-import-v1",
+        "file_name": file_name,
+        "stock_preview": stock_preview,
+        "combined_preview": combined_preview,
+        "mutual_fund_analysis": mutual_result,
+        "loan_tracker": loan_tracker,
+        "classification": {
+            "stocks": stock_count,
+            "mutual_funds": fund_count,
+            "unclassified": len(unclassified_rows),
+            "source_format": suffix.lstrip("."),
+        },
+        "parser_notes": parser_notes,
+        "limitations": [
+            "PDF support requires selectable text; scanned image PDFs need OCR before upload.",
+            "Rows that cannot be identified confidently are not silently assigned to stocks or mutual funds.",
+            "Uploaded data remains in local memory and is not persisted.",
+        ],
+    }
+
+
 def _infer_mutual_fund_category(scheme_name: str) -> tuple[str, str]:
     reviewed = resolve_portfolio_amfi_scheme(scheme_name)
     if reviewed is not None:
@@ -12850,6 +13224,7 @@ def build_mutual_fund_holdings_analysis(
         "contract_version": MUTUAL_FUND_DIVERSIFICATION_CONTRACT_VERSION,
         "improvement_contract_version": "mutual-fund-improvement-review-v1",
         "weight_basis": basis_field,
+        "input_total": round(scaled_total, 2) if basis_field in {"current_value", "invested_value"} else None,
         "funds": funds,
         "categories": categories,
         "overlaps": overlaps,
@@ -17159,6 +17534,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 self._send_portfolio_preview(payload)
             return
 
+        if self.path == "/api/portfolio/universal-import":
+            payload = self._read_json_payload(MAX_PORTFOLIO_IMPORT_BYTES)
+            if payload is not None:
+                self._send_universal_portfolio_import(payload)
+            return
+
         if self.path == "/api/portfolio/analyze":
             payload = self._read_json_payload(MAX_PORTFOLIO_IMPORT_BYTES)
             if payload is not None:
@@ -17574,6 +17955,25 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": reason})
             return
         self._send_json(HTTPStatus.OK, preview)
+
+    def _send_universal_portfolio_import(self, payload: dict[str, object]) -> None:
+        file_name = payload.get("file_name")
+        encoded = payload.get("content_base64")
+        if (
+            not isinstance(file_name, str)
+            or not re.fullmatch(r"[A-Za-z0-9._ ()&-]{1,128}\.(?:csv|xlsx|pdf)", file_name, re.IGNORECASE)
+            or not isinstance(encoded, str)
+        ):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_portfolio_file"})
+            return
+        try:
+            raw = base64.b64decode(encoded, validate=True)
+            result = parse_universal_portfolio_file(file_name, raw)
+        except (ValueError, binascii.Error) as error:
+            reason = str(error) if isinstance(error, ValueError) else "invalid_portfolio_file"
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": reason})
+            return
+        self._send_json(HTTPStatus.OK, result)
 
     def _send_mutual_fund_analysis(self, payload: dict[str, object]) -> None:
         file_name = payload.get("file_name")

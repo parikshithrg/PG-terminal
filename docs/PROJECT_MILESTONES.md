@@ -441,6 +441,43 @@ with the market environment. It remains an analytical review, not execution.
    supports an upfront lump sum, additional monthly payments, and a recurring
    lump sum after every 12th payment. The suggested monthly payment is explicitly identified as
    an editable estimate derived from the latest recorded annual payment.
+9. Mutual Funds Comparer is now consolidated into Portfolio Analysis as the
+   third tab beside Holdings Analysis and Home Loan Tracker. Its local upload,
+   allocation, overlap, true-diversification score and three improvement paths
+   retain their existing calculation contracts; the redundant standalone
+   sidebar destination has been removed.
+10. The Portfolio Analysis entry point now uses `universal-portfolio-import-v1`.
+    A single local CSV, XLSX or text-based PDF upload is inspected for stock and
+    mutual-fund holdings, split conservatively, and routed to the holdings and
+    fund-comparison analyses. Unclassified rows remain explicit. Image-only PDFs
+    require OCR and are rejected visibly rather than guessed.
+11. Holdings Analysis is now the combined portfolio narrative. Its primary
+    sequence is total stock value, mutual-fund value, total portfolio value and
+    diversification score; portfolio performance; risk-adjusted and benchmark
+    ratios; allocation/diversification; direct-stock, fund and cross-holding
+    redundancy; and three improvement paths. Detailed row previews, positions,
+    validation issues and calculation limitations remain available in a
+    collapsed audit disclosure. The Mutual Funds Comparer tab remains the
+    security-level drill-down.
+12. The universal Holdings Analysis upload now displays a staged progress bar
+    immediately below the file control. It reports browser file reading,
+    holdings detection, stock/fund separation, portfolio calculations and fund
+    diversification analysis, with elapsed time and explicit success or error
+    completion states.
+13. A compact file-format indicator now appears above the universal upload and
+    opens a visual table-format dialog. It uses sample stock and mutual-fund
+    sheets to distinguish minimum identity/value columns from the cost/date
+    fields needed for performance and XIRR, and visually flags layouts to avoid.
+14. Holdings Analysis now follows the simplified Mutual Funds Comparer visual
+    system: a concise hero and upload card, numbered story sections, compact
+    surface-backed metrics, right-aligned live inferences, optional reading
+    guides and a collapsed technical audit. Repeated prose and loose status
+    blocks were removed without changing any calculation contract.
+15. Holdings Analysis now applies data-aware disclosure. Missing stock or fund
+    groups are labelled explicitly in the overview, sections without usable
+    calculations are hidden, and the redundancy section shows the five highest
+    fund-pair similarities plus the five largest repeated underlying holdings
+    instead of only a sentence summary.
 
 1. **Market sentiment and regime foundation** — implement the approved
    [Market Sentiment blueprint](MARKET_SENTIMENT_BLUEPRINT.md) in phases,
@@ -674,6 +711,17 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   supplies it. Previously stored release IDs are not downloaded again. Missing
   or malformed catalogue years remain visible in the EOD source audit rather
   than being interpolated or replaced with a later Handbook value.
+- `historical-regimes-v14` adds the first continuous release-native policy-rate
+  cycle. Six original RBI decision and implementation pages preserve the full
+  May 2022–February 2023 tightening path from 4.40% to 6.50%, including each
+  effective/publication date, stated rate change, source URL and initial-release
+  status. The parser requires the visible RBI date to match the effective date
+  and the extracted rate to match the explicitly registered decision; changed
+  page structure or a conflicting value is rejected rather than guessed. These
+  event observations can enter an episode snapshot only from their publication
+  date. Earlier policy cycles and post-February-2023 decisions remain visibly
+  incomplete, so the rates/currency/credit family is still partial rather than
+  promoted to a complete historical classifier input.
 - Market cycles and economic cycles are deliberately separate. Recession and
   depression sections remain visibly unclassified until a versioned definition
   and authoritative point-in-time macro history are available; an equity
@@ -683,8 +731,8 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   held-out outcome/analogue testing. Human emotion is represented only through
   measurable hypotheses such as participation, crowding, volatility, flows,
   leadership and recovery—not asserted as directly observed fact.
-- Next, extend release-native coverage to fuller balance-of-payments,
-  external-debt, policy-rate and macro histories with their original release
+- Next, extend release-native coverage to pre-May-2022 and post-February-2023
+  policy decisions, fuller balance-of-payments, external-debt and macro histories with their original release
   dates and revisions, populate effective-dated membership,
   and expand the held-out sample. Only traits that survive coverage gates,
   multiplicity/stability checks and later unseen regimes may be proposed for

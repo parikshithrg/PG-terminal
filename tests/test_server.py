@@ -5,6 +5,7 @@ import io
 import json
 import zipfile
 from datetime import date, datetime, time, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from server import (
@@ -87,6 +88,7 @@ from server import (
     parse_nse_announcement_csv,
     parse_earnings_csv,
     parse_portfolio_file,
+    parse_universal_portfolio_file,
     parse_mutual_fund_file,
     parse_home_loan_tracker_xlsx,
     parse_google_finance_quote_html,
@@ -181,7 +183,7 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
 
         result = build_historical_regime_workspace(candles)
 
-        self.assertEqual(result["contract_version"], "historical-regimes-v13")
+        self.assertEqual(result["contract_version"], "historical-regimes-v14")
         self.assertEqual(
             result["point_in_time_readiness"]["contract_version"],
             "historical-point-in-time-readiness-v1",
@@ -366,6 +368,64 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(row["date"], date(2024, 8, 31))
         self.assertEqual(row["value"], 15.0)
         self.assertEqual(row["metadata"]["observation_basis"], "catalogue month-end")
+
+    def test_rbi_release_vintage_parser_reads_immediate_policy_repo_decision(self):
+        source = {
+            "release_id": "rbi-policy-repo-2022-09-30",
+            "series_key": "india_policy_repo_rate_pct",
+            "kind": "policy_repo_rate",
+            "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=54465",
+            "title": "RBI MPC resolution: 30 September 2022",
+            "observation_date": date(2022, 9, 30),
+            "period_label": "30 September 2022",
+            "revision_status": "initial",
+            "expected_value": 5.90,
+            "decision": "increase",
+            "change_bps": 50,
+        }
+        row = parse_rbi_release_vintage(
+            """
+            <html><body><div>Date : Sep 30, 2022</div>
+            <p>Increase the policy repo rate under the liquidity adjustment
+            facility (LAF) by 50 basis points from 5.40 per cent to 5.90 per
+            cent with immediate effect.</p></body></html>
+            """,
+            source=source,
+        )
+
+        self.assertEqual(row["series_key"], "india_policy_repo_rate_pct")
+        self.assertEqual(row["date"], date(2022, 9, 30))
+        self.assertEqual(row["vintage_date"], date(2022, 9, 30))
+        self.assertEqual(row["frequency"], "event")
+        self.assertEqual(row["value"], 5.9)
+        self.assertEqual(row["metadata"]["decision"], "increase")
+        self.assertEqual(row["metadata"]["change_bps"], 50)
+        self.assertEqual(
+            row["metadata"]["observation_basis"],
+            "release date; decision effective immediately",
+        )
+
+    def test_rbi_policy_repo_parser_rejects_wrong_registered_rate_or_date(self):
+        source = {
+            "release_id": "rbi-policy-repo-2022-12-07",
+            "series_key": "india_policy_repo_rate_pct",
+            "kind": "policy_repo_rate",
+            "url": "https://www.rbi.org.in/Scripts/FS_Notification.aspx?Id=12419",
+            "title": "RBI policy repo-rate decision: 7 December 2022",
+            "observation_date": date(2022, 12, 7),
+            "period_label": "7 December 2022",
+            "revision_status": "initial",
+            "expected_value": 6.25,
+            "decision": "increase",
+            "change_bps": 35,
+        }
+        wrong_rate = "<div>Date : Dec 07, 2022</div><p>The policy repo rate was increased to 6.50 per cent.</p>"
+        with self.assertRaisesRegex(ValueError, "invalid_rbi_release_vintage"):
+            parse_rbi_release_vintage(wrong_rate, source=source)
+
+        wrong_date = "<div>Date : Dec 08, 2022</div><p>The policy repo rate was increased to 6.25 per cent.</p>"
+        with self.assertRaisesRegex(ValueError, "invalid_rbi_release_vintage"):
+            parse_rbi_release_vintage(wrong_date, source=source)
 
     def test_historical_series_summary_withholds_wpi_change_across_base_break(self):
         common = {
@@ -1029,6 +1089,30 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(readiness["entry_snapshot_admission"], "ready")
         self.assertEqual(readiness["summary"]["ready_categories"], 4)
         self.assertEqual(readiness["summary"]["blocked_categories"], 0)
+
+    def test_historical_point_in_time_readiness_counts_release_dated_policy_rate(self):
+        readiness = build_historical_point_in_time_readiness(
+            [
+                {
+                    "series_key": "india_policy_repo_rate_pct",
+                    "date": date(2022, 5, 4),
+                    "frequency": "event",
+                    "vintage_date": date(2022, 5, 4),
+                    "metadata": {
+                        "release_date": "2022-05-04",
+                        "revision_status": "initial",
+                    },
+                }
+            ]
+        )
+        rates = next(
+            row for row in readiness["categories"]
+            if row["key"] == "rates_currency_credit"
+        )
+        self.assertEqual(rates["status"], "partial")
+        self.assertEqual(rates["release_dated_observations"], 1)
+        self.assertEqual(rates["release_dated_series"], 1)
+        self.assertEqual(rates["frequency"], "event")
 
     def test_all_index_seasonality_backtest_keeps_unavailable_indices_visible(self):
         def history(offset: float) -> list[dict[str, object]]:
@@ -3030,6 +3114,42 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         result = build_mutual_fund_holdings_analysis(parsed["rows"], parsed["mapping"])
         self.assertEqual(result["funds"][0]["weight_pct"], 100.0)
 
+    def test_universal_import_routes_mutual_fund_statement_to_comparer(self):
+        result = parse_universal_portfolio_file(
+            "funds.csv",
+            b"Fund Name,Current Value\nNippon India Large Cap Fund - Direct Plan - Growth,600000\nICICI Prudential Short Term Fund - Direct Plan - Growth,400000\n",
+        )
+        self.assertIsNone(result["stock_preview"])
+        self.assertEqual(result["classification"]["stocks"], 0)
+        self.assertEqual(result["classification"]["mutual_funds"], 2)
+        self.assertEqual(len(result["mutual_fund_analysis"]["funds"]), 2)
+        self.assertEqual(result["mutual_fund_analysis"]["input_total"], 1000000.0)
+        self.assertEqual(result["combined_preview"]["row_count"], 2)
+        self.assertTrue(all(row["Symbol"] == "MF" for row in result["combined_preview"]["rows"]))
+
+    def test_universal_import_splits_stocks_and_funds_in_one_table(self):
+        result = parse_universal_portfolio_file(
+            "mixed.csv",
+            (
+                "Instrument,Symbol,Quantity,Current Value\n"
+                "Infosys,INFY,10,15000\n"
+                "Nippon India Large Cap Fund - Direct Plan - Growth,MF,100,25000\n"
+            ).encode("utf-8"),
+        )
+        self.assertEqual(result["classification"]["stocks"], 1)
+        self.assertEqual(result["classification"]["mutual_funds"], 1)
+        self.assertEqual(result["stock_preview"]["rows"][0]["Symbol"], "INFY")
+        self.assertEqual(result["mutual_fund_analysis"]["funds"][0]["weight_pct"], 100.0)
+        self.assertEqual(result["combined_preview"]["row_count"], 2)
+        self.assertEqual({row["Symbol"] for row in result["combined_preview"]["rows"]}, {"INFY", "MF"})
+        combined = build_portfolio_analysis(
+            result["combined_preview"]["rows"],
+            result["combined_preview"]["detected_mapping"],
+            {},
+        )
+        self.assertEqual(combined["coverage"]["eligible_positions"], 2)
+        self.assertEqual(sum(float(row["current_value"]) for row in combined["positions"]), 40000.0)
+
     def test_mutual_fund_analysis_calculates_pair_overlap_from_uploaded_holdings(self):
         result = build_mutual_fund_holdings_analysis(
             [
@@ -4181,6 +4301,44 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         )
         self.assertEqual(result["coverage"]["eligible_positions"], 1)
         self.assertEqual(result["positions"][0]["return_since_average_cost_pct"], 4.97)
+
+    def test_mutual_funds_comparer_is_a_portfolio_analysis_tab(self):
+        page = (Path(__file__).resolve().parents[1] / "dist" / "index.html").read_text(encoding="utf-8")
+        portfolio_start = page.index('<section id="portfolioView"')
+        next_workspace = page.index('<section id="stockYtdView"', portfolio_start)
+        portfolio_markup = page[portfolio_start:next_workspace]
+
+        self.assertNotIn('data-page="Mutual Funds Comparer"', page)
+        self.assertIn('id="portfolioMutualFundsTab"', portfolio_markup)
+        self.assertIn('id="portfolioMutualFundsPanel"', portfolio_markup)
+        self.assertIn('id="combinedPortfolioValue"', portfolio_markup)
+        self.assertIn('id="combinedDiversificationScore"', portfolio_markup)
+        self.assertIn('id="combinedRedundancyCards"', portfolio_markup)
+        self.assertIn('id="combinedImprovementPaths"', portfolio_markup)
+        self.assertIn('class="analysis-intro mutual-fund-hero portfolio-clean-hero"', portfolio_markup)
+        self.assertIn('class="universe-controls portfolio-upload-card"', portfolio_markup)
+        self.assertGreaterEqual(portfolio_markup.count('portfolio-story-section'), 7)
+        self.assertIn('01 · OVERVIEW', portfolio_markup)
+        self.assertIn('06 · NEXT STEPS', portfolio_markup)
+        self.assertIn('class="portfolio-reading-guide"', portfolio_markup)
+        self.assertIn('id="portfolioPerformanceSection"', portfolio_markup)
+        self.assertIn('id="portfolioRedundancySection"', portfolio_markup)
+        self.assertIn("'No stocks found'", page)
+        self.assertIn('Highest fund similarities', page)
+        self.assertIn('Most repeated underlying holdings', page)
+        self.assertIn("document.getElementById('portfolioPerformanceSection').hidden = !performanceHasData", page)
+        self.assertIn("document.getElementById('portfolioRedundancySection').hidden = !redundancyCards.length", page)
+        self.assertIn('id="portfolioFileGuide"', portfolio_markup)
+        self.assertIn('id="portfolioFormatDialog"', portfolio_markup)
+        self.assertIn('Example stock holdings table', portfolio_markup)
+        self.assertIn('Example mutual fund holdings table', portfolio_markup)
+        self.assertIn("portfolioFormatDialog.showModal()", page)
+        self.assertIn('id="portfolioLoadProgress"', portfolio_markup)
+        self.assertIn('id="portfolioProgressFill"', portfolio_markup)
+        self.assertIn("setPortfolioTab('mutual-funds')", page)
+        self.assertIn('startPortfolioProgress(file)', page)
+        self.assertIn("finishPortfolioProgress('Analysis ready'", page)
+        self.assertNotIn("mutualFundsComparerView", page)
 
 
 if __name__ == "__main__":

@@ -405,6 +405,54 @@
     .portfolio-risk-grid .summary-card { min-height: 96px; padding: 14px 15px; }
     .portfolio-risk-grid .summary-value { font-size: 21px; }
     .portfolio-risk-section { margin: 22px 0 28px; }
+    .combined-portfolio-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 14px 0 0; }
+    .combined-analysis-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+    .combined-analysis-card { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+    .combined-analysis-card h3 { margin: 0 0 10px; color: var(--heading); font-size: 14px; }
+    .combined-analysis-card p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .combined-redundancy-list { display: grid; gap: 9px; }
+    .combined-redundancy-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding-top: 9px; border-top: 1px solid var(--line); }
+    .combined-redundancy-row:first-child { padding-top: 0; border-top: 0; }
+    .combined-redundancy-row span { min-width: 0; overflow: hidden; color: var(--text); font-size: 12px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+    .combined-redundancy-row small { display: block; margin-top: 2px; color: var(--muted); font-size: 10.5px; }
+    .combined-redundancy-row strong { color: var(--heading); font-size: 13px; white-space: nowrap; }
+    .portfolio-audit-details { padding: 0; overflow: hidden; }
+    .portfolio-audit-details > summary { padding: 16px 18px; cursor: pointer; color: var(--heading); font-weight: 650; }
+    .portfolio-audit-details[open] > summary { border-bottom: 1px solid var(--line); }
+    .portfolio-audit-details > section { margin: 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; }
+    .portfolio-audit-details > section:last-child { border-bottom: 0; }
+    .combined-improvement-section { margin-bottom: 0; }
+    .portfolio-clean-hero { align-items: flex-start; margin-bottom: 16px; }
+    .portfolio-hero-actions { display: flex; align-items: center; gap: 9px; }
+    .portfolio-hero-actions .analysis-status { white-space: normal; text-align: right; }
+    .portfolio-upload-card { margin-bottom: 20px; border-radius: 10px; }
+    .portfolio-upload-card .portfolio-format-prompt { border-left-width: 3px; }
+    .portfolio-local-note { grid-column: 1 / -1; margin: -2px 0 0; color: var(--muted); font-size: 11px; }
+    #portfolioHoldingsPanel { display: grid; gap: 18px; }
+    #portfolioHoldingsPanel[hidden] { display: none; }
+    .portfolio-story-section {
+      margin: 0;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+    }
+    .analysis-section.portfolio-story-section { margin: 0; }
+    .portfolio-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
+    .portfolio-section-head > div { min-width: 180px; }
+    .portfolio-section-head span { color: var(--brand-deep); font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+    .portfolio-story-section .portfolio-section-head h2 { margin: 5px 0 0; color: var(--heading); font-size: 19px; }
+    .portfolio-section-head p { max-width: 560px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; text-align: right; }
+    .portfolio-story-section > .summary-grid { margin-bottom: 0; }
+    .portfolio-story-section .summary-card { min-height: 94px; padding: 14px 15px; background: var(--surface-soft); }
+    .portfolio-story-section .summary-value { font-size: 21px; }
+    .portfolio-story-section .portfolio-asset-grid { margin-bottom: 0; }
+    .portfolio-story-section .combined-analysis-card { background: var(--surface-soft); }
+    .portfolio-reading-guide { margin-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+    .portfolio-reading-guide summary { padding: 12px 0 0; color: var(--text); font-weight: 600; cursor: pointer; }
+    .portfolio-reading-guide p { margin: 8px 0 0; line-height: 1.55; }
+    .portfolio-audit-details.portfolio-story-section { padding: 0; }
+    .portfolio-audit-details.portfolio-story-section > summary { padding: 18px 22px; }
 
     .summary-card {
       min-height: 112px;
@@ -413,6 +461,7 @@
       border-radius: 6px;
       background: var(--panel);
     }
+    .summary-value.empty-label { max-width: 150px; color: var(--muted); font-size: 15px; line-height: 1.3; }
     .seasonality-headline-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -732,6 +781,70 @@
       accent-color: #0ea5c9;
     }
     .portfolio-price-consent small { color: var(--muted); line-height: 1.45; }
+    .portfolio-format-prompt {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--warning);
+      border-radius: 6px;
+      background: var(--surface-soft);
+    }
+    .portfolio-format-prompt-mark { display: flex; align-items: center; gap: 10px; color: var(--heading); font-size: 13px; font-weight: 650; }
+    .portfolio-format-prompt-icon {
+      display: grid;
+      grid-template-columns: repeat(3, 4px);
+      gap: 2px;
+      padding: 7px;
+      border-radius: 5px;
+      color: var(--brand-deep);
+      background: var(--panel);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+    .portfolio-format-prompt-icon i { width: 4px; height: 4px; border-radius: 1px; background: currentColor; }
+    .portfolio-format-button { white-space: nowrap; }
+    .portfolio-format-dialog {
+      width: min(940px, calc(100vw - 30px));
+      max-height: min(760px, calc(100vh - 30px));
+      padding: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--text);
+      background: var(--panel);
+      box-shadow: 0 24px 70px rgba(20, 26, 34, .28);
+    }
+    .portfolio-format-dialog::backdrop { background: rgba(20, 26, 34, .58); backdrop-filter: blur(2px); }
+    .portfolio-format-dialog-shell { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; max-height: inherit; }
+    .portfolio-format-dialog-head,
+    .portfolio-format-dialog-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 18px; }
+    .portfolio-format-dialog-head { border-bottom: 1px solid var(--line); }
+    .portfolio-format-dialog-head h2 { margin: 0; color: var(--heading); font-size: 18px; }
+    .portfolio-format-dialog-head span { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
+    .portfolio-format-dialog-close { width: 34px; height: 34px; padding: 0; border-radius: 50%; font-size: 21px; line-height: 1; }
+    .portfolio-format-dialog-body { overflow: auto; padding: 18px; }
+    .portfolio-format-examples { display: grid; gap: 18px; }
+    .portfolio-format-example h3 { margin: 0 0 8px; color: var(--heading); font-size: 13px; }
+    .portfolio-format-sheet { overflow-x: auto; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); }
+    .portfolio-format-row { display: grid; grid-template-columns: 1.15fr 1.5fr .75fr .85fr 1fr 1fr; min-width: 720px; }
+    .portfolio-format-row.funds { grid-template-columns: 2.1fr .75fr 1fr 1fr 1fr; min-width: 650px; }
+    .portfolio-format-cell { min-width: 0; padding: 10px 11px; border-right: 1px solid var(--line); border-top: 1px solid var(--line); font-size: 11.5px; }
+    .portfolio-format-cell:last-child { border-right: 0; }
+    .portfolio-format-row:first-child .portfolio-format-cell { border-top: 0; }
+    .portfolio-format-row.header .portfolio-format-cell { color: var(--heading); background: var(--surface-soft); font-weight: 700; }
+    .portfolio-format-cell.required { box-shadow: inset 0 -3px 0 var(--brand); }
+    .portfolio-format-cell.recommended { box-shadow: inset 0 -3px 0 var(--warning); }
+    .portfolio-format-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 14px; color: var(--muted); font-size: 11px; }
+    .portfolio-format-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .portfolio-format-legend i { width: 18px; height: 3px; border-radius: 999px; background: var(--brand); }
+    .portfolio-format-legend .recommended i { background: var(--warning); }
+    .portfolio-format-avoid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .portfolio-format-avoid-item { display: flex; align-items: center; gap: 9px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 11px; }
+    .portfolio-format-avoid-item b { display: grid; place-items: center; width: 20px; height: 20px; flex: 0 0 auto; border-radius: 50%; color: #fff; background: var(--negative); }
+    .portfolio-format-dialog-foot { border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
     .portfolio-price-date { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; white-space: nowrap; }
     .portfolio-asset-section { margin-bottom: 28px; }
     .portfolio-asset-section h2,
@@ -778,6 +891,21 @@
       background: var(--panel);
     }
     .loan-calculate-button { align-self: end; min-height: 40px; }
+    @media (max-width: 900px) {
+      .combined-portfolio-summary,
+      .combined-analysis-grid { grid-template-columns: 1fr 1fr; }
+      .portfolio-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 620px) {
+      .combined-portfolio-summary,
+      .combined-analysis-grid { grid-template-columns: 1fr; }
+      .portfolio-clean-hero,
+      .portfolio-section-head { flex-direction: column; }
+      .portfolio-hero-actions { width: 100%; justify-content: space-between; }
+      .portfolio-section-head p { max-width: none; text-align: left; }
+      .portfolio-summary-grid { grid-template-columns: 1fr 1fr; }
+      .portfolio-story-section { padding: 17px; }
+    }
     .loan-result-grid { margin-top: 28px; }
     .analysis-section { margin-top: 28px; }
     .analysis-section h2 { margin: 0 0 4px; color: #2b2e33; font-size: 17px; }
@@ -1421,6 +1549,8 @@
       .summary-value { font-size: 20px; }
       .split-panels { grid-template-columns: 1fr; }
       .universe-controls { grid-template-columns: 1fr; }
+      .portfolio-format-prompt { grid-column: 1; }
+      .portfolio-format-avoid { grid-template-columns: 1fr; }
       .loan-calculator-grid { grid-template-columns: 1fr 1fr; }
       .universe-source { grid-column: 1; }
       .score-guide-grid { grid-template-columns: 1fr; }
@@ -1541,7 +1671,6 @@
           <li><button class="nav-button" data-page="Seasonality Analysis" style="--item-color:#60a625"><span class="nav-icon"></span><span>Seasonality Analysis</span></button></li>
           <li><button class="nav-button" data-page="Earnings Analysis" style="--item-color:#c52d78"><span class="nav-icon"></span><span>Earnings Analysis</span></button></li>
           <li><button class="nav-button" data-page="Portfolio Analysis" style="--item-color:#8f3bd1"><span class="nav-icon"></span><span>Portfolio Analysis</span></button></li>
-          <li><button class="nav-button" data-page="Mutual Funds Comparer" style="--item-color:#6b57b8"><span class="nav-icon"></span><span>Mutual Funds Comparer</span></button></li>
           <li><button class="nav-button" data-page="Events Calendar" style="--item-color:#e6980b"><span class="nav-icon"></span><span>Events Calendar</span></button></li>
           <li><button class="nav-button" data-page="Stock Data YTD" style="--item-color:#0c94b7"><span class="nav-icon"></span><span>Stock Data YTD</span></button></li>
           <li><button class="nav-button" data-page="Historical Regimes" style="--item-color:#8b6f47"><span class="nav-icon"></span><span>Historical regimes</span></button></li>
@@ -2794,23 +2923,30 @@
           <div class="page-tabs" role="tablist" aria-label="Portfolio Analysis views">
             <button class="page-tab active" id="portfolioHoldingsTab" type="button" role="tab" aria-selected="true" aria-controls="portfolioHoldingsPanel">Holdings analysis</button>
             <button class="page-tab" id="portfolioLoanTab" type="button" role="tab" aria-selected="false" aria-controls="portfolioLoanPanel">Home loan tracker</button>
+            <button class="page-tab" id="portfolioMutualFundsTab" type="button" role="tab" aria-selected="false" aria-controls="portfolioMutualFundsPanel">Mutual funds comparer</button>
           </div>
 
-          <div class="analysis-intro">
+          <div id="portfolioPrimaryControls">
+          <div class="analysis-intro mutual-fund-hero portfolio-clean-hero">
             <div>
+              <span class="mutual-fund-eyebrow">COMPLETE PORTFOLIO OVERVIEW</span>
               <h1 id="portfolioTitle">Portfolio Analysis</h1>
-              <p class="analysis-caption">Holdings validation, weights, and current price tracking</p>
+              <p class="analysis-caption">One upload for stocks, mutual funds, performance, risk, diversification and improvement paths.</p>
             </div>
-            <button class="panel-button" id="clearPortfolioButton" type="button">Clear portfolio</button>
+            <div class="portfolio-hero-actions">
+              <div class="analysis-status" id="portfolioStatus">Choose a portfolio file</div>
+              <button class="panel-button" id="clearPortfolioButton" type="button">Clear</button>
+            </div>
           </div>
 
-          <div class="analysis-status" id="portfolioStatus">Choose a CSV or XLSX holdings file</div>
-          <div class="analysis-note">Your file is sent only to the PG-terminal server running on this computer. It is parsed in memory, is not written to SQLite, and is discarded after each response.</div>
-
-          <div class="universe-controls" aria-label="Portfolio upload">
+          <div class="universe-controls portfolio-upload-card" aria-label="Portfolio upload">
+            <div class="portfolio-format-prompt" id="portfolioFileGuide" role="note">
+              <span class="portfolio-format-prompt-mark"><span class="portfolio-format-prompt-icon" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>File table format</span>
+              <button class="panel-button portfolio-format-button" id="openPortfolioFormatGuide" type="button" aria-haspopup="dialog">View visual example</button>
+            </div>
             <div class="selector-field">
-              <label for="portfolioFileInput">Holdings file</label>
-              <input id="portfolioFileInput" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+              <label for="portfolioFileInput">Universal portfolio file</label>
+              <input id="portfolioFileInput" type="file" accept=".csv,.xlsx,.pdf,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
             </div>
             <div class="portfolio-price-consent">
               <label for="portfolioGoogleFinanceInput"><input id="portfolioGoogleFinanceInput" type="checkbox">Use Google Finance for NSE prices</label>
@@ -2819,32 +2955,92 @@
             <div class="universe-action-row">
               <span class="universe-action-status" id="portfolioUploadStatus">Choose a file and analysis will start automatically.</span>
             </div>
-            <p class="universe-source">PG-terminal automatically recognizes common broker columns for symbol, quantity, weight, average cost, current value, LTP/NAV, and company name. Uploaded weight is preferred, then current value, then quantity × the latest available price.</p>
+            <p class="portfolio-local-note">LOCAL ONLY · Automatic stock/fund detection · Nothing is written to SQLite · CSV, XLSX or selectable-text PDF</p>
+            <div class="mutual-fund-load-progress" id="portfolioLoadProgress" role="progressbar" aria-label="Portfolio file analysis progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+              <span class="mutual-fund-progress-stage" id="portfolioProgressStage">Waiting for a file</span>
+              <span class="mutual-fund-progress-percent" id="portfolioProgressPercent">0%</span>
+              <div class="mutual-fund-progress-track" aria-hidden="true"><i id="portfolioProgressFill"></i></div>
+              <p class="mutual-fund-progress-detail" id="portfolioProgressDetail">Choose a file to begin.</p>
+            </div>
+          </div>
+
+          <dialog class="portfolio-format-dialog" id="portfolioFormatDialog" aria-labelledby="portfolioFormatDialogTitle">
+            <div class="portfolio-format-dialog-shell">
+              <header class="portfolio-format-dialog-head">
+                <div><h2 id="portfolioFormatDialogTitle">File table format</h2><span>One header row · one holding per row</span></div>
+                <button class="panel-button portfolio-format-dialog-close" id="closePortfolioFormatGuide" type="button" aria-label="Close file format guide">×</button>
+              </header>
+              <div class="portfolio-format-dialog-body">
+                <div class="portfolio-format-legend" aria-label="Column legend">
+                  <span><i></i>Minimum required</span>
+                  <span class="recommended"><i></i>Recommended for performance analysis</span>
+                </div>
+                <div class="portfolio-format-examples">
+                  <section class="portfolio-format-example" aria-labelledby="stockFormatExampleTitle">
+                    <h3 id="stockFormatExampleTitle">Stocks</h3>
+                    <div class="portfolio-format-sheet" aria-label="Example stock holdings table">
+                      <div class="portfolio-format-row header">
+                        <div class="portfolio-format-cell required">Symbol</div><div class="portfolio-format-cell">Instrument</div><div class="portfolio-format-cell required">Quantity</div><div class="portfolio-format-cell recommended">Avg Cost</div><div class="portfolio-format-cell">Current Value</div><div class="portfolio-format-cell recommended">Purchase Date</div>
+                      </div>
+                      <div class="portfolio-format-row">
+                        <div class="portfolio-format-cell">RELIANCE</div><div class="portfolio-format-cell">Reliance Industries</div><div class="portfolio-format-cell">12</div><div class="portfolio-format-cell">2,425.00</div><div class="portfolio-format-cell">31,800.00</div><div class="portfolio-format-cell">2025-04-08</div>
+                      </div>
+                      <div class="portfolio-format-row">
+                        <div class="portfolio-format-cell">HDFCBANK</div><div class="portfolio-format-cell">HDFC Bank</div><div class="portfolio-format-cell">20</div><div class="portfolio-format-cell">1,610.00</div><div class="portfolio-format-cell">34,900.00</div><div class="portfolio-format-cell">2024-11-15</div>
+                      </div>
+                    </div>
+                  </section>
+                  <section class="portfolio-format-example" aria-labelledby="fundFormatExampleTitle">
+                    <h3 id="fundFormatExampleTitle">Mutual funds</h3>
+                    <div class="portfolio-format-sheet" aria-label="Example mutual fund holdings table">
+                      <div class="portfolio-format-row funds header">
+                        <div class="portfolio-format-cell required">Scheme / Fund Name</div><div class="portfolio-format-cell required">Units</div><div class="portfolio-format-cell recommended">Invested Value</div><div class="portfolio-format-cell">Current Value</div><div class="portfolio-format-cell recommended">Purchase Date</div>
+                      </div>
+                      <div class="portfolio-format-row funds">
+                        <div class="portfolio-format-cell">Nippon India Large Cap Fund - Direct Growth</div><div class="portfolio-format-cell">155.24</div><div class="portfolio-format-cell">25,000.00</div><div class="portfolio-format-cell">28,650.00</div><div class="portfolio-format-cell">2024-06-12</div>
+                      </div>
+                      <div class="portfolio-format-row funds">
+                        <div class="portfolio-format-cell">HDFC Mid-Cap Opportunities Fund - Direct Growth</div><div class="portfolio-format-cell">82.70</div><div class="portfolio-format-cell">20,000.00</div><div class="portfolio-format-cell">23,480.00</div><div class="portfolio-format-cell">2024-09-03</div>
+                      </div>
+                    </div>
+                  </section>
+                  <div class="portfolio-format-avoid" aria-label="Formats to avoid">
+                    <div class="portfolio-format-avoid-item"><b>×</b><span>Merged or multi-row headers</span></div>
+                    <div class="portfolio-format-avoid-item"><b>×</b><span>Subtotal and total rows among holdings</span></div>
+                    <div class="portfolio-format-avoid-item"><b>×</b><span>Scanned PDFs or protected workbooks</span></div>
+                  </div>
+                </div>
+              </div>
+              <footer class="portfolio-format-dialog-foot"><span>CSV · XLSX · selectable-text PDF · maximum 8 MB</span><button class="panel-button primary" id="portfolioFormatGuideDone" type="button">Got it</button></footer>
+            </div>
+          </dialog>
           </div>
 
           <div id="portfolioHoldingsPanel" role="tabpanel" aria-labelledby="portfolioHoldingsTab">
-            <section class="portfolio-asset-section" aria-labelledby="portfolioAssetTitle">
-              <h2 id="portfolioAssetTitle">Asset allocation</h2>
-              <p class="section-note" id="portfolioAssetNote">Upload holdings to classify the portfolio into equity, debt, commodity, hybrid, cash and other assets.</p>
-              <div class="portfolio-asset-bar" id="portfolioAssetBar" role="img" aria-label="No asset allocation loaded"></div>
-              <div class="portfolio-asset-grid" id="portfolioAssetCards"><article class="portfolio-asset-card"><span class="portfolio-asset-label">No allocation loaded</span><strong>—</strong><small>Upload a portfolio to begin.</small></article></div>
-              <div class="table-guide"><strong>How to read:</strong> Percentages use the same normalized portfolio weights as the position table. Current value is shown when every holding in that asset class has a usable value. Classification uses the instrument name and exchange-price evidence; uncertain holdings remain under Other.</div>
+            <section class="analysis-section combined-portfolio-overview portfolio-story-section" id="portfolioOverviewSection" aria-labelledby="combinedPortfolioTitle" hidden>
+              <div class="portfolio-section-head"><div><span>01 · OVERVIEW</span><h2 id="combinedPortfolioTitle">Complete portfolio</h2></div><p id="combinedPortfolioNote">Upload one file to separate stocks and mutual funds and build the combined view.</p></div>
+              <div class="summary-grid combined-portfolio-summary" aria-label="Combined portfolio summary">
+                <article class="summary-card"><div class="summary-value" id="combinedStocksValue">—</div><div class="summary-meta">Stocks value</div></article>
+                <article class="summary-card"><div class="summary-value" id="combinedMutualFundsValue">—</div><div class="summary-meta">Mutual funds value</div></article>
+                <article class="summary-card"><div class="summary-value" id="combinedPortfolioValue">—</div><div class="summary-meta">Total portfolio value</div></article>
+                <article class="summary-card"><div class="summary-value" id="combinedDiversificationScore">—</div><div class="summary-meta">Diversification score</div></article>
+              </div>
             </section>
 
-            <h2 class="portfolio-performance-title">Portfolio performance</h2>
-            <section class="summary-grid portfolio-summary-grid" aria-label="Portfolio return summary">
+            <section class="portfolio-story-section" id="portfolioPerformanceSection" aria-labelledby="portfolioPerformanceTitle" hidden>
+              <div class="portfolio-section-head"><div><span>02 · PERFORMANCE</span><h2 id="portfolioPerformanceTitle">Portfolio performance</h2></div><p id="portfolioSummaryNote">Upload holdings with purchase dates and invested amounts to calculate returns, matched benchmarks and XIRR.</p></div>
+            <div class="summary-grid portfolio-summary-grid" aria-label="Portfolio return summary">
               <article class="summary-card"><div class="summary-value" id="portfolioInvestedValue">—</div><div class="summary-meta">Total amount invested</div></article>
               <article class="summary-card"><div class="summary-value" id="portfolioCurrentReturnValue">—</div><div class="summary-meta">Current returns</div></article>
               <article class="summary-card"><div class="summary-value" id="portfolioNetReturnValue">—</div><div class="summary-meta">Net returns</div></article>
               <article class="summary-card"><div class="summary-value" id="portfolioBenchmarkReturnValue">—</div><div class="summary-meta">NIFTY 50 matched return</div></article>
               <article class="summary-card"><div class="summary-value" id="portfolioGsecReturnValue">—</div><div class="summary-meta">10Y G-Sec matched return</div></article>
               <article class="summary-card"><div class="summary-value" id="portfolioXirrValue">—</div><div class="summary-meta">Portfolio XIRR</div></article>
+            </div>
             </section>
-            <div class="analysis-note" id="portfolioSummaryNote">Upload holdings with purchase dates and invested amounts to calculate portfolio-level returns, a cash-flow-matched NIFTY 50 comparison, and XIRR.</div>
 
-            <section class="portfolio-risk-section" aria-labelledby="portfolioRiskTitle">
-              <h2 class="portfolio-performance-title" id="portfolioRiskTitle">Risk-adjusted performance</h2>
-              <p class="section-note">Historical ratios use daily returns and compare the portfolio with NIFTY 50.</p>
+            <section class="portfolio-risk-section portfolio-story-section" id="portfolioRiskSection" aria-labelledby="portfolioRiskTitle" hidden>
+              <div class="portfolio-section-head"><div><span>03 · RISK</span><h2 id="portfolioRiskTitle">Risk-adjusted performance</h2></div><p id="portfolioRiskNote">Upload holdings with sufficient local price history to calculate risk-adjusted performance.</p></div>
               <div class="summary-grid portfolio-risk-grid" aria-label="Portfolio risk ratios">
                 <article class="summary-card"><div class="summary-value" id="portfolioAnnualizedReturnValue">—</div><div class="summary-meta">Annualized return</div></article>
                 <article class="summary-card"><div class="summary-value" id="portfolioVolatilityValue">—</div><div class="summary-meta">Annualized volatility</div></article>
@@ -2858,9 +3054,30 @@
                 <article class="summary-card"><div class="summary-value" id="portfolioInformationRatioValue">—</div><div class="summary-meta">Information ratio</div></article>
                 <article class="summary-card"><div class="summary-value" id="portfolioCorrelationValue">—</div><div class="summary-meta">NIFTY 50 correlation</div></article>
               </div>
-              <div class="analysis-note" id="portfolioRiskNote">Upload holdings with sufficient local price history to calculate risk-adjusted performance.</div>
-              <div class="table-guide"><strong>How to read:</strong> Sharpe measures return per unit of total volatility; Sortino focuses on harmful downside variation. Beta measures sensitivity to NIFTY 50, while Jensen alpha estimates return beyond that beta exposure. Maximum drawdown is the largest peak-to-trough loss. Calmar compares annualized return with drawdown. Tracking error and information ratio describe consistency and reward relative to NIFTY 50.</div>
+              <details class="portfolio-reading-guide"><summary>How to read these ratios</summary><p>Sharpe measures return per unit of total volatility; Sortino focuses on downside variation. Beta measures NIFTY 50 sensitivity, while Jensen alpha estimates return beyond that beta exposure. Drawdown shows the largest peak-to-trough loss; Calmar compares annualized return with that drawdown.</p></details>
             </section>
+
+            <section class="portfolio-asset-section portfolio-story-section" id="portfolioAllocationSection" aria-labelledby="portfolioAssetTitle" hidden>
+              <div class="portfolio-section-head"><div><span>04 · DIVERSIFICATION</span><h2 id="portfolioAssetTitle">Diversification and allocation</h2></div><p id="portfolioAssetNote">Upload holdings to classify the portfolio into equity, debt, commodity, hybrid, cash and other assets.</p></div>
+              <div class="portfolio-asset-bar" id="portfolioAssetBar" role="img" aria-label="No asset allocation loaded"></div>
+              <div class="portfolio-asset-grid" id="portfolioAssetCards"><article class="portfolio-asset-card"><span class="portfolio-asset-label">No allocation loaded</span><strong>—</strong><small>Upload a portfolio to begin.</small></article></div>
+              <div class="combined-analysis-grid">
+                <article class="combined-analysis-card"><h3>Mutual-fund allocation</h3><div id="combinedFundAllocation" class="mutual-fund-allocation-list"><div class="mutual-fund-empty">No mutual funds detected.</div></div></article>
+                <article class="combined-analysis-card"><h3>Stock-size diversification</h3><div id="combinedMarketCapAllocation" class="mutual-fund-allocation-list"><div class="mutual-fund-empty">Official fund holdings are required.</div></div></article>
+              </div>
+              <details class="portfolio-reading-guide"><summary>How to read this allocation</summary><p>Direct holdings and fund allocations stay separate so a diversified list of fund names is not mistaken for diversified underlying exposure. Missing official holdings remain unclassified.</p></details>
+            </section>
+
+            <section class="analysis-section portfolio-story-section" id="portfolioRedundancySection" aria-labelledby="combinedRedundancyTitle" hidden>
+              <div class="portfolio-section-head"><div><span>05 · REDUNDANCY</span><h2 id="combinedRedundancyTitle">Repeated exposure</h2></div><p id="combinedRedundancyNote">Upload holdings to check direct-stock concentration, fund-to-fund similarity and stocks repeated through mutual funds.</p></div>
+              <div class="combined-analysis-grid" id="combinedRedundancyCards">
+                <article class="combined-analysis-card"><h3>Direct stocks</h3><p>No stock holdings detected.</p></article>
+                <article class="combined-analysis-card"><h3>Mutual funds</h3><p>No fund overlap analysis available.</p></article>
+              </div>
+            </section>
+
+            <details class="analysis-section portfolio-audit-details portfolio-story-section" id="portfolioAuditSection" hidden>
+              <summary>Detailed holdings and validation audit</summary>
 
             <section class="analysis-section">
             <h2>Upload preview</h2>
@@ -2886,6 +3103,12 @@
             <section class="analysis-section">
             <h2>Contract and limitations</h2>
             <div class="analysis-note" id="portfolioContractNote">The portfolio-analysis contract has not been loaded.</div>
+            </section>
+            </details>
+
+            <section class="analysis-section combined-improvement-section portfolio-story-section" id="portfolioImprovementSection" aria-labelledby="combinedImprovementTitle" hidden>
+              <div class="portfolio-section-head"><div><span>06 · NEXT STEPS</span><h2 id="combinedImprovementTitle">Three improvement paths</h2></div><p>Evidence-led review prompts for reducing complexity, improving diversification and testing return efficiency. Not buy or sell instructions.</p></div>
+              <div class="mutual-fund-actions" id="combinedImprovementPaths"><div class="mutual-fund-empty">Improvement paths will appear after analysis.</div></div>
             </section>
           </div>
 
@@ -2949,9 +3172,8 @@
               <div class="analysis-note" id="loanContractNote">The home-loan tracker contract has not been loaded.</div>
             </section>
           </div>
-        </section>
 
-        <section id="mutualFundsComparerView" hidden aria-labelledby="mutualFundsComparerTitle">
+          <div id="portfolioMutualFundsPanel" role="tabpanel" aria-labelledby="portfolioMutualFundsTab" hidden>
           <div class="analysis-intro mutual-fund-hero">
             <div>
               <span class="mutual-fund-eyebrow">PORTFOLIO OVERVIEW</span>
@@ -3036,6 +3258,7 @@
             <table><tbody id="mutualFundsPerformanceBody"></tbody></table><table><tbody id="mutualFundsOverlapBody"></tbody></table><table><tbody id="mutualFundsLookthroughBody"></tbody></table>
             <table><tbody id="mutualFundsHoldingsSourcesBody"></tbody></table><table><tbody id="mutualFundsRepeatedBody"></tbody></table><table><tbody id="mutualFundsContributionBody"></tbody></table>
             <table><tbody id="mutualFundsCapBody"></tbody></table><table><tbody id="mutualFundsSuggestionsBody"></tbody></table><table><tbody id="mutualFundsIssuesBody"></tbody></table>
+          </div>
           </div>
         </section>
 
@@ -3486,7 +3709,6 @@
     const earningsSearchInput = document.getElementById('earningsSearchInput');
     const earningsBody = document.getElementById('earningsBody');
     const portfolioView = document.getElementById('portfolioView');
-    const mutualFundsComparerView = document.getElementById('mutualFundsComparerView');
     const mutualFundsFileInput = document.getElementById('mutualFundsFileInput');
     const clearMutualFundsButton = document.getElementById('clearMutualFundsButton');
     const mutualFundsCategoryBody = document.getElementById('mutualFundsCategoryBody');
@@ -3508,18 +3730,31 @@
     const mutualFundsProgressDetail = document.getElementById('mutualFundsProgressDetail');
     let mutualFundsAnalysisSequence = 0;
     let mutualFundsCurrentAnalysis = null;
+    let mutualFundsCurrentScore = null;
     let mutualFundsProgressTimer = null;
     let mutualFundsProgressStartedAt = 0;
     let mutualFundsProgressBaseDetail = '';
     const portfolioFileInput = document.getElementById('portfolioFileInput');
     const portfolioGoogleFinanceInput = document.getElementById('portfolioGoogleFinanceInput');
+    const portfolioFormatDialog = document.getElementById('portfolioFormatDialog');
+    const openPortfolioFormatGuide = document.getElementById('openPortfolioFormatGuide');
+    const closePortfolioFormatGuide = document.getElementById('closePortfolioFormatGuide');
+    const portfolioFormatGuideDone = document.getElementById('portfolioFormatGuideDone');
+    const portfolioLoadProgress = document.getElementById('portfolioLoadProgress');
+    const portfolioProgressStage = document.getElementById('portfolioProgressStage');
+    const portfolioProgressPercent = document.getElementById('portfolioProgressPercent');
+    const portfolioProgressFill = document.getElementById('portfolioProgressFill');
+    const portfolioProgressDetail = document.getElementById('portfolioProgressDetail');
     const clearPortfolioButton = document.getElementById('clearPortfolioButton');
     const portfolioPositionsBody = document.getElementById('portfolioPositionsBody');
     const portfolioIssuesBody = document.getElementById('portfolioIssuesBody');
+    const portfolioPrimaryControls = document.getElementById('portfolioPrimaryControls');
     const portfolioHoldingsTab = document.getElementById('portfolioHoldingsTab');
     const portfolioLoanTab = document.getElementById('portfolioLoanTab');
+    const portfolioMutualFundsTab = document.getElementById('portfolioMutualFundsTab');
     const portfolioHoldingsPanel = document.getElementById('portfolioHoldingsPanel');
     const portfolioLoanPanel = document.getElementById('portfolioLoanPanel');
+    const portfolioMutualFundsPanel = document.getElementById('portfolioMutualFundsPanel');
     const loanHistoryBody = document.getElementById('loanHistoryBody');
     const loanTotalsBody = document.getElementById('loanTotalsBody');
     const loanScheduleBody = document.getElementById('loanScheduleBody');
@@ -3631,6 +3866,10 @@
     let earningsPayload = null;
     let portfolioPreview = null;
     let portfolioAnalysis = null;
+    let portfolioAnalysisSequence = 0;
+    let portfolioProgressTimer = null;
+    let portfolioProgressStartedAt = 0;
+    let portfolioProgressBaseDetail = '';
     let dashboardMarketStory = null;
     let homeLoanTracker = null;
     const displayMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -6137,12 +6376,18 @@
 
     function setPortfolioTab(tabName) {
       const showLoan = tabName === 'loan';
-      portfolioHoldingsPanel.hidden = showLoan;
+      const showMutualFunds = tabName === 'mutual-funds';
+      const showHoldings = !showLoan && !showMutualFunds;
+      portfolioPrimaryControls.hidden = showMutualFunds;
+      portfolioHoldingsPanel.hidden = !showHoldings;
       portfolioLoanPanel.hidden = !showLoan;
-      portfolioHoldingsTab.classList.toggle('active', !showLoan);
+      portfolioMutualFundsPanel.hidden = !showMutualFunds;
+      portfolioHoldingsTab.classList.toggle('active', showHoldings);
       portfolioLoanTab.classList.toggle('active', showLoan);
-      portfolioHoldingsTab.setAttribute('aria-selected', String(!showLoan));
+      portfolioMutualFundsTab.classList.toggle('active', showMutualFunds);
+      portfolioHoldingsTab.setAttribute('aria-selected', String(showHoldings));
       portfolioLoanTab.setAttribute('aria-selected', String(showLoan));
+      portfolioMutualFundsTab.setAttribute('aria-selected', String(showMutualFunds));
     }
 
     function loanPeriod(months, zeroLabel = 'Paid off') {
@@ -6294,14 +6539,71 @@
       calculateLoanRepayment();
     }
 
-    function portfolioFileBase64(file) {
-      return file.arrayBuffer().then((buffer) => {
-        const bytes = new Uint8Array(buffer);
-        let binary = '';
-        for (let offset = 0; offset < bytes.length; offset += 32768) {
-          binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
-        }
-        return btoa(binary);
+    function refreshPortfolioProgressDetail() {
+      if (!portfolioProgressStartedAt || !portfolioProgressBaseDetail) return;
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - portfolioProgressStartedAt) / 1000));
+      portfolioProgressDetail.textContent = `${portfolioProgressBaseDetail} · ${elapsedSeconds}s elapsed`;
+    }
+
+    function setPortfolioProgress(value, stage, detail, state = '') {
+      const progress = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+      portfolioLoadProgress.hidden = false;
+      portfolioLoadProgress.classList.remove('complete', 'warning', 'error');
+      if (state) portfolioLoadProgress.classList.add(state);
+      portfolioLoadProgress.setAttribute('aria-valuenow', String(progress));
+      portfolioProgressStage.textContent = stage;
+      portfolioProgressPercent.textContent = `${progress}%`;
+      portfolioProgressFill.style.width = `${progress}%`;
+      portfolioProgressBaseDetail = detail;
+      portfolioProgressDetail.textContent = detail;
+      refreshPortfolioProgressDetail();
+    }
+
+    function startPortfolioProgress(file) {
+      if (portfolioProgressTimer) clearInterval(portfolioProgressTimer);
+      portfolioProgressStartedAt = Date.now();
+      setPortfolioProgress(2, 'File selected', `${file.name} · ${(file.size / (1024 * 1024)).toFixed(2)} MB`);
+      portfolioProgressTimer = setInterval(refreshPortfolioProgressDetail, 1000);
+    }
+
+    function finishPortfolioProgress(stage, detail, state = 'complete') {
+      if (portfolioProgressTimer) clearInterval(portfolioProgressTimer);
+      portfolioProgressTimer = null;
+      const elapsedSeconds = portfolioProgressStartedAt
+        ? Math.max(0, Math.round((Date.now() - portfolioProgressStartedAt) / 1000))
+        : 0;
+      portfolioProgressStartedAt = 0;
+      portfolioProgressBaseDetail = '';
+      setPortfolioProgress(100, stage, `${detail} · completed in ${elapsedSeconds}s`, state);
+    }
+
+    function portfolioFileBase64WithProgress(file, sequence) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onprogress = (event) => {
+          if (sequence !== portfolioAnalysisSequence) return;
+          const fraction = event.lengthComputable && event.total ? event.loaded / event.total : 0;
+          const readPct = Math.max(4, Math.min(18, 4 + fraction * 14));
+          const loadedMb = event.loaded / (1024 * 1024);
+          const totalMb = (event.total || file.size) / (1024 * 1024);
+          setPortfolioProgress(readPct, 'Reading file', `${loadedMb.toFixed(2)} of ${totalMb.toFixed(2)} MB read`);
+        };
+        reader.onerror = () => reject(new Error('file_read_failed'));
+        reader.onload = () => {
+          try {
+            if (sequence !== portfolioAnalysisSequence) return reject(new Error('analysis_cancelled'));
+            const bytes = new Uint8Array(reader.result);
+            let binary = '';
+            for (let offset = 0; offset < bytes.length; offset += 32768) {
+              binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+            }
+            setPortfolioProgress(20, 'File read', 'Preparing the file for local holdings detection');
+            resolve(btoa(binary));
+          } catch (error) {
+            reject(error);
+          }
+        };
+        reader.readAsArrayBuffer(file);
       });
     }
 
@@ -6557,6 +6859,7 @@
       const targetDefensive = regimeNumber === null ? null : clamp(Math.max(10, Math.min(45, 20 - regimeNumber * .2)));
       const regimeFit = targetDefensive === null ? null : clamp(100 - Math.abs(defensiveWeight - targetDefensive) * 2.5);
       const finalScore = Math.round(regimeFit === null ? structuralScore : structuralScore * .8 + regimeFit * .2);
+      mutualFundsCurrentScore = funds.length ? finalScore : null;
       const scoreLabel = finalScore >= 80 ? 'Strong diversification' : finalScore >= 65 ? 'Balanced, with some gaps' : finalScore >= 50 ? 'Mixed diversification' : 'Concentrated portfolio';
       const readyFunds = Number(disclosure.funds_with_official_holdings || diversification.funds_with_underlying_holdings || 0);
       const coverageRatio = funds.length ? readyFunds / funds.length : 0;
@@ -6585,6 +6888,119 @@
         ? suggestions.map((row) => ({ label: row.priority || 'Review', title: row.title || 'Review portfolio structure', detail: row.detail || '' }))
         : fallbackActions;
       document.getElementById('mutualFundsActionCards').innerHTML = actions.map((row) => `<article class="mutual-fund-action-card"><span>${escapeHtml(row.label)}</span><strong>${escapeHtml(row.title)}</strong><p>${escapeHtml(row.detail)}</p></article>`).join('');
+      renderCombinedPortfolioStory();
+    }
+
+    function renderCombinedPortfolioStory() {
+      const positions = portfolioAnalysis && Array.isArray(portfolioAnalysis.positions) ? portfolioAnalysis.positions : [];
+      const stockPositions = positions.filter((row) => String(row.symbol || '').toUpperCase() !== 'MF');
+      const fundPositions = positions.filter((row) => String(row.symbol || '').toUpperCase() === 'MF');
+      const sumValues = (rows) => {
+        const values = rows.map((row) => row.current_value === null || row.current_value === undefined ? null : Number(row.current_value)).filter((value) => value !== null && Number.isFinite(value));
+        return values.length === rows.length && rows.length ? values.reduce((total, value) => total + value, 0) : null;
+      };
+      const stockValue = sumValues(stockPositions);
+      const analyzedFundValue = sumValues(fundPositions);
+      const uploadedFundValue = mutualFundsCurrentAnalysis && ['current_value', 'invested_value'].includes(String(mutualFundsCurrentAnalysis.weight_basis || ''))
+        ? Number(mutualFundsCurrentAnalysis.input_total) : null;
+      const fundValue = analyzedFundValue !== null ? analyzedFundValue : (Number.isFinite(uploadedFundValue) ? uploadedFundValue : null);
+      const totalValue = stockValue !== null || fundValue !== null ? (stockValue || 0) + (fundValue || 0) : null;
+
+      const stockWeights = stockPositions.map((row) => Number(row.weight_pct)).filter(Number.isFinite);
+      const largestStockWeight = stockWeights.length ? Math.max(...stockWeights) : null;
+      const stockHhi = stockWeights.length ? stockWeights.reduce((total, weight) => total + (weight / 100) ** 2, 0) : null;
+      const stockScore = stockHhi === null ? null : Math.max(0, Math.min(100,
+        (100 - Math.max(0, Number(largestStockWeight) - 20) * 2) * .55
+        + Math.min(100, (1 / stockHhi) / 20 * 100) * .45));
+      const scoreParts = [];
+      if (stockScore !== null) scoreParts.push([stockScore, stockValue || 1]);
+      if (mutualFundsCurrentScore !== null) scoreParts.push([mutualFundsCurrentScore, fundValue || 1]);
+      const combinedScore = scoreParts.length
+        ? Math.round(scoreParts.reduce((total, [score, weight]) => total + score * weight, 0) / scoreParts.reduce((total, [, weight]) => total + weight, 0))
+        : null;
+
+      const stockCount = stockPositions.length;
+      const fundCount = mutualFundsCurrentAnalysis && Array.isArray(mutualFundsCurrentAnalysis.funds) ? mutualFundsCurrentAnalysis.funds.length : fundPositions.length;
+      const hasHoldings = stockCount > 0 || fundCount > 0;
+      const setCombinedSummaryValue = (id, value, missingLabel, hasPositions) => {
+        const element = document.getElementById(id);
+        const missing = !hasPositions || value === null || value === undefined;
+        element.classList.toggle('empty-label', missing);
+        element.textContent = !hasPositions ? missingLabel : (value === null || value === undefined ? 'Value unavailable' : portfolioNumber(value, true));
+      };
+      setCombinedSummaryValue('combinedStocksValue', stockValue, 'No stocks found', stockCount > 0);
+      setCombinedSummaryValue('combinedMutualFundsValue', fundValue, 'No mutual funds found', fundCount > 0);
+      setCombinedSummaryValue('combinedPortfolioValue', totalValue, 'No holdings found', hasHoldings);
+      const combinedScoreElement = document.getElementById('combinedDiversificationScore');
+      combinedScoreElement.classList.toggle('empty-label', combinedScore === null);
+      combinedScoreElement.textContent = combinedScore === null ? 'Score unavailable' : `${combinedScore} / 100`;
+      document.getElementById('combinedPortfolioNote').textContent = positions.length || fundCount
+        ? `${stockCount.toLocaleString('en-IN')} direct stock${stockCount === 1 ? '' : 's'} and ${fundCount.toLocaleString('en-IN')} mutual fund${fundCount === 1 ? '' : 's'} are included. The score combines direct-stock concentration with fund allocation, overlap and available look-through evidence.`
+        : 'Upload one file to separate stocks and mutual funds and build the combined view.';
+
+      const categories = mutualFundsCurrentAnalysis && Array.isArray(mutualFundsCurrentAnalysis.categories) ? mutualFundsCurrentAnalysis.categories : [];
+      document.getElementById('combinedFundAllocation').innerHTML = categories.length
+        ? categories.slice(0, 6).map((row) => `<div class="mutual-fund-allocation-row"><span>${escapeHtml(row.category || 'Unclassified')}</span><div class="mutual-fund-mini-track"><i style="width:${Math.max(0, Math.min(100, Number(row.weight_pct) || 0))}%"></i></div><strong>${Number(row.weight_pct || 0).toFixed(1)}%</strong></div>`).join('')
+        : '<div class="mutual-fund-empty">No mutual funds detected.</div>';
+      const caps = mutualFundsCurrentAnalysis && Array.isArray(mutualFundsCurrentAnalysis.market_cap_allocation) ? mutualFundsCurrentAnalysis.market_cap_allocation : [];
+      document.getElementById('combinedMarketCapAllocation').innerHTML = caps.length
+        ? caps.map((row) => `<div class="mutual-fund-allocation-row"><span>${escapeHtml(row.bucket || 'Unclassified')}</span><div class="mutual-fund-mini-track"><i style="width:${Math.max(0, Math.min(100, Number(row.portfolio_weight_pct) || 0))}%"></i></div><strong>${Number(row.portfolio_weight_pct || 0).toFixed(1)}%</strong></div>`).join('')
+        : '<div class="mutual-fund-empty">Official fund holdings are required.</div>';
+
+      const overlaps = mutualFundsCurrentAnalysis && Array.isArray(mutualFundsCurrentAnalysis.overlaps) ? mutualFundsCurrentAnalysis.overlaps : [];
+      const repeated = mutualFundsCurrentAnalysis && Array.isArray(mutualFundsCurrentAnalysis.repeated_holdings) ? mutualFundsCurrentAnalysis.repeated_holdings : [];
+      const fundLookthrough = mutualFundsCurrentAnalysis && Array.isArray(mutualFundsCurrentAnalysis.top_underlying_holdings) ? mutualFundsCurrentAnalysis.top_underlying_holdings : [];
+      const normalizeSecurity = (value) => String(value || '').toLowerCase().replace(/\b(limited|ltd|company|co)\b/g, '').replace(/[^a-z0-9]/g, '');
+      const directLabels = new Map(stockPositions.flatMap((row) => [row.symbol, row.company_name].filter(Boolean).map((label) => [normalizeSecurity(label), row])));
+      const crossHeld = fundLookthrough.filter((row) => directLabels.has(normalizeSecurity(row.security)));
+      const largestStock = stockPositions.slice().sort((a, b) => Number(b.weight_pct || 0) - Number(a.weight_pct || 0))[0];
+      const redundancyCards = [];
+      if (overlaps.length) {
+        redundancyCards.push(`<article class="combined-analysis-card"><h3>Highest fund similarities</h3><div class="combined-redundancy-list">${overlaps.slice(0, 5).map((row) => `<div class="combined-redundancy-row"><span title="${escapeHtml(`${row.fund_a || 'Fund A'} ↔ ${row.fund_b || 'Fund B'}`)}">${escapeHtml(row.fund_a || 'Fund A')} ↔ ${escapeHtml(row.fund_b || 'Fund B')}<small>${Number(row.common_holdings || 0).toLocaleString('en-IN')} common holdings${String(row.status || '').includes('partial') ? ' · lower-bound estimate' : ''}</small></span><strong>${Number(row.overlap_pct || 0).toFixed(1)}%</strong></div>`).join('')}</div></article>`);
+      }
+      if (repeated.length) {
+        redundancyCards.push(`<article class="combined-analysis-card"><h3>Most repeated underlying holdings</h3><div class="combined-redundancy-list">${repeated.slice(0, 5).map((row) => `<div class="combined-redundancy-row"><span title="${escapeHtml((row.funds || []).join(', '))}">${escapeHtml(row.security || 'Unknown security')}<small>Held through ${Number(row.fund_count || 0).toLocaleString('en-IN')} funds</small></span><strong>${Number(row.portfolio_weight_pct || 0).toFixed(1)}%</strong></div>`).join('')}</div></article>`);
+      }
+      if (stockPositions.length) {
+        redundancyCards.push(`<article class="combined-analysis-card"><h3>Direct stocks repeated through funds</h3><p>${crossHeld.length
+          ? `${crossHeld.length.toLocaleString('en-IN')} direct holding${crossHeld.length === 1 ? '' : 's'} also appear in captured funds: ${crossHeld.slice(0, 5).map((row) => escapeHtml(row.security || '')).join(', ')}.`
+          : `No direct holding was matched in the captured fund portfolios.${largestStock ? ` The largest direct stock is ${escapeHtml(largestStock.company_name || largestStock.symbol || 'stock')} at ${Number(largestStock.weight_pct || 0).toFixed(1)}%.` : ''}`}</p></article>`);
+      }
+      document.getElementById('combinedRedundancyCards').innerHTML = redundancyCards.join('');
+      document.getElementById('combinedRedundancyNote').textContent = redundancyCards.length
+        ? `${overlaps.length.toLocaleString('en-IN')} fund pair${overlaps.length === 1 ? '' : 's'} checked · ${repeated.length.toLocaleString('en-IN')} repeated underlying securit${repeated.length === 1 ? 'y' : 'ies'} observed.`
+        : 'No redundancy result is available for the uploaded holdings.';
+
+      const fundSuggestions = mutualFundsCurrentAnalysis && Array.isArray(mutualFundsCurrentAnalysis.suggestions) ? mutualFundsCurrentAnalysis.suggestions : [];
+      const improvementPaths = fundSuggestions.length === 3 ? fundSuggestions : [
+        { priority: '1 · Simplify', title: 'Give every holding a clear role', detail: `${stockCount} direct stocks and ${fundCount} funds are detected. Remove positions that do not add distinct exposure or a measurable portfolio role.` },
+        { priority: '2 · Diversify', title: 'Reduce concentrated and repeated exposure', detail: largestStock ? `Review the largest direct stock weight of ${Number(largestStock.weight_pct || 0).toFixed(1)}% together with any repeated fund holdings.` : 'Complete holdings coverage before assuming different names provide different exposure.' },
+        { priority: '3 · Return efficiency', title: 'Test every position against benchmarks', detail: 'Compare common-period return, drawdown, consistency and costs. No historical comparison guarantees higher future returns.' },
+      ];
+      document.getElementById('combinedImprovementPaths').innerHTML = improvementPaths.map((row) => `<article class="mutual-fund-action-card"><span>${escapeHtml(row.priority || 'Review')}</span><strong>${escapeHtml(row.title || 'Review portfolio')}</strong><p>${escapeHtml(row.detail || '')}</p></article>`).join('');
+
+      const portfolioSummary = portfolioAnalysis && portfolioAnalysis.portfolio_summary ? portfolioAnalysis.portfolio_summary : {};
+      const portfolioBenchmark = portfolioAnalysis && portfolioAnalysis.benchmark ? portfolioAnalysis.benchmark : {};
+      const portfolioGsec = portfolioAnalysis && portfolioAnalysis.gsec_benchmark ? portfolioAnalysis.gsec_benchmark : {};
+      const performanceHasData = [
+        portfolioSummary.total_invested,
+        portfolioSummary.current_return,
+        portfolioSummary.net_return_pct,
+        portfolioSummary.portfolio_xirr_pct,
+        portfolioBenchmark.return_pct,
+        portfolioGsec.return_pct,
+      ].some((value) => value !== null && value !== undefined && Number.isFinite(Number(value)));
+      const riskHasData = Boolean(portfolioAnalysis && portfolioAnalysis.risk_metrics && portfolioAnalysis.risk_metrics.status === 'available');
+      const directAllocation = portfolioAnalysis && Array.isArray(portfolioAnalysis.asset_allocation)
+        ? portfolioAnalysis.asset_allocation.filter((row) => Number(row.weight_pct) > 0) : [];
+      const allocationHasData = directAllocation.length > 0 || categories.length > 0 || caps.length > 0;
+      document.getElementById('portfolioOverviewSection').hidden = !hasHoldings;
+      document.getElementById('portfolioPerformanceSection').hidden = !performanceHasData;
+      document.getElementById('portfolioRiskSection').hidden = !riskHasData;
+      document.getElementById('portfolioAllocationSection').hidden = !allocationHasData;
+      document.getElementById('portfolioRedundancySection').hidden = !redundancyCards.length;
+      document.getElementById('portfolioAuditSection').hidden = !(portfolioPreview || portfolioAnalysis);
+      document.getElementById('portfolioImprovementSection').hidden = !hasHoldings;
     }
 
     function renderMutualFundAnalysis(result) {
@@ -6739,9 +7155,10 @@
       }
     }
 
-    function clearMutualFundAnalysis() {
+    function clearMutualFundAnalysis(showMessage = true) {
       mutualFundsAnalysisSequence += 1;
       mutualFundsCurrentAnalysis = null;
+      mutualFundsCurrentScore = null;
       if (mutualFundsProgressTimer) clearInterval(mutualFundsProgressTimer);
       mutualFundsProgressTimer = null;
       mutualFundsProgressStartedAt = 0;
@@ -6795,7 +7212,8 @@
       document.getElementById('mutualFundsScoreConfidence').textContent = 'The score will show its evidence coverage after upload.';
       document.getElementById('mutualFundsScoreFactors').innerHTML = '';
       document.getElementById('mutualFundsActionCards').innerHTML = '<div class="mutual-fund-empty">Improvement ideas will appear after analysis.</div>';
-      showNotice('Mutual-fund analysis cleared from browser memory.');
+      renderCombinedPortfolioStory();
+      if (showMessage) showNotice('Mutual-fund analysis cleared from browser memory.');
     }
 
     function renderPortfolioPreview(result) {
@@ -6825,40 +7243,85 @@
     async function previewPortfolioFile() {
       const file = portfolioFileInput.files && portfolioFileInput.files[0];
       if (!file) {
-        showNotice('Choose a CSV or XLSX holdings file first.');
+        showNotice('Choose a CSV, XLSX, or text-based PDF portfolio file first.');
         return false;
       }
+      const sequence = ++portfolioAnalysisSequence;
+      startPortfolioProgress(file);
       if (file.size > 8 * 1024 * 1024) {
+        finishPortfolioProgress('File rejected', 'The selected file exceeds the 8 MB local preview limit', 'error');
         showNotice('The holdings file exceeds the 8 MB local preview limit.');
         return false;
       }
       document.getElementById('portfolioUploadStatus').textContent = 'Parsing and analyzing the file in local server memory.';
       document.getElementById('portfolioStatus').textContent = 'Reading and validating portfolio…';
       try {
-        const response = await fetch('/api/portfolio/preview', {
+        const contentBase64 = await portfolioFileBase64WithProgress(file, sequence);
+        setPortfolioProgress(25, 'Detecting holdings', 'Scanning the file and classifying stocks, mutual funds and other rows');
+        const response = await fetch('/api/portfolio/universal-import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ file_name: file.name, content_base64: await portfolioFileBase64(file) }),
+          body: JSON.stringify({ file_name: file.name, content_base64: contentBase64 }),
         });
         const result = await response.json();
+        if (sequence !== portfolioAnalysisSequence) return false;
         if (!response.ok || result.ok !== true) {
           const reason = String(result.reason || 'invalid file').replaceAll('_', ' ');
-          document.getElementById('portfolioStatus').textContent = 'Portfolio columns were not recognized';
-          document.getElementById('portfolioUploadStatus').textContent = `Upload rejected: ${reason}. You can select the same file again after correcting it.`;
+          document.getElementById('portfolioStatus').textContent = 'No supported holdings were recognized';
+          document.getElementById('portfolioUploadStatus').textContent = `Upload rejected: ${reason}. Text-based CSV, XLSX, and PDF files are supported; scanned PDFs require OCR.`;
           portfolioFileInput.value = '';
-          showNotice(`Portfolio preview rejected: ${reason}.`);
+          finishPortfolioProgress('Analysis stopped', `Upload rejected: ${reason}`, 'error');
+          showNotice(`Universal portfolio import rejected: ${reason}.`);
           return false;
         }
-        portfolioPreview = result;
+        const classification = result.classification || {};
+        const stockCount = Number(classification.stocks || 0);
+        const fundCount = Number(classification.mutual_funds || 0);
+        const unclassifiedCount = Number(classification.unclassified || 0);
+        setPortfolioProgress(48, 'Holdings separated', `${stockCount.toLocaleString('en-IN')} stocks and ${fundCount.toLocaleString('en-IN')} mutual funds detected`);
+        portfolioPreview = result.combined_preview || result.stock_preview || null;
         portfolioAnalysis = null;
-        renderPortfolioPreview(result);
-        renderHomeLoanTracker(result.loan_tracker);
-        document.getElementById('portfolioUploadStatus').textContent = `${result.file_name} · ${Number(result.row_count || 0).toLocaleString('en-IN')} rows held in browser memory · analyzing now.`;
-        return await analyzePortfolio();
-      } catch (_error) {
+        renderHomeLoanTracker(result.loan_tracker || (portfolioPreview && portfolioPreview.loan_tracker));
+
+        let stockReady = false;
+        if (portfolioPreview) {
+          renderPortfolioPreview(portfolioPreview);
+          setPortfolioProgress(62, 'Analyzing portfolio', 'Calculating values, performance, benchmarks and risk-adjusted ratios');
+          stockReady = await analyzePortfolio(false);
+        } else {
+          document.getElementById('portfolioPreviewNote').textContent = 'No stock rows were detected in this file.';
+          document.getElementById('portfolioPreviewHead').innerHTML = '<tr><th>Preview</th></tr>';
+          document.getElementById('portfolioPreviewBody').innerHTML = '<tr><td>No stock holdings detected.</td></tr>';
+        }
+
+        const mutualResult = result.mutual_fund_analysis;
+        if (mutualResult && mutualResult.ok === true) {
+          setPortfolioProgress(78, 'Analyzing mutual funds', 'Building allocation, concentration and diversification evidence');
+          const fundSequence = ++mutualFundsAnalysisSequence;
+          startMutualFundProgress(file);
+          mutualFundsCurrentAnalysis = mutualResult;
+          renderMutualFundAnalysis(mutualResult);
+          if (!mutualResult.underlying_sheet_name) {
+            loadMutualFundOfficialHoldings(mutualResult.funds, fundSequence);
+          } else {
+            finishMutualFundProgress('Analysis ready', 'The uploaded fund allocation and underlying-holdings analysis are ready');
+          }
+        }
+
+        const summary = `${stockCount.toLocaleString('en-IN')} stock${stockCount === 1 ? '' : 's'} · ${fundCount.toLocaleString('en-IN')} mutual fund${fundCount === 1 ? '' : 's'}${unclassifiedCount ? ` · ${unclassifiedCount.toLocaleString('en-IN')} unclassified` : ''}`;
+        document.getElementById('portfolioStatus').textContent = `Universal import: ${summary}`;
+        document.getElementById('portfolioUploadStatus').textContent = `${result.file_name} · ${summary} · data remains in browser memory only.`;
+        renderCombinedPortfolioStory();
+        finishPortfolioProgress('Analysis ready', 'The combined stock-and-mutual-fund portfolio story is ready');
+        showNotice(`Portfolio file analyzed: ${summary}.`);
+        return stockReady || fundCount > 0;
+      } catch (error) {
+        if (sequence !== portfolioAnalysisSequence) return false;
         document.getElementById('portfolioStatus').textContent = 'Portfolio upload could not be analyzed';
         document.getElementById('portfolioUploadStatus').textContent = 'The local portfolio service could not read the file. Select it again to retry.';
         portfolioFileInput.value = '';
+        const reason = error && error.message === 'file_read_failed' ? 'The browser could not read the selected file' : 'The local analysis service could not complete the request';
+        finishPortfolioProgress('Analysis stopped', reason, 'error');
         showNotice('The local portfolio preview service is unavailable.');
         return false;
       }
@@ -7095,6 +7558,7 @@
       document.getElementById('portfolioUploadStatus').textContent = `${Number(coverage.eligible_positions || 0)} eligible positions · ${Number(coverage.amfi_history_positions || 0)} AMFI histories · ${Number(coverage.amfi_nav_priced || 0)} AMFI current NAV · ${Number(coverage.google_finance_priced || 0)} Google Finance · ${Number(coverage.local_eod_priced || 0)} refreshed local EOD · ${Number(coverage.uploaded_price_fallback || 0)} uploaded fallback · data remains in memory only.`;
       renderDashboardPortfolioSummary(result);
       renderDashboardStoryPortfolio(result, dashboardMarketStory);
+      renderCombinedPortfolioStory();
     }
 
     async function analyzePortfolio(showSuccess = true, refreshPrices = false) {
@@ -7133,12 +7597,25 @@
     }
 
     function clearPortfolio() {
+      portfolioAnalysisSequence += 1;
+      if (portfolioProgressTimer) clearInterval(portfolioProgressTimer);
+      portfolioProgressTimer = null;
+      portfolioProgressStartedAt = 0;
+      portfolioProgressBaseDetail = '';
+      portfolioLoadProgress.hidden = true;
+      portfolioLoadProgress.classList.remove('complete', 'warning', 'error');
+      portfolioLoadProgress.setAttribute('aria-valuenow', '0');
+      portfolioProgressStage.textContent = 'Waiting for a file';
+      portfolioProgressPercent.textContent = '0%';
+      portfolioProgressFill.style.width = '0%';
+      portfolioProgressDetail.textContent = 'Choose a file to begin.';
       portfolioPreview = null;
       portfolioAnalysis = null;
       homeLoanTracker = null;
+      clearMutualFundAnalysis(false);
       portfolioFileInput.value = '';
       portfolioGoogleFinanceInput.checked = false;
-      document.getElementById('portfolioStatus').textContent = 'Choose a CSV or XLSX holdings file';
+      document.getElementById('portfolioStatus').textContent = 'Choose a portfolio file';
       document.getElementById('portfolioUploadStatus').textContent = 'Choose a file and analysis will start automatically.';
       document.getElementById('portfolioPreviewNote').textContent = 'The first eight non-empty rows will appear here before analysis.';
       document.getElementById('portfolioPreviewHead').innerHTML = '<tr><th>Preview</th></tr>';
@@ -8219,6 +8696,7 @@
     clearPortfolioButton.addEventListener('click', clearPortfolio);
     portfolioHoldingsTab.addEventListener('click', () => setPortfolioTab('holdings'));
     portfolioLoanTab.addEventListener('click', () => setPortfolioTab('loan'));
+    portfolioMutualFundsTab.addEventListener('click', () => setPortfolioTab('mutual-funds'));
     calculateLoanButton.addEventListener('click', calculateLoanRepayment);
     loadStockYtdButton.addEventListener('click', () => loadStockYtd(true));
     stockYtdYearSelect.addEventListener('change', () => loadStockYtd(false));
@@ -8275,6 +8753,13 @@
       }
     });
 
+    openPortfolioFormatGuide.addEventListener('click', () => portfolioFormatDialog.showModal());
+    closePortfolioFormatGuide.addEventListener('click', () => portfolioFormatDialog.close());
+    portfolioFormatGuideDone.addEventListener('click', () => portfolioFormatDialog.close());
+    portfolioFormatDialog.addEventListener('click', (event) => {
+      if (event.target === portfolioFormatDialog) portfolioFormatDialog.close();
+    });
+
     document.querySelectorAll('.nav-button').forEach((button) => {
       button.addEventListener('click', () => {
         document.querySelectorAll('.nav-button').forEach((item) => item.classList.remove('active'));
@@ -8291,7 +8776,6 @@
         const isBacktests = button.dataset.page === 'Backtests';
         const isEarnings = button.dataset.page === 'Earnings Analysis';
         const isPortfolio = button.dataset.page === 'Portfolio Analysis';
-        const isMutualFundsComparer = button.dataset.page === 'Mutual Funds Comparer';
         dashboardView.hidden = !isDashboard;
         marketSentimentView.hidden = !isMarketSentiment;
         fnoView.hidden = !isFno;
@@ -8303,9 +8787,8 @@
         backtestsView.hidden = !isBacktests;
         earningsView.hidden = !isEarnings;
         portfolioView.hidden = !isPortfolio;
-        mutualFundsComparerView.hidden = !isMutualFundsComparer;
-        emptyView.hidden = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isEarnings || isPortfolio || isMutualFundsComparer;
-        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isEarnings || isPortfolio || isMutualFundsComparer ? '' : button.dataset.page;
+        emptyView.hidden = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isEarnings || isPortfolio;
+        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isEarnings || isPortfolio ? '' : button.dataset.page;
         if (isDashboard) {
           renderDashboardPortfolioSummary(portfolioAnalysis);
           renderDashboardStoryPortfolio(portfolioAnalysis, dashboardMarketStory);

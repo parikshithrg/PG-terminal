@@ -1,6 +1,6 @@
 # Session handoff
 
-Updated: 2026-10-13
+Updated: 2026-10-15
 
 ## Linux migration checkpoint — 2026-10-05
 
@@ -504,6 +504,47 @@ orders or position sizing.
   stated last reporting Friday when available. Stored release IDs are skipped
   on later refreshes; catalogue and release failures remain individually
   visible in the source audit.
+- Added `historical-regimes-v14`. The official-history refresh now imports the
+  six original RBI policy-rate decisions spanning 4 May 2022 through 8 February
+  2023, preserving the complete 4.40% to 6.50% tightening cycle as event-level,
+  release-dated evidence. Each source must retain its registered decision date,
+  rate and basis-point change; conflicts are rejected. The point-in-time audit
+  recognizes `india_policy_repo_rate_pct`, but the evidence family remains
+  partial until earlier and later policy cycles plus release-dated currency
+  history are connected.
+- Consolidated Mutual Funds Comparer into Portfolio Analysis as a third tab
+  beside Holdings Analysis and Home Loan Tracker. The standalone sidebar item
+  is removed, while the existing local upload and comparer calculations remain
+  unchanged and available inside the portfolio workspace.
+- Added `universal-portfolio-import-v1` to the main Portfolio Analysis uploader.
+  CSV, XLSX and selectable-text PDF files are now inspected once, separated into
+  stock and mutual-fund holdings, and routed to both existing analysis contracts.
+  The importer keeps ambiguous rows unclassified and reports scanned PDFs as
+  requiring OCR; it does not infer holdings from images or persist uploaded data.
+- Rebuilt Holdings Analysis as the combined stock-and-fund portfolio story. The
+  top section now shows stock value, mutual-fund value, total portfolio value and
+  a coverage-aware diversification score, followed by performance, risk-adjusted
+  benchmark ratios, allocation, cross-holding redundancy and exactly three
+  improvement paths. A standardized combined preview lets the existing portfolio
+  engine include fund rows with current values and AMFI-resolvable histories;
+  the detailed comparer remains available as a separate drill-down tab.
+- Added the same staged, elapsed-time loading indicator to the universal
+  Holdings Analysis upload. It advances through local file reading, holdings
+  classification, combined portfolio calculations and mutual-fund analysis,
+  then remains visible with a clear completed or failed state.
+- Added a compact file-format indicator above the universal Portfolio upload.
+  It opens a visual modal with sample stock and mutual-fund sheets, coloured
+  minimum/recommended column cues and three invalid-layout examples. The former
+  long instruction block is no longer displayed on the page.
+- Reworked Holdings Analysis to use the clean Mutual Funds Comparer hierarchy:
+  compact hero and upload card, six numbered story sections, consistent rounded
+  panels, subdued metric surfaces, dynamic inferences in section headers and
+  collapsed reading/audit details. Calculations and element IDs are unchanged.
+- Added data-aware section visibility to Holdings Analysis. Empty performance,
+  risk, allocation and redundancy panels stay hidden; the overview explicitly
+  says when no stocks or mutual funds were found. Redundancy now exposes ranked
+  fund-pair similarities and repeated underlying securities rather than only
+  headline counts.
 
 ## Next work
 
@@ -552,8 +593,9 @@ orders or position sizing.
    overview rather than a table-heavy audit page: allocation, top similarity
    pairs, a coverage-labelled structural/regime-fit score, and concise review
    prompts are the only primary outputs.
-2. Continue the audited RBI release registry with continuous balance-of-payments,
-   external-debt, policy-rate and macro vintages while retaining every original
+2. Continue the audited RBI release registry with pre-May-2022 and
+   post-February-2023 policy decisions, continuous balance-of-payments,
+   external-debt and macro vintages while retaining every original
    publication date and revision state, then add authoritative effective-dated
    index membership. Preserve base changes and honest frequency; never
    synthesize missing daily values or use revised actuals in an earlier
