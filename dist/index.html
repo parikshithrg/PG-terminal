@@ -1675,6 +1675,7 @@
           <li><button class="nav-button" data-page="Stock Data YTD" style="--item-color:#0c94b7"><span class="nav-icon"></span><span>Stock Data YTD</span></button></li>
           <li><button class="nav-button" data-page="Historical Regimes" style="--item-color:#8b6f47"><span class="nav-icon"></span><span>Historical regimes</span></button></li>
           <li><button class="nav-button" data-page="Backtests" style="--item-color:#405b78"><span class="nav-icon"></span><span>Backtests</span></button></li>
+          <li><button class="nav-button" data-page="Alpha Research" style="--item-color:#0f766e"><span class="nav-icon"></span><span>Alpha Research</span></button></li>
         </ul>
       </nav>
       <details class="sidebar-footer">
@@ -3652,6 +3653,65 @@
           </section>
         </section>
 
+        <section id="alphaResearchView" hidden aria-labelledby="alphaResearchTitle">
+          <div class="page-tabs" aria-label="Alpha Research views">
+            <div class="page-tab active">Architecture and readiness</div>
+          </div>
+
+          <div class="analysis-intro">
+            <div>
+              <h1 id="alphaResearchTitle">Alpha Research</h1>
+              <p class="analysis-caption">A regime-gated factor core with catalyst overlays, portfolio-impact checks and chronological validation</p>
+            </div>
+            <div class="analysis-status" id="alphaResearchStatus">Foundation not loaded</div>
+          </div>
+
+          <section class="summary-grid" aria-label="Alpha Research readiness">
+            <article class="summary-card"><div class="summary-value" id="alphaLayersValue">—</div><div class="summary-meta">Architecture layers</div></article>
+            <article class="summary-card"><div class="summary-value" id="alphaReadyValue">—</div><div class="summary-meta">Layers ready</div></article>
+            <article class="summary-card"><div class="summary-value" id="alphaPartialValue">—</div><div class="summary-meta">Partial or foundation</div></article>
+            <article class="summary-card"><div class="summary-value" id="alphaIdeasValue">0</div><div class="summary-meta">Ranked research ideas</div></article>
+          </section>
+
+          <section class="analysis-section">
+            <div class="section-heading-row"><div><div class="story-kicker">THE JOINED ARCHITECTURE</div><h2>Evidence before candidates</h2></div><button class="panel-button" id="refreshAlphaResearchButton" type="button">Refresh readiness</button></div>
+            <p class="section-note">A layer may be useful while still incomplete. Ranked ideas remain blocked until factor evidence, regime compatibility, chronological validation and portfolio impact can be reviewed together.</p>
+            <div class="historical-fingerprint-grid" id="alphaArchitectureGrid">
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting readiness check</div><h3>No architecture loaded</h3><p>Refresh the page to inspect the current build state.</p></article>
+            </div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Current development focus</h2>
+            <p class="section-note" id="alphaFocusNote">The next research contract will be shown after the architecture loads.</p>
+            <div class="historical-architecture-grid" id="alphaFocusGrid"></div>
+          </section>
+
+          <section class="analysis-section">
+            <div class="section-heading-row"><div><div class="story-kicker">FACTOR RESEARCH FOUNDATION</div><h2>Input gates before ranking</h2></div></div>
+            <p class="section-note" id="factorResearchNote">Checking the frozen universe, aligned price history, dated sector identity, corporate-action adjustment and liquidity evidence.</p>
+            <div class="summary-grid" aria-label="Factor research coverage">
+              <article class="summary-card"><div class="summary-value" id="factorUniverseValue">—</div><div class="summary-meta">Frozen universe</div></article>
+              <article class="summary-card"><div class="summary-value" id="factorPriceValue">—</div><div class="summary-meta">Price diagnostics ready</div></article>
+              <article class="summary-card"><div class="summary-value" id="factorSectorValue">—</div><div class="summary-meta">Dated sectors ready</div></article>
+              <article class="summary-card"><div class="summary-value" id="factorEligibleValue">0</div><div class="summary-meta">Factor-input eligible</div></article>
+            </div>
+            <div class="historical-fingerprint-grid" id="factorGateGrid">
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting audit</div><h3>No factor contract loaded</h3><p>The audit will not produce security ranks.</p></article>
+            </div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Policy evidence boundary</h2>
+            <div class="analysis-note" id="alphaPolicyNote">MPC release-native history has not been checked.</div>
+          </section>
+
+          <section class="analysis-section">
+            <h2>Decision boundary</h2>
+            <div class="analysis-note" id="alphaResearchContractNote">No candidate ranking, recommendation or order workflow is active. This workspace exposes build readiness and missing evidence only.</div>
+          </section>
+        </section>
+
         <section id="emptyView" hidden aria-live="polite">
           <h1 id="emptyPageTitle"></h1>
         </section>
@@ -3785,6 +3845,9 @@
     const backtestsIndexSelect = document.getElementById('backtestsIndexSelect');
     const loadBacktestsButton = document.getElementById('loadBacktestsButton');
     const backtestsRegistryBody = document.getElementById('backtestsRegistryBody');
+    const alphaResearchView = document.getElementById('alphaResearchView');
+    const alphaResearchStatus = document.getElementById('alphaResearchStatus');
+    const refreshAlphaResearchButton = document.getElementById('refreshAlphaResearchButton');
     const seasonalityIndexSelect = document.getElementById('seasonalityIndexSelect');
     const seasonalityStockSelect = document.getElementById('seasonalityStockSelect');
     const seasonalityInstrumentLabel = document.getElementById('seasonalityInstrumentLabel');
@@ -3862,6 +3925,8 @@
     let stockYtdPayload = null;
     let historicalRegimesPayload = null;
     let backtestsPayload = null;
+    let alphaResearchPayload = null;
+    let factorResearchPayload = null;
     let earningsRows = [];
     let earningsPayload = null;
     let portfolioPreview = null;
@@ -8245,6 +8310,110 @@
       }
     }
 
+    function renderAlphaResearch(result) {
+      alphaResearchPayload = result;
+      const summary = result.summary || {};
+      const layers = Array.isArray(result.layers) ? result.layers : [];
+      const focus = result.current_focus || {};
+      const sequence = Array.isArray(focus.sequence) ? focus.sequence : [];
+      const policy = result.policy_history || {};
+      const limitations = Array.isArray(result.limitations) ? result.limitations : [];
+      const stateLabel = {
+        ready: 'Ready',
+        partial: 'Partial',
+        foundation: 'Foundation',
+        blocked: 'Blocked',
+      };
+      document.getElementById('alphaLayersValue').textContent = Number(summary.layers || 0).toLocaleString('en-IN');
+      document.getElementById('alphaReadyValue').textContent = Number(summary.ready || 0).toLocaleString('en-IN');
+      document.getElementById('alphaPartialValue').textContent = Number(summary.partial_or_foundation || 0).toLocaleString('en-IN');
+      document.getElementById('alphaIdeasValue').textContent = Number(summary.ranked_ideas || 0).toLocaleString('en-IN');
+      document.getElementById('alphaArchitectureGrid').innerHTML = layers.length
+        ? layers.map((layer, index) => `<article class="historical-fingerprint-card ${layer.state === 'ready' ? 'ready' : layer.state === 'blocked' ? 'unavailable' : 'partial'}">
+            <div class="historical-step">${String(index + 1).padStart(2, '0')} · ${escapeHtml(stateLabel[layer.state] || layer.state || 'Unknown')}</div>
+            <h3>${escapeHtml(layer.title || 'Architecture layer')}</h3>
+            <p>${escapeHtml(layer.summary || '')}</p>
+            <div class="fingerprint-limitation">Next gate: ${escapeHtml(layer.next_gate || 'Not specified.')}</div>
+          </article>`).join('')
+        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">No layers returned</div><h3>Architecture unavailable</h3><p>The local readiness contract returned no evidence layers.</p></article>';
+      document.getElementById('alphaFocusNote').textContent = focus.title
+        ? `${focus.title}. The sequence is frozen before any composite rank is calculated.`
+        : 'No current development focus is registered.';
+      document.getElementById('alphaFocusGrid').innerHTML = sequence.length
+        ? sequence.map((item, index) => `<article class="historical-architecture-card"><div class="historical-step">Step ${index + 1}</div><h3>${escapeHtml(String(item))}</h3></article>`).join('')
+        : '<article class="historical-architecture-card"><div class="historical-step">Pending</div><h3>No executable sequence loaded</h3></article>';
+      document.getElementById('alphaPolicyNote').textContent =
+        `${policy.state === 'complete_for_current_scope' ? 'Complete for the current scope.' : 'Incomplete.'} ${policy.coverage || ''}. ${policy.boundary || ''}`;
+      document.getElementById('alphaResearchContractNote').textContent =
+        `${result.contract_version || 'alpha-research-foundation'}. ${limitations.join(' ')}`;
+      alphaResearchStatus.textContent = Number(summary.ranked_ideas || 0)
+        ? 'Research candidates available'
+        : 'Architecture ready · candidate ranking blocked';
+    }
+
+    async function loadAlphaResearch(showSuccess = false) {
+      refreshAlphaResearchButton.disabled = true;
+      refreshAlphaResearchButton.textContent = 'Checking readiness…';
+      alphaResearchStatus.textContent = 'Joining workspace readiness…';
+      try {
+        const response = await fetch('/api/alpha-research', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          alphaResearchStatus.textContent = 'Alpha Research foundation unavailable';
+          if (showSuccess) showNotice(kiteFailureMessage(result.reason));
+          return false;
+        }
+        renderAlphaResearch(result);
+        if (showSuccess) showNotice('Alpha Research architecture and readiness refreshed.');
+        return true;
+      } catch (_error) {
+        alphaResearchStatus.textContent = 'The local Alpha Research service is unavailable';
+        return false;
+      } finally {
+        refreshAlphaResearchButton.disabled = false;
+        refreshAlphaResearchButton.textContent = 'Refresh readiness';
+      }
+    }
+
+    function renderFactorResearch(result) {
+      factorResearchPayload = result;
+      const coverage = result.coverage || {};
+      const gates = Array.isArray(result.gates) ? result.gates : [];
+      const total = Number(coverage.total || 0);
+      document.getElementById('factorUniverseValue').textContent = total.toLocaleString('en-IN');
+      document.getElementById('factorPriceValue').textContent = `${Number(coverage.price_history_ready || 0).toLocaleString('en-IN')} / ${total.toLocaleString('en-IN')}`;
+      document.getElementById('factorSectorValue').textContent = `${Number(coverage.sector_identity_ready || 0).toLocaleString('en-IN')} / ${total.toLocaleString('en-IN')}`;
+      document.getElementById('factorEligibleValue').textContent = Number(coverage.research_eligible || 0).toLocaleString('en-IN');
+      document.getElementById('factorResearchNote').textContent =
+        `${result.contract_version || 'factor-research-foundation'} · frozen ${result.as_of_date || '—'} · ${result.ranking_state === 'blocked_until_all_input_gates_pass' ? 'ranking remains blocked' : 'input audit complete'}. Raw momentum is diagnostic only.`;
+      document.getElementById('factorGateGrid').innerHTML = gates.length
+        ? gates.map((gate, index) => `<article class="historical-fingerprint-card ${gate.state === 'ready' ? 'ready' : 'unavailable'}">
+            <div class="historical-step">${String(index + 1).padStart(2, '0')} · ${escapeHtml(String(gate.state || 'unknown').toUpperCase())}</div>
+            <h3>${escapeHtml(gate.title || 'Input gate')}</h3>
+            <p>${escapeHtml(gate.detail || '')}</p>
+            <div class="fingerprint-limitation">Next gate: ${escapeHtml(gate.next_gate || 'Not specified.')}</div>
+          </article>`).join('')
+        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">No gates returned</div><h3>Factor audit unavailable</h3><p>No security is ranked.</p></article>';
+    }
+
+    async function loadFactorResearch(showSuccess = false) {
+      try {
+        const response = await fetch('/api/factor-research', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          document.getElementById('factorResearchNote').textContent =
+            `Factor input audit unavailable: ${kiteFailureMessage(result.reason)}`;
+          return false;
+        }
+        renderFactorResearch(result);
+        if (showSuccess) showNotice('Architecture and factor-input readiness refreshed.');
+        return true;
+      } catch (_error) {
+        document.getElementById('factorResearchNote').textContent = 'The local factor research service is unavailable.';
+        return false;
+      }
+    }
+
     async function refreshHistoricalOfficialHistory(showSuccess = false) {
       refreshHistoricalOfficialHistoryButton.disabled = true;
       refreshHistoricalOfficialHistoryButton.textContent = 'Updating RBI history…';
@@ -8707,6 +8876,10 @@
     historicalRegimesIndexSelect.addEventListener('change', () => loadHistoricalRegimes(false));
     loadBacktestsButton.addEventListener('click', () => loadBacktests(true));
     backtestsIndexSelect.addEventListener('change', () => loadBacktests(false));
+    refreshAlphaResearchButton.addEventListener('click', async () => {
+      await Promise.all([loadAlphaResearch(false), loadFactorResearch(false)]);
+      showNotice('Architecture and factor-input readiness refreshed.');
+    });
     regimeValidationIndexSelect.addEventListener('change', () => updateRegimeValidationSelection(true));
     regimeValidationBenchmarkSelect.addEventListener('change', () => {
       const benchmark = regimeValidationBenchmarkSelect.value === 'none' ? 'No relative benchmark' : 'Nifty 50 benchmark';
@@ -8774,6 +8947,7 @@
         const isStockYtd = button.dataset.page === 'Stock Data YTD';
         const isHistoricalRegimes = button.dataset.page === 'Historical Regimes';
         const isBacktests = button.dataset.page === 'Backtests';
+        const isAlphaResearch = button.dataset.page === 'Alpha Research';
         const isEarnings = button.dataset.page === 'Earnings Analysis';
         const isPortfolio = button.dataset.page === 'Portfolio Analysis';
         dashboardView.hidden = !isDashboard;
@@ -8785,10 +8959,11 @@
         stockYtdView.hidden = !isStockYtd;
         historicalRegimesView.hidden = !isHistoricalRegimes;
         backtestsView.hidden = !isBacktests;
+        alphaResearchView.hidden = !isAlphaResearch;
         earningsView.hidden = !isEarnings;
         portfolioView.hidden = !isPortfolio;
-        emptyView.hidden = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isEarnings || isPortfolio;
-        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isEarnings || isPortfolio ? '' : button.dataset.page;
+        emptyView.hidden = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isAlphaResearch || isEarnings || isPortfolio;
+        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isAlphaResearch || isEarnings || isPortfolio ? '' : button.dataset.page;
         if (isDashboard) {
           renderDashboardPortfolioSummary(portfolioAnalysis);
           renderDashboardStoryPortfolio(portfolioAnalysis, dashboardMarketStory);
@@ -8821,6 +8996,9 @@
           loadHistoricalRegimes(false);
         } else if (isBacktests && !backtestsPayload) {
           loadBacktests(false);
+        } else if (isAlphaResearch && (!alphaResearchPayload || !factorResearchPayload)) {
+          loadAlphaResearch(false);
+          loadFactorResearch(false);
         } else if (isEarnings && !earningsPayload) {
           loadEarnings(false);
         }

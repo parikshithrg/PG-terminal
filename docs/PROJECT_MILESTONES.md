@@ -12,6 +12,76 @@ activate providers, conduct research, generate recommendations, or place trades.
 - Ten-year index and F&O equity seasonality tables.
 - Current-month and historical month leader/laggard contracts.
 
+## Current working architecture and build order
+
+This is now the authoritative product sequence. Older entries below remain the
+chronological implementation record; where their "next" wording conflicts with
+this section, this section wins.
+
+1. **Validated data layer — operational.** Completed-session local histories,
+   official release records, source identity, freshness, coverage, conflicts and
+   missing evidence remain visible. No later layer may silently repair them.
+2. **Regime and risk-budget layer — evidence operational, decision gate
+   partial.** Breadth, volatility, flows, derivatives, policy, global risk,
+   seasonality and historical analogues are joined. Thresholds and transitions
+   remain validation-only until continuity and held-out gates pass.
+3. **Factor and relative-strength core — active development.** The local
+   screener supplies transparent price evidence, but point-in-time sector-neutral
+   momentum, quality and value factors, composite ranks, decay monitoring and
+   investable cost tests are not yet implemented.
+4. **Catalyst overlay — foundation available.** Reviewed earnings imports and
+   the macro calendar exist. Permitted release timestamps, expectations,
+   surprise, guidance and post-event drift remain future evidence contracts.
+5. **Portfolio-impact gate — foundation available.** Holdings, fund
+   look-through, overlap, allocation and risk ratios exist. Transaction history
+   and marginal concentration, beta and drawdown effects per candidate remain
+   required.
+6. **Chronological validation — foundation operational.** Backtests v4 enforces
+   release-aware admission, holdouts, multiple-testing controls and visible
+   negative results. Investable simulations still require turnover, costs,
+   slippage, liquidity and capacity.
+7. **Ranked research cards — blocked by design.** A candidate may appear only
+   after factor evidence, regime compatibility, chronological validation and
+   portfolio impact are jointly reviewable. Automated orders remain out of
+   scope.
+
+### Active build sequence
+
+1. `alpha-research-foundation-v1` — **complete**. Added a dedicated Alpha
+   Research workspace and local readiness contract. It joins the seven layers,
+   reports ready/partial/blocked states, names the current factor-core work and
+   deliberately returns zero ranked ideas.
+2. `factor-research-foundation-v1` — **complete**. The local API now freezes
+   the stored F&O universe with a reproducible SHA-256 identity, audits aligned
+   histories and dated sector coverage, and calculates raw 12-1, 6-1 and 3-1
+   Nifty-relative momentum diagnostics. Corporate-action adjustment, liquidity
+   and sector gates remain explicit; the contract returns no ranked candidates.
+3. `factor-market-data-v2` — **in progress; storage contract complete**. Schema
+   v2 stores cash-market volume plus explicit adjustment status/source, while
+   immutable OHLC remains unchanged. The NIFTY 500 breadth refresh now attempts
+   metadata-only backfill for locally stored F&O equities: volume is written
+   only when fetched OHLC matches exactly, and price/volume conflicts remain
+   visible. It also persists the official dated constituent/sector snapshot.
+   The next connected EOD refresh must populate and audit live coverage before
+   this milestone can be marked operational.
+4. Add sector-neutral momentum only after those gates pass; then admit quality
+   and value exclusively from permitted point-in-time fundamentals.
+5. Validate composite ranks chronologically and net of costs before connecting
+   regime compatibility.
+6. Add the catalyst and portfolio-impact overlays only after their own evidence
+   gates pass.
+7. Produce auditable research cards last: hypothesis, evidence, uncertainty,
+   benchmark, horizon, risk budget, portfolio impact and invalidation.
+
+### RBI policy scope decision
+
+- The release-native MPC sequence from February 2016 through October 2026 is
+  **complete for the current product scope**. The scheduled December 2026
+  meeting remains an event, not a pre-populated outcome.
+- Pre-2016 policy reconstruction toward the 12 June 2000 market-data floor is
+  deferred documentary research and is no longer an immediate blocker for the
+  Alpha Research build. Existing pre-2000 material remains story context only.
+
 ## Next milestone: persistent EOD data foundation v1
 
 Status: in progress.
@@ -606,6 +676,12 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   with weekly/monthly context from 1995 onward. The backend can roll validated
   closes to period-end weekly, monthly, quarterly, and annual observations and
   never interpolates missing prices.
+- For the current build phase, quantitative regime evidence and release-native
+  policy backfilling stop at **12 June 2000**, when NSE launched NIFTY index
+  futures. Earlier exchange and index history remains documentary/annual story
+  context and is not admitted to the classifier until comparable index evidence
+  is available. This is a temporary research boundary, not a claim that earlier
+  market history is unimportant.
 - The initial era scaffolds cover exchange formation, the controlled-capital
   period, benchmark formation, liberalisation and market-structure reform,
   electronic-market/global-shock history, the pre-GFC boom and crisis,
@@ -750,6 +826,54 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   easing path is therefore available to regime stories as a sequence of actual
   decisions rather than a reconstructed end-period rate. Decisions before May
   2022 and after December 2025 remain visibly incomplete.
+- `historical-regimes-v19` extends the release-native policy timeline through
+  every completed 2026 MPC meeting available on 16 October: the February,
+  April, June and August holds at 5.25%, followed by the 7 October
+  25-basis-point increase to 5.50%. The October reversal is retained as a
+  positive signed event-level change rather than being flattened into an
+  end-period rate. The scheduled December meeting remains explicitly pending;
+  the tool neither forecasts nor pre-populates its outcome.
+- `historical-regimes-v20` extends the audited policy timeline backwards through
+  the pandemic-era rate floor. Eight original MPC resolutions from 5 February
+  2021 through 8 April 2022 are stored as separate 4.00% zero-basis-point hold
+  events. The long pause is therefore represented by actual decisions known on
+  their publication dates, not by filling a constant rate between two points.
+  Policy coverage is now continuous from February 2021 through October 2026;
+  earlier decisions and the scheduled December 2026 meeting remain pending.
+- `historical-regimes-v21` captures the 2020 pandemic policy sequence from six
+  original RBI resolutions. The February hold at 5.15%, emergency 75-basis-point
+  March cut, emergency 40-basis-point May cut, and August, October and December
+  holds at 4.00% remain distinct event-level observations. The off-cycle cuts
+  are not collapsed into an annual change, preserving the timing and magnitude
+  of the monetary response visible to the market. Policy coverage is now
+  continuous from February 2020 through October 2026.
+- `historical-regimes-v22` extends the release-native policy history through the
+  complete 2019 easing cycle. Five original RBI resolutions preserve cuts of
+  25, 25, 25, 35 and 25 basis points, taking the repo rate from 6.50% to 5.15%;
+  the sixth records December's 5.15% pause as a distinct zero-basis-point hold.
+  The unusually sized August reduction and the year-end pause therefore remain
+  visible to regime stories instead of being flattened into an annual rate.
+  Policy coverage is continuous from February 2019 through October 2026.
+- `historical-regimes-v23` adds the complete 2018 MPC tightening cycle from six
+  original RBI resolutions. February and April preserve the 6.00% pause; June
+  and August retain two separate 25-basis-point increases to 6.50%; October and
+  December preserve the subsequent 6.50% holds. The mid-year 50-basis-point
+  tightening is therefore visible as two market-timed decisions rather than an
+  annual endpoint. Policy coverage is continuous from February 2018 through
+  October 2026.
+- `historical-regimes-v24` adds the complete 2017 MPC cycle from six original
+  RBI resolutions. February, April and June retain the 6.25% pause; August
+  preserves the 25-basis-point reduction to 6.00%; October and December retain
+  the subsequent 6.00% holds. This keeps the sole 2017 rate change distinct
+  from five no-change decisions and makes the policy timeline continuous from
+  February 2017 through October 2026.
+- `historical-regimes-v25` preserves the complete 2016 transition from
+  Governor-led policy reviews to the newly constituted MPC. The February hold
+  at 6.75%, April 25-basis-point cut to 6.50%, June and August holds, inaugural
+  October MPC cut of 25 basis points to 6.25%, and December hold remain six
+  separately dated original-release observations. Policy coverage is now
+  continuous from February 2016 through October 2026 without flattening the
+  institutional transition or its two easing decisions.
 - Market cycles and economic cycles are deliberately separate. Recession and
   depression sections remain visibly unclassified until a versioned definition
   and authoritative point-in-time macro history are available; an equity
@@ -759,12 +883,29 @@ presented as guaranteed alpha, a recommendation, or an automated trade.
   held-out outcome/analogue testing. Human emotion is represented only through
   measurable hypotheses such as participation, crowding, volatility, flows,
   leadership and recovery—not asserted as directly observed fact.
-- Next, extend release-native coverage to pre-May-2022 and post-December-2025
-  policy decisions, fuller balance-of-payments, external-debt and macro histories with their original release
-  dates and revisions, populate effective-dated membership,
+- Next, extend release-native coverage backward from pre-February-2016 toward
+  the 12 June 2000 NIFTY index-futures research floor, and forward through the
+  next completed decision after October 2026. Expand balance-of-payments,
+  external-debt and macro histories with their original release dates and
+  revisions, populate effective-dated membership,
   and expand the held-out sample. Only traits that survive coverage gates,
   multiplicity/stability checks and later unseen regimes may be proposed for
   the current classifier.
+
+### Alpha-terminal booklet side project — complete
+
+- Created a three-volume visual field-guide series showing distinct ways to
+  build an analytics terminal for alpha research: market-regime classification,
+  catalyst/earnings analysis, and relative-strength portfolio allocation.
+- Each eight-page booklet covers the evidence architecture, three testable
+  research engines, an auditable decision card, walk-forward validation,
+  operating cadence, a 90-day build plan, scorecard and risk guardrails.
+- The regime volume carries the temporary **12 June 2000** quantitative floor;
+  all three explicitly avoid performance promises and separate observed facts,
+  derived conclusions and portfolio actions.
+- Final PDFs and editable DOCX containers are stored under `output/pdf/` and
+  `output/docx/`; the reproducible builder and original visual assets are under
+  `side-projects/alpha-terminal-booklets/`.
 
 ### Backtests workspace foundation — complete
 

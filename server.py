@@ -134,12 +134,14 @@ FRED_GLOBAL_SERIES = {
 }
 SENTIMENT_EVIDENCE_MODEL_VERSION = "market-sentiment-evidence-v1"
 REGIME_RULE_VERSION = "market-regime-candidate-v1"
-HISTORICAL_REGIME_CONTRACT_VERSION = "historical-regimes-v18"
+HISTORICAL_REGIME_CONTRACT_VERSION = "historical-regimes-v25"
 HISTORICAL_FINGERPRINT_CONTRACT_VERSION = "historical-episode-fingerprint-v1"
 HISTORICAL_ENTRY_VALIDATION_CONTRACT_VERSION = "historical-entry-validation-v1"
 HISTORICAL_POINT_IN_TIME_CONTRACT_VERSION = "historical-point-in-time-readiness-v1"
 BACKTESTS_CONTRACT_VERSION = "backtests-v4"
 SEASONALITY_BACKTEST_CONTRACT_VERSION = "seasonality-all-indices-backtest-v1"
+ALPHA_RESEARCH_CONTRACT_VERSION = "alpha-research-foundation-v1"
+FACTOR_RESEARCH_CONTRACT_VERSION = "factor-research-foundation-v1"
 HISTORICAL_BULL_BEAR_THRESHOLD_PCT = 20.0
 HISTORICAL_CORRECTION_THRESHOLD_PCT = 10.0
 HISTORICAL_RAPID_BEAR_SESSIONS = 45
@@ -637,6 +639,500 @@ RBI_RELEASE_VINTAGE_SOURCES = (
         "revision_status": "provisional",
     },
     {
+        "release_id": "rbi-policy-repo-2016-02-02",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=36124",
+        "title": "RBI policy statement: 2 February 2016",
+        "observation_date": date(2016, 2, 2),
+        "period_label": "2 February 2016",
+        "revision_status": "initial",
+        "expected_value": 6.75,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2016-04-05",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=36654",
+        "title": "RBI policy statement: 5 April 2016",
+        "observation_date": date(2016, 4, 5),
+        "period_label": "5 April 2016",
+        "revision_status": "initial",
+        "expected_value": 6.50,
+        "decision": "decrease",
+        "change_bps": -25,
+    },
+    {
+        "release_id": "rbi-policy-repo-2016-06-07",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=37151",
+        "title": "RBI policy statement: 7 June 2016",
+        "observation_date": date(2016, 6, 7),
+        "period_label": "7 June 2016",
+        "revision_status": "initial",
+        "expected_value": 6.50,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2016-08-09",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=37734",
+        "title": "RBI policy statement: 9 August 2016",
+        "observation_date": date(2016, 8, 9),
+        "period_label": "9 August 2016",
+        "revision_status": "initial",
+        "expected_value": 6.50,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2016-10-04",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=38224",
+        "title": "RBI MPC resolution: 4 October 2016",
+        "observation_date": date(2016, 10, 4),
+        "period_label": "4 October 2016",
+        "revision_status": "initial",
+        "expected_value": 6.25,
+        "decision": "decrease",
+        "change_bps": -25,
+    },
+    {
+        "release_id": "rbi-policy-repo-2016-12-07",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=38818",
+        "title": "RBI MPC resolution: 7 December 2016",
+        "observation_date": date(2016, 12, 7),
+        "period_label": "7 December 2016",
+        "revision_status": "initial",
+        "expected_value": 6.25,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2017-02-08",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=39505",
+        "title": "RBI MPC resolution: 8 February 2017",
+        "observation_date": date(2017, 2, 8),
+        "period_label": "8 February 2017",
+        "revision_status": "initial",
+        "expected_value": 6.25,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2017-04-06",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=40069",
+        "title": "RBI MPC resolution: 6 April 2017",
+        "observation_date": date(2017, 4, 6),
+        "period_label": "6 April 2017",
+        "revision_status": "initial",
+        "expected_value": 6.25,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2017-06-07",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=40685",
+        "title": "RBI MPC resolution: 7 June 2017",
+        "observation_date": date(2017, 6, 7),
+        "period_label": "7 June 2017",
+        "revision_status": "initial",
+        "expected_value": 6.25,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2017-08-02",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=41256",
+        "title": "RBI MPC resolution: 2 August 2017",
+        "observation_date": date(2017, 8, 2),
+        "period_label": "2 August 2017",
+        "revision_status": "initial",
+        "expected_value": 6.00,
+        "decision": "decrease",
+        "change_bps": -25,
+    },
+    {
+        "release_id": "rbi-policy-repo-2017-10-04",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=41852",
+        "title": "RBI MPC resolution: 4 October 2017",
+        "observation_date": date(2017, 10, 4),
+        "period_label": "4 October 2017",
+        "revision_status": "initial",
+        "expected_value": 6.00,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2017-12-06",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=42476",
+        "title": "RBI MPC resolution: 6 December 2017",
+        "observation_date": date(2017, 12, 6),
+        "period_label": "6 December 2017",
+        "revision_status": "initial",
+        "expected_value": 6.00,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2018-02-07",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=43078",
+        "title": "RBI MPC resolution: 7 February 2018",
+        "observation_date": date(2018, 2, 7),
+        "period_label": "7 February 2018",
+        "revision_status": "initial",
+        "expected_value": 6.00,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2018-04-05",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=43573",
+        "title": "RBI MPC resolution: 5 April 2018",
+        "observation_date": date(2018, 4, 5),
+        "period_label": "5 April 2018",
+        "revision_status": "initial",
+        "expected_value": 6.00,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2018-06-06",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=44125",
+        "title": "RBI MPC resolution: 6 June 2018",
+        "observation_date": date(2018, 6, 6),
+        "period_label": "6 June 2018",
+        "revision_status": "initial",
+        "expected_value": 6.25,
+        "decision": "increase",
+        "change_bps": 25,
+    },
+    {
+        "release_id": "rbi-policy-repo-2018-08-01",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=44636",
+        "title": "RBI MPC resolution: 1 August 2018",
+        "observation_date": date(2018, 8, 1),
+        "period_label": "1 August 2018",
+        "revision_status": "initial",
+        "expected_value": 6.50,
+        "decision": "increase",
+        "change_bps": 25,
+    },
+    {
+        "release_id": "rbi-policy-repo-2018-10-05",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=45152",
+        "title": "RBI MPC resolution: 5 October 2018",
+        "observation_date": date(2018, 10, 5),
+        "period_label": "5 October 2018",
+        "revision_status": "initial",
+        "expected_value": 6.50,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2018-12-05",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=45656",
+        "title": "RBI MPC resolution: 5 December 2018",
+        "observation_date": date(2018, 12, 5),
+        "period_label": "5 December 2018",
+        "revision_status": "initial",
+        "expected_value": 6.50,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2019-02-07",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=46235",
+        "title": "RBI MPC resolution: 7 February 2019",
+        "observation_date": date(2019, 2, 7),
+        "period_label": "7 February 2019",
+        "revision_status": "initial",
+        "expected_value": 6.25,
+        "decision": "decrease",
+        "change_bps": -25,
+    },
+    {
+        "release_id": "rbi-policy-repo-2019-04-04",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=46722",
+        "title": "RBI MPC resolution: 4 April 2019",
+        "observation_date": date(2019, 4, 4),
+        "period_label": "4 April 2019",
+        "revision_status": "initial",
+        "expected_value": 6.00,
+        "decision": "decrease",
+        "change_bps": -25,
+    },
+    {
+        "release_id": "rbi-policy-repo-2019-06-06",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=47225",
+        "title": "RBI MPC resolution: 6 June 2019",
+        "observation_date": date(2019, 6, 6),
+        "period_label": "6 June 2019",
+        "revision_status": "initial",
+        "expected_value": 5.75,
+        "decision": "decrease",
+        "change_bps": -25,
+    },
+    {
+        "release_id": "rbi-policy-repo-2019-08-07",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=47818",
+        "title": "RBI MPC resolution: 7 August 2019",
+        "observation_date": date(2019, 8, 7),
+        "period_label": "7 August 2019",
+        "revision_status": "initial",
+        "expected_value": 5.40,
+        "decision": "decrease",
+        "change_bps": -35,
+    },
+    {
+        "release_id": "rbi-policy-repo-2019-10-04",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=48319",
+        "title": "RBI MPC resolution: 4 October 2019",
+        "observation_date": date(2019, 10, 4),
+        "period_label": "4 October 2019",
+        "revision_status": "initial",
+        "expected_value": 5.15,
+        "decision": "decrease",
+        "change_bps": -25,
+    },
+    {
+        "release_id": "rbi-policy-repo-2019-12-05",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=48802",
+        "title": "RBI MPC resolution: 5 December 2019",
+        "observation_date": date(2019, 12, 5),
+        "period_label": "5 December 2019",
+        "revision_status": "initial",
+        "expected_value": 5.15,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2020-02-06",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=49342",
+        "title": "RBI MPC resolution: 6 February 2020",
+        "observation_date": date(2020, 2, 6),
+        "period_label": "6 February 2020",
+        "revision_status": "initial",
+        "expected_value": 5.15,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2020-03-27",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=49581",
+        "title": "RBI MPC emergency resolution: 27 March 2020",
+        "observation_date": date(2020, 3, 27),
+        "period_label": "27 March 2020",
+        "revision_status": "initial",
+        "expected_value": 4.40,
+        "decision": "decrease",
+        "change_bps": -75,
+    },
+    {
+        "release_id": "rbi-policy-repo-2020-05-22",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=49843",
+        "title": "RBI MPC emergency resolution: 22 May 2020",
+        "observation_date": date(2020, 5, 22),
+        "period_label": "22 May 2020",
+        "revision_status": "initial",
+        "expected_value": 4.00,
+        "decision": "decrease",
+        "change_bps": -40,
+    },
+    {
+        "release_id": "rbi-policy-repo-2020-08-06",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=50175",
+        "title": "RBI MPC resolution: 6 August 2020",
+        "observation_date": date(2020, 8, 6),
+        "period_label": "6 August 2020",
+        "revision_status": "initial",
+        "expected_value": 4.00,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2020-10-09",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=50479",
+        "title": "RBI MPC resolution: 9 October 2020",
+        "observation_date": date(2020, 10, 9),
+        "period_label": "9 October 2020",
+        "revision_status": "initial",
+        "expected_value": 4.00,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2020-12-04",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=50747",
+        "title": "RBI MPC resolution: 4 December 2020",
+        "observation_date": date(2020, 12, 4),
+        "period_label": "4 December 2020",
+        "revision_status": "initial",
+        "expected_value": 4.00,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2021-02-05",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=51077",
+        "title": "RBI MPC resolution: 5 February 2021",
+        "observation_date": date(2021, 2, 5),
+        "period_label": "5 February 2021",
+        "revision_status": "initial",
+        "expected_value": 4.00,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2021-04-07",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=51381",
+        "title": "RBI MPC resolution: 7 April 2021",
+        "observation_date": date(2021, 4, 7),
+        "period_label": "7 April 2021",
+        "revision_status": "initial",
+        "expected_value": 4.00,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2021-06-04",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=51683",
+        "title": "RBI MPC resolution: 4 June 2021",
+        "observation_date": date(2021, 6, 4),
+        "period_label": "4 June 2021",
+        "revision_status": "initial",
+        "expected_value": 4.00,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2021-08-06",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=52011",
+        "title": "RBI MPC resolution: 6 August 2021",
+        "observation_date": date(2021, 8, 6),
+        "period_label": "6 August 2021",
+        "revision_status": "initial",
+        "expected_value": 4.00,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2021-10-08",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=52366",
+        "title": "RBI MPC resolution: 8 October 2021",
+        "observation_date": date(2021, 10, 8),
+        "period_label": "8 October 2021",
+        "revision_status": "initial",
+        "expected_value": 4.00,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2021-12-08",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=52687",
+        "title": "RBI MPC resolution: 8 December 2021",
+        "observation_date": date(2021, 12, 8),
+        "period_label": "8 December 2021",
+        "revision_status": "initial",
+        "expected_value": 4.00,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2022-02-10",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=53247",
+        "title": "RBI MPC resolution: 10 February 2022",
+        "observation_date": date(2022, 2, 10),
+        "period_label": "10 February 2022",
+        "revision_status": "initial",
+        "expected_value": 4.00,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2022-04-08",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=53537",
+        "title": "RBI MPC resolution: 8 April 2022",
+        "observation_date": date(2022, 4, 8),
+        "period_label": "8 April 2022",
+        "revision_status": "initial",
+        "expected_value": 4.00,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
         "release_id": "rbi-policy-repo-2022-05-04",
         "series_key": "india_policy_repo_rate_pct",
         "kind": "policy_repo_rate",
@@ -935,6 +1431,71 @@ RBI_RELEASE_VINTAGE_SOURCES = (
         "decision": "decrease",
         "change_bps": -25,
     },
+    {
+        "release_id": "rbi-policy-repo-2026-02-06",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=62169",
+        "title": "RBI MPC resolution: 6 February 2026",
+        "observation_date": date(2026, 2, 6),
+        "period_label": "6 February 2026",
+        "revision_status": "initial",
+        "expected_value": 5.25,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2026-04-08",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=62514",
+        "title": "RBI MPC resolution: 8 April 2026",
+        "observation_date": date(2026, 4, 8),
+        "period_label": "8 April 2026",
+        "revision_status": "initial",
+        "expected_value": 5.25,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2026-06-05",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=62863",
+        "title": "RBI MPC resolution: 5 June 2026",
+        "observation_date": date(2026, 6, 5),
+        "period_label": "5 June 2026",
+        "revision_status": "initial",
+        "expected_value": 5.25,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2026-08-05",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=63287",
+        "title": "RBI MPC resolution: 5 August 2026",
+        "observation_date": date(2026, 8, 5),
+        "period_label": "5 August 2026",
+        "revision_status": "initial",
+        "expected_value": 5.25,
+        "decision": "hold",
+        "change_bps": 0,
+    },
+    {
+        "release_id": "rbi-policy-repo-2026-10-07",
+        "series_key": "india_policy_repo_rate_pct",
+        "kind": "policy_repo_rate",
+        "url": "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=63742",
+        "title": "RBI MPC resolution: 7 October 2026",
+        "observation_date": date(2026, 10, 7),
+        "period_label": "7 October 2026",
+        "revision_status": "initial",
+        "expected_value": 5.50,
+        "decision": "increase",
+        "change_bps": 25,
+    },
 )
 KITE_FUTURES_SOURCE = "Kite Connect NFO completed daily price and open interest"
 NIFTY_INDICES_PUBLIC_USER_AGENT = (
@@ -942,6 +1503,8 @@ NIFTY_INDICES_PUBLIC_USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
 )
 HISTORICAL_URL_TEMPLATE = "https://api.kite.trade/instruments/historical/{instrument_token}/day"
+KITE_HISTORICAL_DOCUMENTATION_URL = "https://kite.trade/docs/connect/v3/historical/"
+KITE_ADJUSTMENT_PROVENANCE_URL = "https://support.zerodha.com/category/trading-and-markets/charts-and-orders/charts/articles/kite-charts-not-matching-as-per-the-records-in-nse-or-bse"
 BASE_INDEX = ("Nifty 50", "NSE:NIFTY 50")
 DASHBOARD_EOD_INDICES = ("Nifty 50", "Nifty Bank", "Nifty IT", "Nifty Energy", "India VIX")
 OFFICIAL_SECTORAL_INDICES = (
@@ -1767,6 +2330,15 @@ def parse_daily_candles(
         open_price, high, low, close = (float(value) for value in values)
         if high < max(open_price, close, low) or low > min(open_price, close, high):
             raise ValueError("invalid_provider_response")
+        raw_volume = candle[5] if len(candle) >= 6 else None
+        if raw_volume is not None and (
+            not isinstance(raw_volume, (int, float))
+            or isinstance(raw_volume, bool)
+            or not math.isfinite(float(raw_volume))
+            or float(raw_volume) != int(raw_volume)
+            or int(raw_volume) < 0
+        ):
+            raise ValueError("invalid_provider_response")
         if candle_date < today or allow_today:
             parsed.append(
                 {
@@ -1775,6 +2347,7 @@ def parse_daily_candles(
                     "high": high,
                     "low": low,
                     "close": close,
+                    "volume": int(raw_volume) if raw_volume is not None else None,
                 }
             )
     parsed.sort(key=lambda item: item["date"])
@@ -5026,7 +5599,7 @@ def build_historical_point_in_time_readiness(
             },
             "required_keys": 3,
             "use": "Measure financing conditions, policy transmission and currency pressure without hindsight.",
-            "missing_requirement": "Extend release-dated policy-rate history before May 2022 and beyond December 2025, add currency vintages, and extend monthly credit coverage before 2024.",
+            "missing_requirement": "Extend release-dated policy-rate history from February 2016 back toward the temporary 12 June 2000 NIFTY index-futures research floor and through the next completed decision after October 2026; add currency vintages and extend monthly credit coverage before 2024.",
         },
         {
             "key": "external_balance",
@@ -8947,6 +9520,346 @@ def build_dashboard_screener_summary(
             "Counts and extremes describe the current local EOD screen; they are not recommendations.",
             "The universe is the locally stored NSE F&O equity list, not the whole cash market.",
             "Twenty-session excess return is a simple difference versus Nifty 50, not risk-adjusted alpha.",
+        ],
+    }
+
+
+def build_factor_research_foundation(
+    stock_histories: dict[str, list[dict[str, object]]],
+    benchmark_candles: list[dict[str, object]],
+    *,
+    expected_through: date,
+    constituent_snapshot: dict[str, object] | None = None,
+    adjusted_price_evidence: bool = False,
+    liquidity_evidence: bool = False,
+) -> dict[str, object]:
+    """Audit the factor information set before any security can be ranked.
+
+    Momentum diagnostics are deliberately separated from candidate ranking. A
+    row can expose trailing, one-month-skipped price strength while remaining
+    ineligible because sector identity, adjustment or liquidity evidence is
+    missing. This keeps a convenient price series from silently becoming an
+    investable signal.
+    """
+    benchmark = sorted(benchmark_candles, key=lambda item: item["date"])
+    if len(benchmark) < 253:
+        raise ValueError("factor_benchmark_history_unavailable")
+    as_of = benchmark[-1]["date"]
+    if not isinstance(as_of, date):
+        raise ValueError("factor_benchmark_history_unavailable")
+
+    benchmark_closes = [float(item["close"]) for item in benchmark]
+
+    def skipped_return(closes: list[float], sessions: int) -> float | None:
+        # The most recent 21 sessions are excluded to reduce short-term
+        # reversal leakage into medium-horizon momentum research.
+        if len(closes) < sessions + 22:
+            return None
+        start = closes[-(sessions + 22)]
+        end = closes[-22]
+        if start <= 0 or end <= 0:
+            return None
+        return ((end / start) - 1) * 100
+
+    benchmark_momentum = {
+        "12_1": skipped_return(benchmark_closes, 231),
+        "6_1": skipped_return(benchmark_closes, 105),
+        "3_1": skipped_return(benchmark_closes, 42),
+    }
+    if any(value is None for value in benchmark_momentum.values()):
+        raise ValueError("factor_benchmark_history_unavailable")
+
+    snapshot = constituent_snapshot if isinstance(constituent_snapshot, dict) else {}
+    snapshot_rows = snapshot.get("constituents")
+    snapshot_rows = snapshot_rows if isinstance(snapshot_rows, list) else []
+    snapshot_date = None
+    try:
+        if snapshot.get("as_of"):
+            snapshot_date = date.fromisoformat(str(snapshot["as_of"]))
+    except ValueError:
+        snapshot_date = None
+    sector_lookup = {
+        str(row.get("symbol") or "").strip().upper(): str(row.get("sector") or "").strip()
+        for row in snapshot_rows
+        if isinstance(row, dict)
+        and str(row.get("symbol") or "").strip()
+        and str(row.get("sector") or "").strip()
+    }
+    snapshot_usable = bool(
+        snapshot_date
+        and snapshot_date <= as_of
+        and sector_lookup
+        and snapshot.get("membership_type") in {"current_snapshot", "effective_dated_snapshot"}
+    )
+
+    symbols = sorted(str(symbol).strip().upper() for symbol in stock_histories if str(symbol).strip())
+    universe_hash = hashlib.sha256("\n".join(symbols).encode("utf-8")).hexdigest()
+    freshness_ready = as_of >= expected_through
+    rows: list[dict[str, object]] = []
+    for symbol in symbols:
+        ordered = sorted(stock_histories.get(symbol, []), key=lambda item: item["date"])
+        latest = ordered[-1]["date"] if ordered else None
+        closes = [float(item["close"]) for item in ordered]
+        aligned = latest == as_of
+        raw = {
+            key: skipped_return(closes, sessions)
+            for key, sessions in (("12_1", 231), ("6_1", 105), ("3_1", 42))
+        }
+        excess = {
+            key: (raw[key] - float(benchmark_momentum[key])) if raw[key] is not None else None
+            for key in raw
+        }
+        price_ready = bool(aligned and all(value is not None for value in raw.values()))
+        sector = sector_lookup.get(symbol) if snapshot_usable else None
+        rows.append(
+            {
+                "symbol": symbol,
+                "sessions": len(ordered),
+                "last_session": latest.isoformat() if isinstance(latest, date) else None,
+                "price_history_ready": price_ready,
+                "sector": sector,
+                "sector_identity_ready": bool(sector),
+                "momentum_12_1_pct": round(raw["12_1"], 2) if raw["12_1"] is not None else None,
+                "momentum_6_1_pct": round(raw["6_1"], 2) if raw["6_1"] is not None else None,
+                "momentum_3_1_pct": round(raw["3_1"], 2) if raw["3_1"] is not None else None,
+                "excess_12_1_vs_nifty_pct": round(excess["12_1"], 2) if excess["12_1"] is not None else None,
+                "excess_6_1_vs_nifty_pct": round(excess["6_1"], 2) if excess["6_1"] is not None else None,
+                "excess_3_1_vs_nifty_pct": round(excess["3_1"], 2) if excess["3_1"] is not None else None,
+                "research_eligible": bool(
+                    price_ready
+                    and freshness_ready
+                    and sector
+                    and adjusted_price_evidence
+                    and liquidity_evidence
+                ),
+            }
+        )
+
+    price_ready_count = sum(bool(row["price_history_ready"]) for row in rows)
+    sector_ready_count = sum(bool(row["sector_identity_ready"]) for row in rows)
+    eligible_count = sum(bool(row["research_eligible"]) for row in rows)
+
+    def gate(key: str, title: str, ready: bool, detail: str, next_gate: str) -> dict[str, object]:
+        return {
+            "key": key,
+            "title": title,
+            "state": "ready" if ready else "blocked",
+            "detail": detail,
+            "next_gate": next_gate,
+        }
+
+    gates = [
+        gate(
+            "universe",
+            "Frozen eligible universe",
+            bool(symbols),
+            f"{len(symbols)} locally stored F&O equities; SHA-256 {universe_hash[:12]}…",
+            "Preserve this dated symbol set with every later test and result.",
+        ),
+        gate(
+            "freshness",
+            "Completed-session freshness",
+            freshness_ready,
+            (
+                f"Latest benchmark session {as_of.isoformat()} meets the expected completed session {expected_through.isoformat()}."
+                if freshness_ready
+                else f"Latest benchmark session {as_of.isoformat()} trails the expected completed session {expected_through.isoformat()}."
+            ),
+            "Run the EOD update and retain missing sessions as visible failures.",
+        ),
+        gate(
+            "price_history",
+            "Aligned price history",
+            bool(rows) and price_ready_count == len(rows),
+            f"{price_ready_count} of {len(rows)} symbols have aligned 12-1, 6-1 and 3-1 diagnostics.",
+            "Refresh missing or stale completed sessions without filling gaps silently.",
+        ),
+        gate(
+            "sector_identity",
+            "Dated sector identity",
+            bool(rows) and sector_ready_count == len(rows),
+            f"{sector_ready_count} of {len(rows)} symbols have a sector from the dated official snapshot.",
+            "Persist each official NIFTY 500 constituent snapshot before sector-neutral scoring.",
+        ),
+        gate(
+            "adjusted_prices",
+            "Corporate-action-adjusted prices",
+            adjusted_price_evidence,
+            "Adjustment provenance is recorded." if adjusted_price_evidence else "The current OHLC store does not identify split/dividend adjustment provenance.",
+            "Add an auditable adjustment source and prevent mixed adjusted/unadjusted histories.",
+        ),
+        gate(
+            "liquidity",
+            "Liquidity evidence",
+            liquidity_evidence,
+            "Dated liquidity evidence is recorded." if liquidity_evidence else "Cash-market volume and investable capacity are not stored with daily candles.",
+            "Persist validated cash volume, turnover and a dated investability rule.",
+        ),
+    ]
+    all_gates_ready = all(item["state"] == "ready" for item in gates)
+    return {
+        "ok": True,
+        "contract_version": FACTOR_RESEARCH_CONTRACT_VERSION,
+        "status": "factor_inputs_ready" if all_gates_ready else "factor_inputs_blocked",
+        "as_of_date": as_of.isoformat(),
+        "expected_through": expected_through.isoformat(),
+        "universe": {
+            "name": "locally_stored_nse_fno_equities",
+            "symbols": len(symbols),
+            "hash_sha256": universe_hash,
+            "frozen_as_of": as_of.isoformat(),
+        },
+        "sector_snapshot": {
+            "state": "ready" if snapshot_usable else "unavailable",
+            "as_of": snapshot_date.isoformat() if snapshot_date else None,
+            "source": snapshot.get("source"),
+            "membership_type": snapshot.get("membership_type"),
+        },
+        "benchmark": {
+            "name": "Nifty 50",
+            "as_of": as_of.isoformat(),
+            "momentum_12_1_pct": round(float(benchmark_momentum["12_1"]), 2),
+            "momentum_6_1_pct": round(float(benchmark_momentum["6_1"]), 2),
+            "momentum_3_1_pct": round(float(benchmark_momentum["3_1"]), 2),
+        },
+        "coverage": {
+            "total": len(rows),
+            "price_history_ready": price_ready_count,
+            "sector_identity_ready": sector_ready_count,
+            "research_eligible": eligible_count,
+        },
+        "gates": gates,
+        "rows": rows,
+        "ranked_candidates": [],
+        "ranking_state": "blocked_until_all_input_gates_pass",
+        "limitations": [
+            "Momentum fields are diagnostics, not ranks, recommendations or expected returns.",
+            "The final 21 sessions are skipped; windows are defined in completed trading sessions, not calendar months.",
+            "Current-universe research is not a survivorship-safe historical backtest.",
+            "Quality and value are absent until permitted point-in-time fundamentals are connected.",
+            "No composite score is calculated while any input gate is blocked.",
+        ],
+    }
+
+
+def build_alpha_research_foundation(
+    screener_payload: dict[str, object] | None = None,
+    *,
+    earnings_record_count: int = 0,
+) -> dict[str, object]:
+    """Expose the joined alpha-research architecture without manufacturing signals."""
+    coverage = (
+        screener_payload.get("coverage")
+        if isinstance(screener_payload, dict)
+        and screener_payload.get("ok") is True
+        and isinstance(screener_payload.get("coverage"), dict)
+        else {}
+    )
+    freshness = (
+        screener_payload.get("freshness")
+        if isinstance(screener_payload, dict)
+        and isinstance(screener_payload.get("freshness"), dict)
+        else {}
+    )
+    ready_equities = int(coverage.get("ready", 0) or 0)
+    total_equities = int(coverage.get("total", 0) or 0)
+    screener_ready = ready_equities > 0 and freshness.get("state") == "fresh"
+    layers = [
+        {
+            "key": "data_integrity",
+            "title": "Validated data",
+            "state": "ready",
+            "summary": "Append-only completed-session histories, freshness, coverage and conflict checks are implemented.",
+            "next_gate": "Keep source and point-in-time membership coverage explicit.",
+        },
+        {
+            "key": "regime",
+            "title": "Regime and risk budget",
+            "state": "partial",
+            "summary": "Breadth, volatility, flows, derivatives, policy, global risk and historical analogues are joined.",
+            "next_gate": "Freeze thresholds only after derivatives continuity and held-out validation are adequate.",
+        },
+        {
+            "key": "factor_core",
+            "title": "Factor and relative strength core",
+            "state": "partial" if total_equities else "blocked",
+            "summary": (
+                f"{ready_equities} of {total_equities} stored F&O equities currently have calculation-ready price evidence."
+                if total_equities
+                else "No calculation-ready local equity universe is available."
+            ),
+            "next_gate": "Persist adjustment provenance, dated sectors and liquidity evidence before sector-neutral momentum.",
+        },
+        {
+            "key": "catalyst",
+            "title": "Catalyst overlay",
+            "state": "foundation" if earnings_record_count else "blocked",
+            "summary": (
+                f"{earnings_record_count} reviewed earnings records are stored; the macro-event calendar is available."
+                if earnings_record_count
+                else "The event calendar exists, but no reviewed earnings records are stored."
+            ),
+            "next_gate": "Add permitted release timestamps, expectations, surprise and post-event drift evidence.",
+        },
+        {
+            "key": "portfolio_impact",
+            "title": "Portfolio impact gate",
+            "state": "foundation",
+            "summary": "Local holdings, fund look-through, overlap, allocation and risk ratios are implemented in browser memory.",
+            "next_gate": "Add transaction history and marginal concentration, beta and drawdown impact per candidate.",
+        },
+        {
+            "key": "validation",
+            "title": "Chronological validation",
+            "state": "partial",
+            "summary": "Backtests v4 enforces release-aware evidence admission, holdouts and visible negative results.",
+            "next_gate": "Add investable simulations with turnover, costs, slippage and capacity.",
+        },
+        {
+            "key": "decision",
+            "title": "Ranked research cards",
+            "state": "blocked",
+            "summary": "No alpha candidates are promoted and no trading recommendation or execution is generated.",
+            "next_gate": "Require validated factors, regime compatibility and portfolio-impact evidence before ranking.",
+        },
+    ]
+    return {
+        "ok": True,
+        "contract_version": ALPHA_RESEARCH_CONTRACT_VERSION,
+        "status": "foundation_ready_no_ranked_ideas",
+        "architecture": "regime_gated_factor_core_with_catalyst_overlay_and_portfolio_impact",
+        "layers": layers,
+        "summary": {
+            "layers": len(layers),
+            "ready": sum(layer["state"] == "ready" for layer in layers),
+            "partial_or_foundation": sum(
+                layer["state"] in {"partial", "foundation"} for layer in layers
+            ),
+            "blocked": sum(layer["state"] == "blocked" for layer in layers),
+            "ranked_ideas": 0,
+        },
+        "policy_history": {
+            "state": "complete_for_current_scope",
+            "coverage": "February 2016 through October 2026",
+            "boundary": "Release-native MPC decisions only; pre-2016 reconstruction is not an immediate dependency.",
+        },
+        "current_focus": {
+            "key": "factor_market_data",
+            "title": "Factor market-data contract v2",
+            "sequence": [
+                "persist each official dated constituent and sector snapshot",
+                "record corporate-action adjustment provenance without relabelling old OHLC",
+                "persist validated cash volume and turnover",
+                "freeze investability and missing-data rules",
+                "then add sector-neutral momentum",
+                "add quality and value only from permitted point-in-time fundamentals",
+            ],
+        },
+        "limitations": [
+            "The page reports build readiness, not investment opportunities.",
+            "Descriptive relative strength is not validated alpha.",
+            "A current regime label cannot activate a playbook until its validation gate passes.",
+            "Portfolio holdings remain local and browser-memory-only.",
         ],
     }
 
@@ -15230,6 +16143,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         if path == "/api/backtests":
             self._send_backtests(urllib.parse.urlsplit(self.path).query)
             return
+        if path == "/api/alpha-research":
+            self._send_alpha_research()
+            return
+        if path == "/api/factor-research":
+            self._send_factor_research()
+            return
         super().do_GET()
 
     def _send_domestic_sentiment_core(self) -> None:
@@ -15378,6 +16297,80 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
     def _send_local_screener(self) -> None:
         try:
             payload = self._calculate_local_screener_payload()
+            self._send_json(HTTPStatus.OK, payload)
+        except ValueError as error:
+            self._send_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"ok": False, "reason": str(error)},
+            )
+
+    def _send_alpha_research(self) -> None:
+        try:
+            screener_payload = self._calculate_local_screener_payload()
+        except ValueError:
+            screener_payload = None
+        earnings_record_count = len(_get_eod_store().load_earnings_records())
+        self._send_json(
+            HTTPStatus.OK,
+            build_alpha_research_foundation(
+                screener_payload,
+                earnings_record_count=earnings_record_count,
+            ),
+        )
+
+    def _send_factor_research(self) -> None:
+        try:
+            store = _get_eod_store()
+            stock_inventory = store.list_instruments(kind="stock")
+            histories = {
+                str(item["display_name"]): store.load_candles(
+                    kind="stock",
+                    display_name=str(item["display_name"]),
+                )
+                for item in stock_inventory
+            }
+            stored_snapshot = store.load_latest_workspace_snapshot(
+                "nifty500-constituent-snapshot"
+            )
+            snapshot_payload = (
+                stored_snapshot.get("payload")
+                if isinstance(stored_snapshot, dict)
+                and isinstance(stored_snapshot.get("payload"), dict)
+                else None
+            )
+            market_data_coverage = store.factor_market_data_coverage()
+            market_data_total = int(market_data_coverage.get("total") or 0)
+            payload = build_factor_research_foundation(
+                histories,
+                store.load_candles(kind="index", display_name="Nifty 50"),
+                expected_through=completed_history_date(
+                    datetime.now(INDIA_TIMEZONE)
+                ),
+                constituent_snapshot=snapshot_payload,
+                adjusted_price_evidence=bool(
+                    market_data_total
+                    and int(market_data_coverage.get("adjustment_ready") or 0)
+                    == market_data_total
+                ),
+                liquidity_evidence=bool(
+                    market_data_total
+                    and int(market_data_coverage.get("liquidity_ready") or 0)
+                    == market_data_total
+                ),
+            )
+            payload["market_data_coverage"] = {
+                "minimum_sessions": market_data_coverage.get("minimum_sessions"),
+                "total": market_data_total,
+                "adjustment_ready": market_data_coverage.get("adjustment_ready"),
+                "liquidity_ready": market_data_coverage.get("liquidity_ready"),
+                "adjustment_source": KITE_ADJUSTMENT_PROVENANCE_URL,
+                "candle_schema_version": 2,
+            }
+            store.save_workspace_snapshot(
+                snapshot_key="factor-research-foundation",
+                as_of_date=date.fromisoformat(str(payload["as_of_date"])),
+                payload=payload,
+            )
             self._send_json(HTTPStatus.OK, payload)
         except ValueError as error:
             self._send_json(
@@ -16611,6 +17604,8 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                             provider_token=tokens[display_name],
                             candles=new_candles,
                             retrieved_at=datetime.now(timezone.utc).isoformat(),
+                            adjustment_status="not_applicable_index",
+                            adjustment_source_url=KITE_HISTORICAL_DOCUMENTATION_URL,
                         )
                     except CandleConflictError as error:
                         raise ValueError(str(error)) from error
@@ -16788,6 +17783,16 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                     provider_token=token,
                     candles=parsed_candles,
                     retrieved_at=datetime.now(timezone.utc).isoformat(),
+                    adjustment_status=(
+                        "provider_reported_adjusted"
+                        if kind == "stock"
+                        else "not_applicable_index"
+                    ),
+                    adjustment_source_url=(
+                        KITE_ADJUSTMENT_PROVENANCE_URL
+                        if kind == "stock"
+                        else KITE_HISTORICAL_DOCUMENTATION_URL
+                    ),
                 )
             except CandleConflictError as error:
                 raise ValueError("stored_candle_conflict") from error
@@ -16959,6 +17964,20 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         now = datetime.now(INDIA_TIMEZONE)
         from_date = now.date() - timedelta(days=NIFTY500_HISTORY_LOOKBACK_DAYS)
         histories: dict[str, list[tuple[date, float]]] = {}
+        store = _get_eod_store()
+        locally_stored_stocks = {
+            str(item["display_name"])
+            for item in store.list_instruments(kind="stock")
+        }
+        metadata_backfill = {
+            "eligible_instruments": 0,
+            "matched_sessions": 0,
+            "volume_backfilled": 0,
+            "already_complete": 0,
+            "price_conflicts": 0,
+            "volume_conflicts": 0,
+            "not_stored": 0,
+        }
         requested = 0
         for constituent in constituents:
             symbol = constituent["symbol"]
@@ -16988,12 +18007,37 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             requested += 1
             if reason is not None:
                 raise ValueError(reason)
-            histories[symbol] = parse_daily_closes(
-                provider_payload or {}, today=now.date(), now_time=now.time().replace(tzinfo=None)
+            parsed_candles = parse_daily_candles(
+                provider_payload or {},
+                today=now.date(),
+                now_time=now.time().replace(tzinfo=None),
             )
+            histories[symbol] = [
+                (row["date"], float(row["close"])) for row in parsed_candles
+            ]
+            if symbol in locally_stored_stocks:
+                backfill = store.backfill_candle_metadata(
+                    kind="stock",
+                    display_name=symbol,
+                    provider_token=token,
+                    candles=parsed_candles,
+                    adjustment_status="provider_reported_adjusted",
+                    adjustment_source_url=KITE_ADJUSTMENT_PROVENANCE_URL,
+                    retrieved_at=datetime.now(timezone.utc).isoformat(),
+                )
+                metadata_backfill["eligible_instruments"] += 1
+                for key in (
+                    "matched",
+                    "volume_backfilled",
+                    "already_complete",
+                    "price_conflicts",
+                    "volume_conflicts",
+                    "not_stored",
+                ):
+                    target_key = "matched_sessions" if key == "matched" else key
+                    metadata_backfill[target_key] += int(backfill[key])
 
         rows, as_of, evaluated = calculate_market_breadth(constituents, histories)
-        store = _get_eod_store()
         index_histories = {
             str(item["display_name"]): [
                 (row["date"], float(row["close"]))
@@ -17022,6 +18066,16 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 as_of_date=as_of,
                 payload=market_context,
             )
+        store.save_workspace_snapshot(
+            snapshot_key="nifty500-constituent-snapshot",
+            as_of_date=as_of,
+            payload={
+                "as_of": as_of.isoformat(),
+                "source": NIFTY500_CONSTITUENTS_URL,
+                "membership_type": "current_snapshot",
+                "constituents": constituents,
+            },
+        )
         monthly_returns = calculate_month_to_date_returns(histories, as_of=as_of)
         stock_ytd_by_year = {
             year: build_stock_ytd_table(constituents, histories, as_of=as_of, year=year)
@@ -17048,6 +18102,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             "one_day_change_definition": "percentage-point change in share above 20DMA",
             "universe_source": NIFTY500_CONSTITUENTS_URL,
             "price_source": "Kite Connect historical daily candles",
+            "factor_market_data_backfill": metadata_backfill,
             "_stock_ytd_by_year": stock_ytd_by_year,
         }
 

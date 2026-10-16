@@ -30,6 +30,8 @@ from server import (
     build_dashboard_market_story,
     build_dashboard_fno_summary,
     build_dashboard_screener_summary,
+    build_alpha_research_foundation,
+    build_factor_research_foundation,
     build_dashboard_seasonality_summary,
     build_dashboard_seasonality_universe_summary,
     build_news_events_workspace,
@@ -123,6 +125,103 @@ from server import (
 )
 
 
+class AlphaResearchFoundationTest(unittest.TestCase):
+    def test_reports_architecture_without_promoting_candidates(self):
+        payload = build_alpha_research_foundation(
+            {
+                "ok": True,
+                "coverage": {"total": 210, "ready": 208},
+                "freshness": {"state": "fresh"},
+            },
+            earnings_record_count=24,
+        )
+
+        self.assertEqual(payload["contract_version"], "alpha-research-foundation-v1")
+        self.assertEqual(payload["summary"]["ranked_ideas"], 0)
+        self.assertEqual(payload["policy_history"]["state"], "complete_for_current_scope")
+        self.assertEqual(payload["current_focus"]["key"], "factor_market_data")
+        factor = next(layer for layer in payload["layers"] if layer["key"] == "factor_core")
+        decision = next(layer for layer in payload["layers"] if layer["key"] == "decision")
+        self.assertEqual(factor["state"], "partial")
+        self.assertIn("208 of 210", factor["summary"])
+        self.assertEqual(decision["state"], "blocked")
+
+    def test_keeps_factor_layer_blocked_without_local_universe(self):
+        payload = build_alpha_research_foundation(None)
+
+        factor = next(layer for layer in payload["layers"] if layer["key"] == "factor_core")
+        catalyst = next(layer for layer in payload["layers"] if layer["key"] == "catalyst")
+        self.assertEqual(factor["state"], "blocked")
+        self.assertEqual(catalyst["state"], "blocked")
+
+
+class FactorResearchFoundationTest(unittest.TestCase):
+    @staticmethod
+    def _candles(multiplier=1.0):
+        start = date(2025, 1, 1)
+        return [
+            {
+                "date": start + timedelta(days=offset),
+                "open": multiplier * (100 + offset),
+                "high": multiplier * (102 + offset),
+                "low": multiplier * (99 + offset),
+                "close": multiplier * (101 + offset),
+            }
+            for offset in range(300)
+        ]
+
+    def test_audits_factor_inputs_without_promoting_price_strength_to_a_rank(self):
+        benchmark = self._candles()
+        as_of = benchmark[-1]["date"]
+        result = build_factor_research_foundation(
+            {"AAA": self._candles(1.1), "BBB": self._candles(0.9)},
+            benchmark,
+            expected_through=as_of,
+            constituent_snapshot={
+                "as_of": as_of.isoformat(),
+                "source": "official-test-snapshot",
+                "membership_type": "current_snapshot",
+                "constituents": [
+                    {"symbol": "AAA", "sector": "Industrials"},
+                    {"symbol": "BBB", "sector": "Financial Services"},
+                ],
+            },
+        )
+
+        self.assertEqual(result["contract_version"], "factor-research-foundation-v1")
+        self.assertEqual(result["coverage"]["price_history_ready"], 2)
+        self.assertEqual(result["coverage"]["sector_identity_ready"], 2)
+        self.assertEqual(result["coverage"]["research_eligible"], 0)
+        self.assertEqual(result["ranked_candidates"], [])
+        self.assertEqual(result["ranking_state"], "blocked_until_all_input_gates_pass")
+        self.assertIsNotNone(result["rows"][0]["momentum_12_1_pct"])
+        states = {gate["key"]: gate["state"] for gate in result["gates"]}
+        self.assertEqual(states["universe"], "ready")
+        self.assertEqual(states["adjusted_prices"], "blocked")
+        self.assertEqual(states["liquidity"], "blocked")
+
+    def test_marks_rows_eligible_only_when_every_input_gate_is_explicit(self):
+        benchmark = self._candles()
+        as_of = benchmark[-1]["date"]
+        result = build_factor_research_foundation(
+            {"AAA": self._candles(1.1)},
+            benchmark,
+            expected_through=as_of,
+            constituent_snapshot={
+                "as_of": as_of.isoformat(),
+                "source": "official-test-snapshot",
+                "membership_type": "effective_dated_snapshot",
+                "constituents": [{"symbol": "AAA", "sector": "Industrials"}],
+            },
+            adjusted_price_evidence=True,
+            liquidity_evidence=True,
+        )
+
+        self.assertEqual(result["status"], "factor_inputs_ready")
+        self.assertEqual(result["coverage"]["research_eligible"], 1)
+        self.assertEqual(result["ranked_candidates"], [])
+
+
 class KiteHandshakeHelpersTest(unittest.TestCase):
     @staticmethod
     def _candidate_evidence(
@@ -184,7 +283,7 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
 
         result = build_historical_regime_workspace(candles)
 
-        self.assertEqual(result["contract_version"], "historical-regimes-v18")
+        self.assertEqual(result["contract_version"], "historical-regimes-v25")
         self.assertEqual(
             result["point_in_time_readiness"]["contract_version"],
             "historical-point-in-time-readiness-v1",
@@ -457,6 +556,243 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(row["metadata"]["change_bps"], 0)
         self.assertEqual(row["metadata"]["revision_status"], "initial")
 
+    def test_rbi_policy_repo_registry_preserves_2021_to_2022_pause_cycle(self):
+        expected_meetings = (
+            (date(2021, 2, 5), "51077"),
+            (date(2021, 4, 7), "51381"),
+            (date(2021, 6, 4), "51683"),
+            (date(2021, 8, 6), "52011"),
+            (date(2021, 10, 8), "52366"),
+            (date(2021, 12, 8), "52687"),
+            (date(2022, 2, 10), "53247"),
+            (date(2022, 4, 8), "53537"),
+        )
+        policy_sources = {
+            source["observation_date"]: source
+            for source in RBI_RELEASE_VINTAGE_SOURCES
+            if source["kind"] == "policy_repo_rate"
+        }
+
+        for meeting_date, press_release_id in expected_meetings:
+            source = policy_sources[meeting_date]
+            self.assertEqual(source["expected_value"], 4.00)
+            self.assertEqual(source["decision"], "hold")
+            self.assertEqual(source["change_bps"], 0)
+            self.assertIn(press_release_id, source["url"])
+
+            row = parse_rbi_release_vintage(
+                f"""
+                <html><body><div>Date : {meeting_date.strftime('%b %d, %Y')}</div>
+                <p>The Monetary Policy Committee decided to keep the policy
+                repo rate unchanged at 4.00 per cent.</p></body></html>
+                """,
+                source=source,
+            )
+            self.assertEqual(row["date"], meeting_date)
+            self.assertEqual(row["value"], 4.0)
+            self.assertEqual(row["metadata"]["decision"], "hold")
+            self.assertEqual(row["metadata"]["change_bps"], 0)
+
+    def test_rbi_policy_repo_registry_preserves_2020_pandemic_cycle(self):
+        expected_meetings = (
+            (date(2020, 2, 6), "49342", 5.15, "hold", 0),
+            (date(2020, 3, 27), "49581", 4.40, "decrease", -75),
+            (date(2020, 5, 22), "49843", 4.00, "decrease", -40),
+            (date(2020, 8, 6), "50175", 4.00, "hold", 0),
+            (date(2020, 10, 9), "50479", 4.00, "hold", 0),
+            (date(2020, 12, 4), "50747", 4.00, "hold", 0),
+        )
+        policy_sources = {
+            source["observation_date"]: source
+            for source in RBI_RELEASE_VINTAGE_SOURCES
+            if source["kind"] == "policy_repo_rate"
+        }
+
+        for meeting_date, press_release_id, rate, decision, change_bps in expected_meetings:
+            source = policy_sources[meeting_date]
+            self.assertEqual(source["expected_value"], rate)
+            self.assertEqual(source["decision"], decision)
+            self.assertEqual(source["change_bps"], change_bps)
+            self.assertIn(press_release_id, source["url"])
+
+            decision_wording = (
+                f"reduce the policy repo rate by {abs(change_bps)} basis points to {rate:.2f} per cent"
+                if decision == "decrease"
+                else f"keep the policy repo rate unchanged at {rate:.2f} per cent"
+            )
+            row = parse_rbi_release_vintage(
+                f"""
+                <html><body><div>Date : {meeting_date.strftime('%b %d, %Y')}</div>
+                <p>The Monetary Policy Committee decided to {decision_wording}
+                with immediate effect.</p></body></html>
+                """,
+                source=source,
+            )
+            self.assertEqual(row["date"], meeting_date)
+            self.assertEqual(row["value"], rate)
+            self.assertEqual(row["metadata"]["decision"], decision)
+            self.assertEqual(row["metadata"]["change_bps"], change_bps)
+
+    def test_rbi_policy_repo_registry_preserves_2019_easing_cycle(self):
+        expected_meetings = (
+            (date(2019, 2, 7), "46235", 6.25, "decrease", -25),
+            (date(2019, 4, 4), "46722", 6.00, "decrease", -25),
+            (date(2019, 6, 6), "47225", 5.75, "decrease", -25),
+            (date(2019, 8, 7), "47818", 5.40, "decrease", -35),
+            (date(2019, 10, 4), "48319", 5.15, "decrease", -25),
+            (date(2019, 12, 5), "48802", 5.15, "hold", 0),
+        )
+        policy_sources = {
+            source["observation_date"]: source
+            for source in RBI_RELEASE_VINTAGE_SOURCES
+            if source["kind"] == "policy_repo_rate"
+        }
+
+        for meeting_date, press_release_id, rate, decision, change_bps in expected_meetings:
+            source = policy_sources[meeting_date]
+            self.assertEqual(source["expected_value"], rate)
+            self.assertEqual(source["decision"], decision)
+            self.assertEqual(source["change_bps"], change_bps)
+            self.assertIn(press_release_id, source["url"])
+
+            decision_wording = (
+                f"reduce the policy repo rate by {abs(change_bps)} basis points to {rate:.2f} per cent"
+                if decision == "decrease"
+                else f"keep the policy repo rate unchanged at {rate:.2f} per cent"
+            )
+            row = parse_rbi_release_vintage(
+                f"""
+                <html><body><div>Date : {meeting_date.strftime('%b %d, %Y')}</div>
+                <p>The Monetary Policy Committee decided to {decision_wording}
+                with immediate effect.</p></body></html>
+                """,
+                source=source,
+            )
+            self.assertEqual(row["date"], meeting_date)
+            self.assertEqual(row["value"], rate)
+            self.assertEqual(row["metadata"]["decision"], decision)
+            self.assertEqual(row["metadata"]["change_bps"], change_bps)
+
+    def test_rbi_policy_repo_registry_preserves_2018_tightening_cycle(self):
+        expected_meetings = (
+            (date(2018, 2, 7), "43078", 6.00, "hold", 0),
+            (date(2018, 4, 5), "43573", 6.00, "hold", 0),
+            (date(2018, 6, 6), "44125", 6.25, "increase", 25),
+            (date(2018, 8, 1), "44636", 6.50, "increase", 25),
+            (date(2018, 10, 5), "45152", 6.50, "hold", 0),
+            (date(2018, 12, 5), "45656", 6.50, "hold", 0),
+        )
+        policy_sources = {
+            source["observation_date"]: source
+            for source in RBI_RELEASE_VINTAGE_SOURCES
+            if source["kind"] == "policy_repo_rate"
+        }
+
+        for meeting_date, press_release_id, rate, decision, change_bps in expected_meetings:
+            source = policy_sources[meeting_date]
+            self.assertEqual(source["expected_value"], rate)
+            self.assertEqual(source["decision"], decision)
+            self.assertEqual(source["change_bps"], change_bps)
+            self.assertIn(press_release_id, source["url"])
+
+            decision_wording = (
+                f"increase the policy repo rate by {change_bps} basis points to {rate:.2f} per cent"
+                if decision == "increase"
+                else f"keep the policy repo rate unchanged at {rate:.2f} per cent"
+            )
+            row = parse_rbi_release_vintage(
+                f"""
+                <html><body><div>Date : {meeting_date.strftime('%b %d, %Y')}</div>
+                <p>The Monetary Policy Committee decided to {decision_wording}
+                with immediate effect.</p></body></html>
+                """,
+                source=source,
+            )
+            self.assertEqual(row["date"], meeting_date)
+            self.assertEqual(row["value"], rate)
+            self.assertEqual(row["metadata"]["decision"], decision)
+            self.assertEqual(row["metadata"]["change_bps"], change_bps)
+
+    def test_rbi_policy_repo_registry_preserves_2017_easing_cycle(self):
+        expected_meetings = (
+            (date(2017, 2, 8), "39505", 6.25, "hold", 0),
+            (date(2017, 4, 6), "40069", 6.25, "hold", 0),
+            (date(2017, 6, 7), "40685", 6.25, "hold", 0),
+            (date(2017, 8, 2), "41256", 6.00, "decrease", -25),
+            (date(2017, 10, 4), "41852", 6.00, "hold", 0),
+            (date(2017, 12, 6), "42476", 6.00, "hold", 0),
+        )
+        policy_sources = {
+            source["observation_date"]: source
+            for source in RBI_RELEASE_VINTAGE_SOURCES
+            if source["kind"] == "policy_repo_rate"
+        }
+
+        for meeting_date, press_release_id, rate, decision, change_bps in expected_meetings:
+            source = policy_sources[meeting_date]
+            self.assertEqual(source["expected_value"], rate)
+            self.assertEqual(source["decision"], decision)
+            self.assertEqual(source["change_bps"], change_bps)
+            self.assertIn(press_release_id, source["url"])
+
+            decision_wording = (
+                f"reduce the policy repo rate by {abs(change_bps)} basis points to {rate:.2f} per cent"
+                if decision == "decrease"
+                else f"keep the policy repo rate unchanged at {rate:.2f} per cent"
+            )
+            row = parse_rbi_release_vintage(
+                f"""
+                <html><body><div>Date : {meeting_date.strftime('%b %d, %Y')}</div>
+                <p>The Monetary Policy Committee decided to {decision_wording}
+                with immediate effect.</p></body></html>
+                """,
+                source=source,
+            )
+            self.assertEqual(row["date"], meeting_date)
+            self.assertEqual(row["value"], rate)
+            self.assertEqual(row["metadata"]["decision"], decision)
+            self.assertEqual(row["metadata"]["change_bps"], change_bps)
+
+    def test_rbi_policy_repo_registry_preserves_2016_policy_framework_transition(self):
+        expected_meetings = (
+            (date(2016, 2, 2), "36124", 6.75, "hold", 0),
+            (date(2016, 4, 5), "36654", 6.50, "decrease", -25),
+            (date(2016, 6, 7), "37151", 6.50, "hold", 0),
+            (date(2016, 8, 9), "37734", 6.50, "hold", 0),
+            (date(2016, 10, 4), "38224", 6.25, "decrease", -25),
+            (date(2016, 12, 7), "38818", 6.25, "hold", 0),
+        )
+        policy_sources = {
+            source["observation_date"]: source
+            for source in RBI_RELEASE_VINTAGE_SOURCES
+            if source["kind"] == "policy_repo_rate"
+        }
+
+        for meeting_date, press_release_id, rate, decision, change_bps in expected_meetings:
+            source = policy_sources[meeting_date]
+            self.assertEqual(source["expected_value"], rate)
+            self.assertEqual(source["decision"], decision)
+            self.assertEqual(source["change_bps"], change_bps)
+            self.assertIn(press_release_id, source["url"])
+
+            decision_wording = (
+                f"reduce the policy repo rate by {abs(change_bps)} basis points to {rate:.2f} per cent"
+                if decision == "decrease"
+                else f"keep the policy repo rate unchanged at {rate:.2f} per cent"
+            )
+            row = parse_rbi_release_vintage(
+                f"""
+                <html><body><div>Date : {meeting_date.strftime('%b %d, %Y')}</div>
+                <p>The Reserve Bank decided to {decision_wording}
+                with immediate effect.</p></body></html>
+                """,
+                source=source,
+            )
+            self.assertEqual(row["date"], meeting_date)
+            self.assertEqual(row["value"], rate)
+            self.assertEqual(row["metadata"]["decision"], decision)
+            self.assertEqual(row["metadata"]["change_bps"], change_bps)
+
     def test_rbi_policy_repo_registry_preserves_remaining_2023_hold_meetings(self):
         expected_meetings = (
             (date(2023, 6, 8), "55814"),
@@ -550,6 +886,45 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
             decision_wording = (
                 f"reduce the policy repo rate by {abs(change_bps)} basis points to {rate:.2f} per cent"
                 if decision == "decrease"
+                else f"keep the policy repo rate unchanged at {rate:.2f} per cent"
+            )
+            row = parse_rbi_release_vintage(
+                f"""
+                <html><body><div>Date : {meeting_date.strftime('%b %d, %Y')}</div>
+                <p>The Monetary Policy Committee voted to {decision_wording}
+                with immediate effect.</p></body></html>
+                """,
+                source=source,
+            )
+            self.assertEqual(row["date"], meeting_date)
+            self.assertEqual(row["value"], rate)
+            self.assertEqual(row["metadata"]["decision"], decision)
+            self.assertEqual(row["metadata"]["change_bps"], change_bps)
+
+    def test_rbi_policy_repo_registry_preserves_completed_2026_meetings(self):
+        expected_meetings = (
+            (date(2026, 2, 6), "62169", 5.25, "hold", 0),
+            (date(2026, 4, 8), "62514", 5.25, "hold", 0),
+            (date(2026, 6, 5), "62863", 5.25, "hold", 0),
+            (date(2026, 8, 5), "63287", 5.25, "hold", 0),
+            (date(2026, 10, 7), "63742", 5.50, "increase", 25),
+        )
+        policy_sources = {
+            source["observation_date"]: source
+            for source in RBI_RELEASE_VINTAGE_SOURCES
+            if source["kind"] == "policy_repo_rate"
+        }
+
+        for meeting_date, press_release_id, rate, decision, change_bps in expected_meetings:
+            source = policy_sources[meeting_date]
+            self.assertEqual(source["expected_value"], rate)
+            self.assertEqual(source["decision"], decision)
+            self.assertEqual(source["change_bps"], change_bps)
+            self.assertIn(press_release_id, source["url"])
+
+            decision_wording = (
+                f"increase the policy repo rate by {change_bps} basis points to {rate:.2f} per cent"
+                if decision == "increase"
                 else f"keep the policy repo rate unchanged at {rate:.2f} per cent"
             )
             row = parse_rbi_release_vintage(
@@ -2651,12 +3026,19 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         }
         candles = parse_daily_candles(payload, today=date(2026, 9, 23), now_time=time(10, 0))
         self.assertEqual([item["date"] for item in candles], [date(2026, 9, 22)])
+        self.assertEqual(candles[0]["volume"], 100)
         invalid = {
             "status": "success",
             "data": {"candles": [["2026-09-22T00:00:00+0530", 100, 90, 95, 105, 100]]},
         }
         with self.assertRaisesRegex(ValueError, "invalid_provider_response"):
             parse_daily_candles(invalid, today=date(2026, 9, 23), now_time=time(10, 0))
+        invalid_volume = {
+            "status": "success",
+            "data": {"candles": [["2026-09-22T00:00:00+0530", 100, 110, 95, 105, -1]]},
+        }
+        with self.assertRaisesRegex(ValueError, "invalid_provider_response"):
+            parse_daily_candles(invalid_volume, today=date(2026, 9, 23), now_time=time(10, 0))
 
     def test_daily_candles_skip_only_all_zero_pre_inception_placeholders(self):
         payload = {

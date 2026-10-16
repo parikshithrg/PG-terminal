@@ -12,8 +12,13 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SOURCE_NAME = "Kite Connect historical daily candles"
+ADJUSTMENT_STATUSES = {
+    "provider_unspecified",
+    "provider_reported_adjusted",
+    "not_applicable_index",
+}
 
 
 class CandleConflictError(ValueError):
@@ -68,6 +73,8 @@ class EODStore:
                         display_name TEXT NOT NULL,
                         provider_token TEXT NOT NULL,
                         source TEXT NOT NULL,
+                        adjustment_status TEXT NOT NULL DEFAULT 'provider_unspecified',
+                        adjustment_source_url TEXT,
                         updated_at TEXT NOT NULL,
                         schema_version INTEGER NOT NULL
                     );
@@ -79,6 +86,8 @@ class EODStore:
                         high REAL NOT NULL,
                         low REAL NOT NULL,
                         close REAL NOT NULL,
+                        volume INTEGER,
+                        metadata_retrieved_at TEXT,
                         source TEXT NOT NULL,
                         retrieved_at TEXT NOT NULL,
                         validation_status TEXT NOT NULL CHECK (validation_status = 'validated'),
@@ -294,6 +303,28 @@ class EODStore:
                     ON workspace_snapshots(snapshot_key, as_of_date, created_at);
                     """
                 )
+                instrument_columns = {
+                    row["name"]
+                    for row in connection.execute("PRAGMA table_info(instruments)").fetchall()
+                }
+                if "adjustment_status" not in instrument_columns:
+                    connection.execute(
+                        "ALTER TABLE instruments ADD COLUMN adjustment_status TEXT NOT NULL DEFAULT 'provider_unspecified'"
+                    )
+                if "adjustment_source_url" not in instrument_columns:
+                    connection.execute(
+                        "ALTER TABLE instruments ADD COLUMN adjustment_source_url TEXT"
+                    )
+                candle_columns = {
+                    row["name"]
+                    for row in connection.execute("PRAGMA table_info(candles)").fetchall()
+                }
+                if "volume" not in candle_columns:
+                    connection.execute("ALTER TABLE candles ADD COLUMN volume INTEGER")
+                if "metadata_retrieved_at" not in candle_columns:
+                    connection.execute(
+                        "ALTER TABLE candles ADD COLUMN metadata_retrieved_at TEXT"
+                    )
 
     def save_workspace_snapshot(
         self,
@@ -368,7 +399,9 @@ class EODStore:
         return f"{kind}:{display_name}"
 
     @staticmethod
-    def _validated_values(candle: dict[str, object]) -> tuple[str, float, float, float, float]:
+    def _validated_values(
+        candle: dict[str, object],
+    ) -> tuple[str, float, float, float, float, int | None]:
         candle_date = candle.get("date")
         if not isinstance(candle_date, date):
             raise ValueError("invalid_candle")
@@ -384,7 +417,20 @@ class EODStore:
         open_price, high, low, close = (float(value) for value in raw_values)
         if high < max(open_price, low, close) or low > min(open_price, high, close):
             raise ValueError("invalid_candle")
-        return candle_date.isoformat(), open_price, high, low, close
+        raw_volume = candle.get("volume")
+        if raw_volume is None:
+            volume = None
+        elif (
+            not isinstance(raw_volume, (int, float))
+            or isinstance(raw_volume, bool)
+            or not math.isfinite(float(raw_volume))
+            or float(raw_volume) != int(raw_volume)
+            or int(raw_volume) < 0
+        ):
+            raise ValueError("invalid_candle")
+        else:
+            volume = int(raw_volume)
+        return candle_date.isoformat(), open_price, high, low, close, volume
 
     def append_candles(
         self,
@@ -394,12 +440,23 @@ class EODStore:
         provider_token: str,
         candles: list[dict[str, object]],
         retrieved_at: str | None = None,
+        adjustment_status: str = "provider_unspecified",
+        adjustment_source_url: str | None = None,
     ) -> dict[str, int]:
         identity = self.instrument_id(kind, display_name)
         if not provider_token or not provider_token.isdigit():
             raise ValueError("invalid_instrument_identity")
+        if adjustment_status not in ADJUSTMENT_STATUSES:
+            raise ValueError("invalid_adjustment_status")
+        if adjustment_source_url is not None and (
+            not adjustment_source_url.startswith("https://")
+            or len(adjustment_source_url) > 500
+        ):
+            raise ValueError("invalid_adjustment_status")
         timestamp = retrieved_at or datetime.now(timezone.utc).isoformat()
-        validated_by_date: dict[str, tuple[str, float, float, float, float]] = {}
+        validated_by_date: dict[
+            str, tuple[str, float, float, float, float, int | None]
+        ] = {}
         source_duplicates = 0
         for candle in candles:
             validated = self._validated_values(candle)
@@ -412,24 +469,32 @@ class EODStore:
         validated_rows = [validated_by_date[key] for key in sorted(validated_by_date)]
         inserted = 0
         duplicates = 0
+        metadata_backfilled = 0
         with closing(self._connect()) as connection:
             with connection:
                 connection.execute(
                     """
                     INSERT INTO instruments (
-                        instrument_id, kind, display_name, provider_token, source, updated_at, schema_version
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        instrument_id, kind, display_name, provider_token, source,
+                        adjustment_status, adjustment_source_url, updated_at, schema_version
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(instrument_id) DO UPDATE SET
                         provider_token = excluded.provider_token,
+                        adjustment_status = excluded.adjustment_status,
+                        adjustment_source_url = excluded.adjustment_source_url,
                         updated_at = excluded.updated_at,
                         schema_version = excluded.schema_version
                     """,
-                    (identity, kind, display_name, provider_token, SOURCE_NAME, timestamp, SCHEMA_VERSION),
+                    (
+                        identity, kind, display_name, provider_token, SOURCE_NAME,
+                        adjustment_status, adjustment_source_url, timestamp,
+                        SCHEMA_VERSION,
+                    ),
                 )
-                for session_date, open_price, high, low, close in validated_rows:
+                for session_date, open_price, high, low, close, volume in validated_rows:
                     existing = connection.execute(
                         """
-                        SELECT open, high, low, close
+                        SELECT open, high, low, close, volume
                         FROM candles
                         WHERE instrument_id = ? AND session_date = ?
                         """,
@@ -440,14 +505,34 @@ class EODStore:
                         stored = tuple(float(existing[key]) for key in ("open", "high", "low", "close"))
                         if stored != values:
                             raise CandleConflictError(f"stored_candle_conflict:{identity}:{session_date}")
+                        stored_volume = existing["volume"]
+                        if stored_volume is None and volume is not None:
+                            connection.execute(
+                                """
+                                UPDATE candles
+                                SET volume = ?, metadata_retrieved_at = ?, schema_version = ?
+                                WHERE instrument_id = ? AND session_date = ? AND volume IS NULL
+                                """,
+                                (volume, timestamp, SCHEMA_VERSION, identity, session_date),
+                            )
+                            metadata_backfilled += 1
+                        elif (
+                            stored_volume is not None
+                            and volume is not None
+                            and int(stored_volume) != volume
+                        ):
+                            raise CandleConflictError(
+                                f"stored_candle_volume_conflict:{identity}:{session_date}"
+                            )
                         duplicates += 1
                         continue
                     connection.execute(
                         """
                         INSERT INTO candles (
                             instrument_id, session_date, open, high, low, close,
-                            source, retrieved_at, validation_status, schema_version
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'validated', ?)
+                            volume, metadata_retrieved_at, source, retrieved_at,
+                            validation_status, schema_version
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'validated', ?)
                         """,
                         (
                             identity,
@@ -456,6 +541,8 @@ class EODStore:
                             high,
                             low,
                             close,
+                            volume,
+                            timestamp if volume is not None else None,
                             SOURCE_NAME,
                             timestamp,
                             SCHEMA_VERSION,
@@ -466,6 +553,7 @@ class EODStore:
             "inserted": inserted,
             "duplicates": duplicates,
             "source_duplicates": source_duplicates,
+            "metadata_backfilled": metadata_backfilled,
         }
 
     def load_candles(
@@ -477,7 +565,7 @@ class EODStore:
         end: date | None = None,
     ) -> list[dict[str, object]]:
         identity = self.instrument_id(kind, display_name)
-        clauses = ["instrument_id = ?", "validation_status = 'validated'"]
+        clauses = ["c.instrument_id = ?", "c.validation_status = 'validated'"]
         parameters: list[object] = [identity]
         if start is not None:
             clauses.append("session_date >= ?")
@@ -486,8 +574,11 @@ class EODStore:
             clauses.append("session_date <= ?")
             parameters.append(end.isoformat())
         query = f"""
-            SELECT session_date, open, high, low, close
-            FROM candles
+            SELECT c.session_date, c.open, c.high, c.low, c.close, c.volume,
+                   c.metadata_retrieved_at, i.adjustment_status,
+                   i.adjustment_source_url
+            FROM candles c
+            JOIN instruments i ON i.instrument_id = c.instrument_id
             WHERE {' AND '.join(clauses)}
             ORDER BY session_date
         """
@@ -500,9 +591,175 @@ class EODStore:
                 "high": float(row["high"]),
                 "low": float(row["low"]),
                 "close": float(row["close"]),
+                "volume": int(row["volume"]) if row["volume"] is not None else None,
+                "metadata_retrieved_at": row["metadata_retrieved_at"],
+                "adjustment_status": row["adjustment_status"],
+                "adjustment_source_url": row["adjustment_source_url"],
             }
             for row in rows
         ]
+
+    def backfill_candle_metadata(
+        self,
+        *,
+        kind: str,
+        display_name: str,
+        provider_token: str,
+        candles: list[dict[str, object]],
+        adjustment_status: str,
+        adjustment_source_url: str | None,
+        retrieved_at: str | None = None,
+    ) -> dict[str, int]:
+        """Add volume/provenance only where immutable stored OHLC still matches."""
+        identity = self.instrument_id(kind, display_name)
+        if not provider_token or not provider_token.isdigit():
+            raise ValueError("invalid_instrument_identity")
+        if adjustment_status not in ADJUSTMENT_STATUSES:
+            raise ValueError("invalid_adjustment_status")
+        if adjustment_source_url is not None and (
+            not adjustment_source_url.startswith("https://")
+            or len(adjustment_source_url) > 500
+        ):
+            raise ValueError("invalid_adjustment_status")
+        timestamp = retrieved_at or datetime.now(timezone.utc).isoformat()
+        validated = {
+            row[0]: row for row in (self._validated_values(candle) for candle in candles)
+        }
+        counts = {
+            "requested": len(validated),
+            "matched": 0,
+            "volume_backfilled": 0,
+            "already_complete": 0,
+            "price_conflicts": 0,
+            "volume_conflicts": 0,
+            "not_stored": 0,
+        }
+        with closing(self._connect()) as connection:
+            with connection:
+                instrument = connection.execute(
+                    "SELECT instrument_id FROM instruments WHERE instrument_id = ?",
+                    (identity,),
+                ).fetchone()
+                if instrument is None:
+                    counts["not_stored"] = len(validated)
+                    return counts
+                connection.execute(
+                    """
+                    UPDATE instruments
+                    SET provider_token = ?, adjustment_status = ?,
+                        adjustment_source_url = ?, updated_at = ?, schema_version = ?
+                    WHERE instrument_id = ?
+                    """,
+                    (
+                        provider_token,
+                        adjustment_status,
+                        adjustment_source_url,
+                        timestamp,
+                        SCHEMA_VERSION,
+                        identity,
+                    ),
+                )
+                for session_date, open_price, high, low, close, volume in validated.values():
+                    existing = connection.execute(
+                        """
+                        SELECT open, high, low, close, volume
+                        FROM candles
+                        WHERE instrument_id = ? AND session_date = ?
+                        """,
+                        (identity, session_date),
+                    ).fetchone()
+                    if existing is None:
+                        counts["not_stored"] += 1
+                        continue
+                    stored = tuple(
+                        float(existing[key]) for key in ("open", "high", "low", "close")
+                    )
+                    if stored != (open_price, high, low, close):
+                        counts["price_conflicts"] += 1
+                        continue
+                    counts["matched"] += 1
+                    stored_volume = existing["volume"]
+                    if stored_volume is None and volume is not None:
+                        connection.execute(
+                            """
+                            UPDATE candles
+                            SET volume = ?, metadata_retrieved_at = ?, schema_version = ?
+                            WHERE instrument_id = ? AND session_date = ? AND volume IS NULL
+                            """,
+                            (volume, timestamp, SCHEMA_VERSION, identity, session_date),
+                        )
+                        counts["volume_backfilled"] += 1
+                    elif stored_volume is not None and volume is not None:
+                        if int(stored_volume) == volume:
+                            counts["already_complete"] += 1
+                        else:
+                            counts["volume_conflicts"] += 1
+        return counts
+
+    def factor_market_data_coverage(
+        self,
+        *,
+        minimum_sessions: int = 252,
+    ) -> dict[str, object]:
+        if minimum_sessions < 1 or minimum_sessions > 5000:
+            raise ValueError("invalid_factor_coverage_window")
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                """
+                WITH ranked AS (
+                    SELECT c.instrument_id, c.session_date, c.volume,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY c.instrument_id
+                               ORDER BY c.session_date DESC
+                           ) AS recency_rank
+                    FROM candles c
+                    JOIN instruments source_i
+                      ON source_i.instrument_id = c.instrument_id
+                    WHERE source_i.kind = 'stock'
+                      AND c.validation_status = 'validated'
+                )
+                SELECT i.display_name, i.adjustment_status,
+                       i.adjustment_source_url,
+                       COUNT(r.session_date) AS recent_sessions,
+                       COUNT(r.volume) AS volume_sessions,
+                       SUM(CASE WHEN r.volume > 0 THEN 1 ELSE 0 END) AS positive_volume_sessions
+                FROM instruments i
+                LEFT JOIN ranked r
+                  ON r.instrument_id = i.instrument_id
+                 AND r.recency_rank <= ?
+                WHERE i.kind = 'stock'
+                GROUP BY i.instrument_id
+                ORDER BY i.display_name
+                """,
+                (minimum_sessions,),
+            ).fetchall()
+        instruments = [
+            {
+                "symbol": row["display_name"],
+                "recent_sessions": int(row["recent_sessions"]),
+                "volume_sessions": int(row["volume_sessions"]),
+                "positive_volume_sessions": int(row["positive_volume_sessions"] or 0),
+                "liquidity_evidence_ready": int(row["volume_sessions"]) >= minimum_sessions,
+                "adjustment_status": row["adjustment_status"],
+                "adjustment_source_url": row["adjustment_source_url"],
+                "adjustment_provenance_ready": bool(
+                    row["adjustment_status"] != "provider_unspecified"
+                    and row["adjustment_source_url"]
+                ),
+            }
+            for row in rows
+        ]
+        return {
+            "minimum_sessions": minimum_sessions,
+            "total": len(instruments),
+            "liquidity_ready": sum(
+                bool(row["liquidity_evidence_ready"]) for row in instruments
+            ),
+            "adjustment_ready": sum(
+                bool(row["adjustment_provenance_ready"]) for row in instruments
+            ),
+            "instruments": instruments,
+        }
 
     def coverage(self, *, kind: str, display_name: str) -> dict[str, object]:
         identity = self.instrument_id(kind, display_name)
@@ -532,6 +789,7 @@ class EODStore:
             rows = connection.execute(
                 f"""
                 SELECT i.kind, i.display_name, i.provider_token,
+                       i.adjustment_status, i.adjustment_source_url,
                        COUNT(c.session_date) AS session_count,
                        MIN(c.session_date) AS first_session,
                        MAX(c.session_date) AS last_session
@@ -550,6 +808,8 @@ class EODStore:
                 "kind": row["kind"],
                 "display_name": row["display_name"],
                 "provider_token": row["provider_token"],
+                "adjustment_status": row["adjustment_status"],
+                "adjustment_source_url": row["adjustment_source_url"],
                 "session_count": int(row["session_count"]),
                 "first_session": date.fromisoformat(row["first_session"]) if row["first_session"] else None,
                 "last_session": date.fromisoformat(row["last_session"]) if row["last_session"] else None,

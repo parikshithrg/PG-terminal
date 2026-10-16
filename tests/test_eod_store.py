@@ -47,8 +47,8 @@ class EODStoreTest(unittest.TestCase):
             kind="index", display_name="Nifty 50", provider_token="256265", candles=candles
         )
 
-        self.assertEqual(first, {"inserted": 2, "duplicates": 0, "source_duplicates": 0})
-        self.assertEqual(second, {"inserted": 0, "duplicates": 2, "source_duplicates": 0})
+        self.assertEqual(first, {"inserted": 2, "duplicates": 0, "source_duplicates": 0, "metadata_backfilled": 0})
+        self.assertEqual(second, {"inserted": 0, "duplicates": 2, "source_duplicates": 0, "metadata_backfilled": 0})
         self.assertEqual(self.store.coverage(kind="index", display_name="Nifty 50")["session_count"], 2)
         self.assertEqual(
             [row["date"] for row in self.store.load_candles(kind="index", display_name="Nifty 50")],
@@ -78,7 +78,7 @@ class EODStoreTest(unittest.TestCase):
                 self.candle(date(2026, 9, 22), 102.0),
             ],
         )
-        self.assertEqual(result, {"inserted": 1, "duplicates": 0, "source_duplicates": 1})
+        self.assertEqual(result, {"inserted": 1, "duplicates": 0, "source_duplicates": 1, "metadata_backfilled": 0})
         loaded = self.store.load_candles(kind="index", display_name="Nifty Auto")
         self.assertEqual(loaded[0]["close"], 102.0)
 
@@ -92,6 +92,62 @@ class EODStoreTest(unittest.TestCase):
         self.assertEqual(
             incremental_history_ranges(date(2026, 1, 1), date(2026, 1, 10), date(2026, 1, 10)),
             [],
+        )
+
+    def test_volume_and_adjustment_metadata_backfill_preserves_stored_ohlc(self):
+        session = date(2026, 9, 22)
+        self.store.append_candles(
+            kind="stock",
+            display_name="INFY",
+            provider_token="408065",
+            candles=[self.candle(session, 102.0)],
+        )
+        enriched = self.candle(session, 102.0)
+        enriched["volume"] = 125000
+        result = self.store.backfill_candle_metadata(
+            kind="stock",
+            display_name="INFY",
+            provider_token="408065",
+            candles=[enriched],
+            adjustment_status="provider_reported_adjusted",
+            adjustment_source_url="https://example.test/adjustment-policy",
+        )
+        loaded = self.store.load_candles(kind="stock", display_name="INFY")
+
+        self.assertEqual(result["matched"], 1)
+        self.assertEqual(result["volume_backfilled"], 1)
+        self.assertEqual(result["price_conflicts"], 0)
+        self.assertEqual(loaded[0]["close"], 102.0)
+        self.assertEqual(loaded[0]["volume"], 125000)
+        self.assertEqual(loaded[0]["adjustment_status"], "provider_reported_adjusted")
+        coverage = self.store.factor_market_data_coverage(minimum_sessions=1)
+        self.assertEqual(coverage["liquidity_ready"], 1)
+        self.assertEqual(coverage["adjustment_ready"], 1)
+
+    def test_metadata_backfill_reports_price_conflict_without_overwrite(self):
+        session = date(2026, 9, 22)
+        self.store.append_candles(
+            kind="stock",
+            display_name="INFY",
+            provider_token="408065",
+            candles=[self.candle(session, 102.0)],
+        )
+        changed = self.candle(session, 103.0)
+        changed["volume"] = 125000
+        result = self.store.backfill_candle_metadata(
+            kind="stock",
+            display_name="INFY",
+            provider_token="408065",
+            candles=[changed],
+            adjustment_status="provider_reported_adjusted",
+            adjustment_source_url="https://example.test/adjustment-policy",
+        )
+
+        self.assertEqual(result["price_conflicts"], 1)
+        self.assertEqual(result["volume_backfilled"], 0)
+        self.assertEqual(
+            self.store.load_candles(kind="stock", display_name="INFY")[0]["close"],
+            102.0,
         )
 
     def test_invalid_ohlc_is_rejected_before_storage(self):

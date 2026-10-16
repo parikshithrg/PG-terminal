@@ -1,6 +1,31 @@
 # Session handoff
 
-Updated: 2026-10-15
+Updated: 2026-10-16
+
+## Alpha research build checkpoint — 2026-10-16
+
+- The authoritative sequence is now validated data → regime/risk budget →
+  factor core → catalyst overlay → portfolio-impact gate → chronological
+  validation → ranked research cards. Cosmetics are deferred until the
+  background contracts reach candidate ranking.
+- `alpha-research-foundation-v1` joins those layers and returns no manufactured
+  candidates.
+- `factor-research-foundation-v1` is complete. It freezes the locally stored
+  F&O universe with a reproducible hash, audits aligned history and dated sector
+  coverage, and exposes raw 12-1, 6-1 and 3-1 Nifty-relative momentum
+  diagnostics. It does not rank securities.
+- The current OHLC store does not record corporate-action adjustment provenance
+  or cash-market volume/turnover. These remain blocking gates rather than
+  silently assumed inputs. Official NIFTY 500 constituent snapshots will now be
+  persisted by the market-breadth refresh for dated sector evidence.
+- `factor-market-data-v2` storage is implemented and awaits a connected EOD
+  refresh. Schema v2 records volume and adjustment provenance; the NIFTY 500
+  breadth pass performs metadata-only backfill for local F&O equities and
+  refuses to alter mismatched OHLC. Coverage and all conflicts remain visible.
+  Only after the live refresh passes should sector-neutral momentum,
+  point-in-time quality/value and composite rank validation begin.
+- RBI MPC release-native coverage from February 2016 through October 2026 is
+  complete for the current scope. Pre-2016 policy reconstruction is deferred.
 
 ## Linux migration checkpoint — 2026-10-05
 
@@ -532,6 +557,70 @@ orders or position sizing.
   points and two intervening holds, taking the policy repo rate from 6.50% to
   5.25%. Reductions use signed negative basis-point changes; holds remain zero.
   Release date, effective date and expected rate continue to be validated.
+- Added `historical-regimes-v19`. Every completed 2026 RBI MPC meeting through
+  7 October is now registered from its original resolution. Four holds retain
+  the 5.25% rate through August; October records a positive 25-basis-point
+  increase to 5.50%. The scheduled December meeting is deliberately left
+  pending so no future policy outcome enters the historical evidence.
+- Added `historical-regimes-v20`. The eight MPC meetings from February 2021
+  through April 2022 are now registered as distinct 4.00% hold decisions from
+  their original RBI resolutions. This creates a continuous release-native
+  policy sequence from February 2021 through October 2026 without forward-filled
+  meeting outcomes. Earlier policy decisions remain explicitly incomplete.
+- Added `historical-regimes-v21`. Six original RBI resolutions now preserve the
+  2020 pandemic policy sequence: the February 5.15% hold, emergency March and
+  May cuts totalling 115 basis points, and three subsequent 4.00% holds. The two
+  off-cycle cuts retain their actual decision dates and signed changes. The
+  release-native policy timeline is continuous from February 2020 through
+  October 2026.
+- Added `historical-regimes-v22`. The six 2019 MPC decisions are now registered
+  from their original RBI resolutions: five cuts totalling 135 basis points
+  take the repo rate from 6.50% to 5.15%, followed by December's 5.15% hold.
+  Each decision keeps its publication date, exact signed change and initial
+  release identity. The release-native timeline is continuous from February
+  2019 through October 2026; pre-February-2019 decisions remain pending.
+- Added `historical-regimes-v23`. The complete 2018 MPC cycle is now registered
+  from six original RBI resolutions: February and April holds at 6.00%, June
+  and August increases of 25 basis points each, and October and December holds
+  at 6.50%. Publication dates, signed changes and release identity remain
+  event-level evidence. The release-native timeline is continuous from February
+  2018 through October 2026; pre-February-2018 decisions remain pending.
+- Added `historical-regimes-v24`. The six 2017 MPC decisions are now registered
+  from their original RBI resolutions: three 6.25% holds, August's 25-basis-point
+  reduction to 6.00%, and two subsequent 6.00% holds. The one rate change remains
+  separate from five no-change decisions. The release-native timeline is
+  continuous from February 2017 through October 2026; pre-February-2017
+  decisions remain pending.
+- Added `historical-regimes-v25`. Six original RBI publications now preserve the
+  2016 policy-framework transition: a February hold at 6.75%, April cut to
+  6.50%, June and August holds, the inaugural MPC's October cut to 6.25%, and
+  December's hold. The two 25-basis-point reductions remain signed event-level
+  decisions. Coverage is continuous from February 2016 through October 2026;
+  pre-February-2016 decisions remain pending.
+- Set a temporary Historical Regimes quantitative floor at **12 June 2000**, the
+  NSE launch date for NIFTY index futures. Release-native policy and classifier
+  evidence should be extended back only to this boundary for now. Pre-2000
+  material remains useful as documentary/annual story context but must not be
+  mixed into comparable quantitative regime evidence without adequate index
+  coverage.
+- Reorganized the active roadmap around the approved joined architecture:
+  validated data; regime/risk budget; factor and relative-strength core;
+  catalyst overlay; portfolio-impact gate; chronological validation; and ranked
+  research cards. `alpha-research-foundation-v1` adds the first dedicated Alpha
+  Research workspace and API contract. It reports layer readiness, exposes the
+  point-in-time factor foundation as the next executable milestone and returns
+  zero candidates while the required gates remain incomplete.
+- Treat the release-native February 2016–October 2026 MPC sequence as complete
+  for the current scope. Pre-2016 policy reconstruction is deferred historical
+  research rather than an immediate Alpha Research dependency; no future policy
+  outcome is pre-populated.
+- Completed the three-booklet Alpha Terminal side project. The Market Regime,
+  Catalyst & Earnings, and Relative Strength Portfolio field guides each use an
+  eight-page visual system covering architecture, research playbooks, decision
+  cards, validation, operating rhythm and measurable guardrails. Final PDFs are
+  in `output/pdf/`, DOCX containers are in `output/docx/`, and the reproducible
+  source lives in `side-projects/alpha-terminal-booklets/`. The series is
+  educational research material and does not promise alpha or recommend trades.
 - Consolidated Mutual Funds Comparer into Portfolio Analysis as a third tab
   beside Holdings Analysis and Home Loan Tracker. The standalone sidebar item
   is removed, while the existing local upload and comparer calculations remain
@@ -613,13 +702,12 @@ orders or position sizing.
    overview rather than a table-heavy audit page: allocation, top similarity
    pairs, a coverage-labelled structural/regime-fit score, and concise review
    prompts are the only primary outputs.
-2. Continue the audited RBI release registry with pre-May-2022 and
-   post-December-2025 policy decisions, continuous balance-of-payments,
-   external-debt and macro vintages while retaining every original
-   publication date and revision state, then add authoritative effective-dated
-   index membership. Preserve base changes and honest frequency; never
-   synthesize missing daily values or use revised actuals in an earlier
-   information set.
+2. Build `factor-market-data-v2`: persist dated official sector snapshots,
+   corporate-action adjustment provenance, cash volume and turnover, then
+   freeze the investability and missing-data rules. The factor foundation and
+   raw momentum diagnostics are complete; sector-neutral scores and composite
+   ranks remain blocked until these data gates pass. Pre-2016 RBI policy
+   reconstruction is deferred and is not an immediate dependency.
 3. Live-check the first full NIFTY 500 five-year retrieval after reconnecting
    Kite, including year switching, coverage counts, and reverse ranking order.
 4. Begin the queued Portfolio performance and Alpha Opportunities roadmap:
