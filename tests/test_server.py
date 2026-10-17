@@ -32,6 +32,8 @@ from server import (
     build_dashboard_screener_summary,
     build_alpha_research_foundation,
     build_factor_research_foundation,
+    build_point_in_time_fundamentals_foundation,
+    normalize_official_fundamental_export,
     build_dashboard_seasonality_summary,
     build_dashboard_seasonality_universe_summary,
     build_news_events_workspace,
@@ -139,7 +141,7 @@ class AlphaResearchFoundationTest(unittest.TestCase):
         self.assertEqual(payload["contract_version"], "alpha-research-foundation-v1")
         self.assertEqual(payload["summary"]["ranked_ideas"], 0)
         self.assertEqual(payload["policy_history"]["state"], "complete_for_current_scope")
-        self.assertEqual(payload["current_focus"]["key"], "factor_market_data")
+        self.assertEqual(payload["current_focus"]["key"], "fundamental_coverage_audit")
         factor = next(layer for layer in payload["layers"] if layer["key"] == "factor_core")
         decision = next(layer for layer in payload["layers"] if layer["key"] == "decision")
         self.assertEqual(factor["state"], "partial")
@@ -213,13 +215,266 @@ class FactorResearchFoundationTest(unittest.TestCase):
                 "membership_type": "effective_dated_snapshot",
                 "constituents": [{"symbol": "AAA", "sector": "Industrials"}],
             },
-            adjusted_price_evidence=True,
-            liquidity_evidence=True,
+            market_data_evidence={
+                "AAA": {
+                    "adjustment_provenance_ready": True,
+                    "liquidity_evidence_ready": True,
+                    "positive_volume_coverage_pct": 99.0,
+                    "median_daily_turnover_inr": 250_000_000.0,
+                }
+            },
         )
 
         self.assertEqual(result["status"], "factor_inputs_ready")
         self.assertEqual(result["coverage"]["research_eligible"], 1)
+        self.assertEqual(result["coverage"]["liquidity_evidence_ready"], 1)
+        self.assertEqual(result["ranking_state"], "inputs_ready_ranking_not_started")
+        self.assertEqual(result["rows"][0]["positive_volume_coverage_pct"], 99.0)
         self.assertEqual(result["ranked_candidates"], [])
+
+    def test_market_data_admission_excludes_failed_rows_without_hiding_them(self):
+        benchmark = self._candles()
+        as_of = benchmark[-1]["date"]
+        histories = {
+            f"S{index:02d}": self._candles(1 + index / 100)
+            for index in range(20)
+        }
+        evidence = {
+            symbol: {
+                "adjustment_provenance_ready": True,
+                "liquidity_evidence_ready": symbol != "S19",
+                "positive_volume_coverage_pct": 99.0 if symbol != "S19" else 83.33,
+                "median_daily_turnover_inr": 250_000_000.0,
+            }
+            for symbol in histories
+        }
+        result = build_factor_research_foundation(
+            histories,
+            benchmark,
+            expected_through=as_of,
+            constituent_snapshot={
+                "as_of": as_of.isoformat(),
+                "source": "official-test-snapshot",
+                "membership_type": "current_snapshot",
+                "constituents": [
+                    {"symbol": symbol, "sector": "Industrials"}
+                    for symbol in histories
+                ],
+            },
+            market_data_evidence=evidence,
+        )
+
+        liquidity_gate = next(
+            gate for gate in result["gates"] if gate["key"] == "liquidity"
+        )
+        excluded = next(row for row in result["rows"] if row["symbol"] == "S19")
+        self.assertEqual(result["coverage"]["minimum_market_data_admission"], 19)
+        self.assertEqual(result["coverage"]["research_eligible"], 19)
+        self.assertEqual(liquidity_gate["state"], "ready")
+        self.assertFalse(excluded["research_eligible"])
+
+    def test_builds_sector_neutral_diagnostics_without_promoting_candidates(self):
+        benchmark = self._candles()
+        as_of = benchmark[-1]["date"]
+
+        def trending_candles(slope):
+            start = date(2025, 1, 1)
+            return [
+                {
+                    "date": start + timedelta(days=offset),
+                    "open": 100 + slope * offset,
+                    "high": 102 + slope * offset,
+                    "low": 99 + slope * offset,
+                    "close": 101 + slope * offset,
+                }
+                for offset in range(300)
+            ]
+
+        histories = {
+            f"S{index}": trending_candles(0.5 + index * 0.2)
+            for index in range(5)
+        }
+        result = build_factor_research_foundation(
+            histories,
+            benchmark,
+            expected_through=as_of,
+            constituent_snapshot={
+                "as_of": as_of.isoformat(),
+                "source": "official-test-snapshot",
+                "membership_type": "current_snapshot",
+                "constituents": [
+                    {"symbol": symbol, "sector": "Industrials"}
+                    for symbol in histories
+                ],
+            },
+            market_data_evidence={
+                symbol: {
+                    "adjustment_provenance_ready": True,
+                    "liquidity_evidence_ready": True,
+                }
+                for symbol in histories
+            },
+        )
+
+        momentum = result["sector_neutral_momentum"]
+        self.assertEqual(momentum["contract_version"], "sector-neutral-momentum-v3")
+        self.assertEqual(momentum["coverage"]["sector_neutral_scored"], 5)
+        self.assertEqual(momentum["sectors"][0]["state"], "ready")
+        self.assertEqual(len(momentum["rows"]), 5)
+        self.assertEqual(momentum["ranked_candidates"], [])
+        self.assertEqual(momentum["scoring_rule"]["candidate_promotion"], "disabled")
+        self.assertGreater(
+            momentum["rows"][0]["composite_score"],
+            momentum["rows"][-1]["composite_score"],
+        )
+
+    def test_fundamentals_use_only_release_known_quarters_and_do_not_rank(self):
+        period_ends = [
+            "2026-09-30",
+            "2026-06-30",
+            "2026-03-31",
+            "2025-12-31",
+            "2025-09-30",
+        ]
+        filings = []
+        for index, period_end in enumerate(period_ends):
+            filings.append(
+                {
+                    "filing_id": f"NSE:AAA:{period_end}:0",
+                    "symbol": "AAA",
+                    "company_name": "AAA Limited",
+                    "sector": "Industrials",
+                    "basis": "consolidated",
+                    "period_type": "quarterly",
+                    "period_end": period_end,
+                    "reported_at": (
+                        datetime.fromisoformat(period_end)
+                        .replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+                        + timedelta(days=20)
+                    ).isoformat(),
+                    "revision_sequence": 0,
+                    "currency": "INR",
+                    "unit": "absolute",
+                    "source_url": "https://nsearchives.nseindia.com/corporate/AAA.xml",
+                    "facts": {
+                        "revenue": 1_000.0 + index * 10,
+                        "ebit": 200.0,
+                        "profit_after_tax": 120.0,
+                        "total_equity": 2_000.0 - index * 50,
+                        "total_debt": 400.0,
+                        "cash_and_equivalents": 100.0,
+                        "shares_outstanding": 10.0,
+                    },
+                }
+            )
+        result = build_point_in_time_fundamentals_foundation(
+            filings,
+            [
+                {
+                    "symbol": "AAA",
+                    "sector": "Industrials",
+                    "factor_input_admitted": True,
+                }
+            ],
+            {"AAA": 100.0},
+            known_at=datetime(2026, 10, 31, tzinfo=ZoneInfo("Asia/Kolkata")),
+        )
+
+        row = result["rows"][0]
+        self.assertEqual(result["contract_version"], "point-in-time-fundamentals-v4")
+        self.assertEqual(result["coverage"]["quality_ready"], 1)
+        self.assertEqual(result["coverage"]["value_ready"], 1)
+        self.assertEqual(row["quarters_known"], 5)
+        self.assertIsNotNone(row["return_on_equity_pct"])
+        self.assertIsNotNone(row["earnings_yield_pct"])
+        self.assertEqual(result["quality_scores"], [])
+        self.assertEqual(result["composite_ranks"], [])
+        self.assertEqual(result["ranked_candidates"], [])
+
+    def test_official_xbrl_normalizer_uses_period_context_and_preserves_metadata(self):
+        payload = b'''<?xml version="1.0" encoding="UTF-8"?>
+        <xbrli:xbrl xmlns:xbrli="http://www.xbrl.org/2003/instance"
+          xmlns:in="https://example.test/indas">
+          <xbrli:context id="quarter">
+            <xbrli:entity><xbrli:identifier scheme="NSE">AAA</xbrli:identifier></xbrli:entity>
+            <xbrli:period><xbrli:startDate>2026-07-01</xbrli:startDate><xbrli:endDate>2026-09-30</xbrli:endDate></xbrli:period>
+          </xbrli:context>
+          <xbrli:context id="instant">
+            <xbrli:entity><xbrli:identifier scheme="NSE">AAA</xbrli:identifier></xbrli:entity>
+            <xbrli:period><xbrli:instant>2026-09-30</xbrli:instant></xbrli:period>
+          </xbrli:context>
+          <in:RevenueFromOperations contextRef="quarter">125</in:RevenueFromOperations>
+          <in:ProfitBeforeInterestAndTax contextRef="quarter">25</in:ProfitBeforeInterestAndTax>
+          <in:ProfitLossForThePeriod contextRef="quarter">17</in:ProfitLossForThePeriod>
+          <in:TotalEquity contextRef="instant">300</in:TotalEquity>
+          <in:CashAndCashEquivalents contextRef="instant">20</in:CashAndCashEquivalents>
+          <in:TotalBorrowings contextRef="instant">75</in:TotalBorrowings>
+          <in:UnmappedDisclosure contextRef="instant">9</in:UnmappedDisclosure>
+        </xbrli:xbrl>'''
+        result = normalize_official_fundamental_export(
+            "AAA-Q2.xbrl",
+            payload,
+            {
+                "symbol": "AAA",
+                "company_name": "AAA Limited",
+                "sector": "Industrials",
+                "basis": "consolidated",
+                "period_type": "quarterly",
+                "period_end": "2026-09-30",
+                "reported_at": "2026-10-20T18:30:00+05:30",
+                "revision_sequence": 1,
+                "source_url": "https://nsearchives.nseindia.com/corporate/AAA-Q2.xbrl",
+                "unit_scale": "lakh",
+            },
+        )
+        filing = result["filing"]
+        self.assertEqual(result["contract_version"], "fundamental-xbrl-normalizer-v5")
+        self.assertEqual(filing["facts"]["revenue"], 12_500_000.0)
+        self.assertEqual(filing["facts"]["total_equity"], 30_000_000.0)
+        self.assertEqual(filing["revision_sequence"], 1)
+        self.assertEqual(result["audit"]["unmapped_taxonomy_count"], 1)
+        self.assertEqual(result["audit"]["metadata_inference"], "disabled")
+
+    def test_official_excel_normalizer_requires_an_unambiguous_value_column(self):
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr(
+                "xl/workbook.xml",
+                '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+                'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+                '<sheets><sheet name="Financial Results" sheetId="1" r:id="rId1"/></sheets></workbook>',
+            )
+            archive.writestr(
+                "xl/_rels/workbook.xml.rels",
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+            )
+            archive.writestr(
+                "xl/worksheets/sheet1.xml",
+                '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                '<row r="1"><c r="A1" t="inlineStr"><is><t>Revenue from operations</t></is></c><c r="B1"><v>80</v></c><c r="C1"><v>120</v></c></row>'
+                '<row r="2"><c r="A2" t="inlineStr"><is><t>Profit after tax</t></is></c><c r="B2"><v>9</v></c><c r="C2"><v>15</v></c></row>'
+                '</sheetData></worksheet>',
+            )
+        metadata = {
+            "symbol": "AAA",
+            "company_name": "AAA Limited",
+            "sector": "Industrials",
+            "basis": "standalone",
+            "period_type": "quarterly",
+            "period_end": "2026-09-30",
+            "reported_at": "2026-10-20T18:30:00+05:30",
+            "revision_sequence": 0,
+            "source_url": "https://www.nseindia.com/companies-listing/corporate-filings-financial-results",
+            "unit_scale": "crore",
+            "value_column": 3,
+        }
+        result = normalize_official_fundamental_export(
+            "AAA-Q2.xlsx", payload.getvalue(), metadata
+        )
+        self.assertEqual(result["filing"]["facts"]["revenue"], 1_200_000_000.0)
+        self.assertEqual(result["filing"]["facts"]["profit_after_tax"], 150_000_000.0)
+        self.assertEqual(result["audit"]["value_column"], 3)
 
 
 class KiteHandshakeHelpersTest(unittest.TestCase):

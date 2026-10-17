@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 import json
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from eod_store import (
@@ -9,6 +9,7 @@ from eod_store import (
     ConfirmedFpiConflictError,
     EODStore,
     FuturesSnapshotConflictError,
+    FundamentalFilingConflictError,
     GlobalRiskConflictError,
     HistoricalSeriesConflictError,
     InstitutionalFlowConflictError,
@@ -103,7 +104,7 @@ class EODStoreTest(unittest.TestCase):
             candles=[self.candle(session, 102.0)],
         )
         enriched = self.candle(session, 102.0)
-        enriched["volume"] = 125000
+        enriched["volume"] = 2_000_000
         result = self.store.backfill_candle_metadata(
             kind="stock",
             display_name="INFY",
@@ -118,11 +119,93 @@ class EODStoreTest(unittest.TestCase):
         self.assertEqual(result["volume_backfilled"], 1)
         self.assertEqual(result["price_conflicts"], 0)
         self.assertEqual(loaded[0]["close"], 102.0)
-        self.assertEqual(loaded[0]["volume"], 125000)
+        self.assertEqual(loaded[0]["volume"], 2_000_000)
         self.assertEqual(loaded[0]["adjustment_status"], "provider_reported_adjusted")
         coverage = self.store.factor_market_data_coverage(minimum_sessions=1)
         self.assertEqual(coverage["liquidity_ready"], 1)
         self.assertEqual(coverage["adjustment_ready"], 1)
+        self.assertEqual(coverage["rule"]["version"], "factor-liquidity-v1")
+        self.assertGreaterEqual(
+            coverage["instruments"][0]["median_daily_turnover_inr"],
+            100_000_000,
+        )
+
+    def test_factor_liquidity_rule_allows_small_gaps_but_never_imputes_them(self):
+        start = date(2026, 8, 1)
+        for symbol, missing_sessions in (("READY", {0}), ("EXCLUDED", {0, 1})):
+            candles = []
+            for offset in range(20):
+                candle = self.candle(start + timedelta(days=offset), 102.0)
+                if offset not in missing_sessions:
+                    candle["volume"] = 2_000_000
+                candles.append(candle)
+            self.store.append_candles(
+                kind="stock",
+                display_name=symbol,
+                provider_token="408065" if symbol == "READY" else "408066",
+                candles=candles,
+                adjustment_status="provider_reported_adjusted",
+                adjustment_source_url="https://example.test/adjustment-policy",
+            )
+
+        coverage = self.store.factor_market_data_coverage(minimum_sessions=20)
+        rows = {row["symbol"]: row for row in coverage["instruments"]}
+
+        self.assertEqual(coverage["rule"]["minimum_positive_volume_sessions"], 19)
+        self.assertTrue(rows["READY"]["liquidity_evidence_ready"])
+        self.assertEqual(rows["READY"]["positive_volume_coverage_pct"], 95.0)
+        self.assertFalse(rows["EXCLUDED"]["liquidity_evidence_ready"])
+        self.assertEqual(rows["EXCLUDED"]["positive_volume_sessions"], 18)
+
+    def test_fundamental_filings_are_release_aware_and_immutable(self):
+        filing = {
+            "filing_id": "NSE:INFY:2026Q2:0",
+            "symbol": "INFY",
+            "company_name": "Infosys Limited",
+            "sector": "Information Technology",
+            "basis": "consolidated",
+            "period_type": "quarterly",
+            "period_end": "2026-09-30",
+            "reported_at": "2026-10-14T16:01:00+05:30",
+            "revision_sequence": 0,
+            "currency": "INR",
+            "unit": "absolute",
+            "source_url": "https://nsearchives.nseindia.com/corporate/INFY.xml",
+            "facts": {
+                "revenue": 450_000_000_000,
+                "ebit": 95_000_000_000,
+                "profit_after_tax": 72_000_000_000,
+                "total_equity": 900_000_000_000,
+                "total_debt": 80_000_000_000,
+                "cash_and_equivalents": 300_000_000_000,
+                "shares_outstanding": 4_100_000_000,
+            },
+        }
+        first = self.store.append_fundamental_filings(
+            [filing], source_file_name="official-results.json"
+        )
+        second = self.store.append_fundamental_filings(
+            [filing], source_file_name="official-results.json"
+        )
+
+        self.assertEqual(first, {"inserted": 1, "duplicates": 0})
+        self.assertEqual(second, {"inserted": 0, "duplicates": 1})
+        self.assertEqual(
+            self.store.load_fundamental_filings(
+                known_at=datetime.fromisoformat("2026-10-13T23:59:59+05:30")
+            ),
+            [],
+        )
+        loaded = self.store.load_fundamental_filings(
+            known_at=datetime.fromisoformat("2026-10-14T16:01:00+05:30")
+        )
+        self.assertEqual(loaded[0]["facts"]["revenue"], 450_000_000_000)
+
+        changed = {**filing, "facts": {**filing["facts"], "revenue": 1.0}}
+        with self.assertRaises(FundamentalFilingConflictError):
+            self.store.append_fundamental_filings(
+                [changed], source_file_name="official-results.json"
+            )
 
     def test_metadata_backfill_reports_price_conflict_without_overwrite(self):
         session = date(2026, 9, 22)

@@ -3701,6 +3701,55 @@
             </div>
           </section>
 
+          <section class="analysis-section" id="sectorNeutralMomentumPanel">
+            <div class="section-heading-row"><div><div class="story-kicker">SECTOR-NEUTRAL MOMENTUM V3</div><h2>Relative strength after sector effects</h2></div></div>
+            <p class="section-note" id="sectorNeutralNote">Waiting for the factor-input audit. These are diagnostics, not candidates.</p>
+            <div class="summary-grid" aria-label="Sector-neutral momentum coverage">
+              <article class="summary-card"><div class="summary-value" id="sectorNeutralScoredValue">—</div><div class="summary-meta">Securities scored</div></article>
+              <article class="summary-card"><div class="summary-value" id="sectorNeutralGroupsValue">—</div><div class="summary-meta">Sector groups ready</div></article>
+              <article class="summary-card"><div class="summary-value" id="sectorNeutralStabilityValue">—</div><div class="summary-meta">Mean monthly rank stability</div></article>
+              <article class="summary-card"><div class="summary-value" id="sectorNeutralTurnoverValue">—</div><div class="summary-meta">Mean one-way turnover</div></article>
+            </div>
+            <div class="historical-architecture-grid">
+              <article class="historical-fingerprint-card"><div class="historical-step">CURRENT DIAGNOSTIC</div><h3>Strongest relative scores</h3><p id="sectorNeutralStrongest">No scores loaded.</p></article>
+              <article class="historical-fingerprint-card"><div class="historical-step">CURRENT DIAGNOSTIC</div><h3>Weakest relative scores</h3><p id="sectorNeutralWeakest">No scores loaded.</p></article>
+              <article class="historical-fingerprint-card"><div class="historical-step">VALIDATION BOUNDARY</div><h3>Provisional historical audit</h3><p id="sectorNeutralValidation">No validation loaded.</p></article>
+            </div>
+          </section>
+
+          <section class="analysis-section" id="fundamentalsFoundationPanel">
+            <div class="section-heading-row"><div><div class="story-kicker">POINT-IN-TIME FUNDAMENTALS V4</div><h2>Quality and value evidence</h2></div><div class="analysis-status" id="fundamentalsStatus">Manual official import pending</div></div>
+            <p class="section-note" id="fundamentalsNote">Only manually supplied official NSE/BSE filing exports are admitted. Automated exchange scraping and aggregator substitutions are disabled.</p>
+            <div class="universe-controls">
+              <div class="selector-field"><label for="fundamentalsFile">Official NSE/BSE XBRL or Excel export</label><input id="fundamentalsFile" type="file" accept=".xbrl,.xml,.xhtml,.html,.xlsx,application/xml,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></div>
+              <details class="analysis-note"><summary>Required filing identity</summary>
+                <div class="summary-grid">
+                  <div class="selector-field"><label for="fundamentalsSymbol">NSE symbol</label><input id="fundamentalsSymbol" type="text" maxlength="32" placeholder="RELIANCE"></div>
+                  <div class="selector-field"><label for="fundamentalsCompany">Company name</label><input id="fundamentalsCompany" type="text" maxlength="160" placeholder="Reliance Industries Limited"></div>
+                  <div class="selector-field"><label for="fundamentalsSector">Official sector</label><input id="fundamentalsSector" type="text" maxlength="120" placeholder="Oil Gas & Consumable Fuels"></div>
+                  <div class="selector-field"><label for="fundamentalsBasis">Statement basis</label><select id="fundamentalsBasis"><option value="consolidated">Consolidated</option><option value="standalone">Standalone</option></select></div>
+                  <div class="selector-field"><label for="fundamentalsPeriodType">Period type</label><select id="fundamentalsPeriodType"><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select></div>
+                  <div class="selector-field"><label for="fundamentalsPeriodEnd">Period end</label><input id="fundamentalsPeriodEnd" type="date"></div>
+                  <div class="selector-field"><label for="fundamentalsReportedAt">Exchange broadcast time</label><input id="fundamentalsReportedAt" type="datetime-local"></div>
+                  <div class="selector-field"><label for="fundamentalsRevision">Revision sequence</label><input id="fundamentalsRevision" type="number" min="0" step="1" value="0"></div>
+                  <div class="selector-field"><label for="fundamentalsUnitScale">Reported amount scale</label><select id="fundamentalsUnitScale"><option value="absolute">Absolute INR</option><option value="lakh">₹ lakh</option><option value="crore">₹ crore</option><option value="thousand">₹ thousand</option><option value="million">₹ million</option><option value="billion">₹ billion</option></select></div>
+                  <div class="selector-field"><label for="fundamentalsValueColumn">Excel value column (optional)</label><input id="fundamentalsValueColumn" type="number" min="1" max="100" step="1" placeholder="3"></div>
+                </div>
+                <div class="selector-field"><label for="fundamentalsSourceUrl">Official filing URL</label><input id="fundamentalsSourceUrl" type="url" placeholder="https://nsearchives.nseindia.com/corporate/..."></div>
+                <p>Metadata is never inferred from the file name or current date. For Excel with several period columns, enter the one-based value column shown in the workbook.</p>
+              </details>
+              <div class="universe-action-row"><button class="primary-button" id="importFundamentalsButton" type="button">Normalize and import</button><span class="universe-action-status">Manual local import only</span></div>
+              <div class="analysis-note" id="fundamentalsNormalizerAudit">No official export normalized yet.</div>
+            </div>
+            <div class="summary-grid" aria-label="Point-in-time fundamentals coverage">
+              <article class="summary-card"><div class="summary-value" id="fundamentalsKnownValue">0</div><div class="summary-meta">Symbols with filings</div></article>
+              <article class="summary-card"><div class="summary-value" id="fundamentalsQualityValue">0</div><div class="summary-meta">Quality metrics ready</div></article>
+              <article class="summary-card"><div class="summary-value" id="fundamentalsValueValue">0</div><div class="summary-meta">Value metrics ready</div></article>
+              <article class="summary-card"><div class="summary-value" id="fundamentalsDeferredValue">—</div><div class="summary-meta">Financial-sector model deferred</div></article>
+            </div>
+            <div class="analysis-note" id="fundamentalsBoundaryNote">Raw metrics remain unscored. Composite ranks and candidates are disabled.</div>
+          </section>
+
           <section class="analysis-section">
             <h2>Policy evidence boundary</h2>
             <div class="analysis-note" id="alphaPolicyNote">MPC release-native history has not been checked.</div>
@@ -3848,6 +3897,20 @@
     const alphaResearchView = document.getElementById('alphaResearchView');
     const alphaResearchStatus = document.getElementById('alphaResearchStatus');
     const refreshAlphaResearchButton = document.getElementById('refreshAlphaResearchButton');
+    const fundamentalsFile = document.getElementById('fundamentalsFile');
+    const importFundamentalsButton = document.getElementById('importFundamentalsButton');
+    const fundamentalsSymbol = document.getElementById('fundamentalsSymbol');
+    const fundamentalsCompany = document.getElementById('fundamentalsCompany');
+    const fundamentalsSector = document.getElementById('fundamentalsSector');
+    const fundamentalsBasis = document.getElementById('fundamentalsBasis');
+    const fundamentalsPeriodType = document.getElementById('fundamentalsPeriodType');
+    const fundamentalsPeriodEnd = document.getElementById('fundamentalsPeriodEnd');
+    const fundamentalsReportedAt = document.getElementById('fundamentalsReportedAt');
+    const fundamentalsRevision = document.getElementById('fundamentalsRevision');
+    const fundamentalsUnitScale = document.getElementById('fundamentalsUnitScale');
+    const fundamentalsValueColumn = document.getElementById('fundamentalsValueColumn');
+    const fundamentalsSourceUrl = document.getElementById('fundamentalsSourceUrl');
+    const fundamentalsNormalizerAudit = document.getElementById('fundamentalsNormalizerAudit');
     const seasonalityIndexSelect = document.getElementById('seasonalityIndexSelect');
     const seasonalityStockSelect = document.getElementById('seasonalityStockSelect');
     const seasonalityInstrumentLabel = document.getElementById('seasonalityInstrumentLabel');
@@ -8394,6 +8457,30 @@
             <div class="fingerprint-limitation">Next gate: ${escapeHtml(gate.next_gate || 'Not specified.')}</div>
           </article>`).join('')
         : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">No gates returned</div><h3>Factor audit unavailable</h3><p>No security is ranked.</p></article>';
+      const momentum = result.sector_neutral_momentum || {};
+      const momentumCoverage = momentum.coverage || {};
+      const momentumRows = Array.isArray(momentum.rows) ? momentum.rows : [];
+      const sectors = Array.isArray(momentum.sectors) ? momentum.sectors : [];
+      const validation = momentum.validation || {};
+      const readySectors = sectors.filter((sector) => sector.state === 'ready').length;
+      const excludedSectors = sectors.length - readySectors;
+      document.getElementById('sectorNeutralScoredValue').textContent = Number(momentumCoverage.sector_neutral_scored || 0).toLocaleString('en-IN');
+      document.getElementById('sectorNeutralGroupsValue').textContent = `${readySectors} / ${sectors.length}`;
+      document.getElementById('sectorNeutralStabilityValue').textContent = validation.mean_rank_stability === null || validation.mean_rank_stability === undefined
+        ? '—'
+        : Number(validation.mean_rank_stability).toFixed(2);
+      document.getElementById('sectorNeutralTurnoverValue').textContent = validation.mean_one_way_turnover_pct === null || validation.mean_one_way_turnover_pct === undefined
+        ? '—'
+        : `${Number(validation.mean_one_way_turnover_pct).toFixed(1)}%`;
+      document.getElementById('sectorNeutralNote').textContent =
+        `${momentum.contract_version || 'sector-neutral-momentum'} · ${Number(momentumCoverage.factor_input_admitted || 0)} market-data-admitted · ${excludedSectors} thin or invalid sector groups excluded. Current ranks are diagnostics only.`;
+      const describeScores = (rows) => rows.length
+        ? rows.map((row) => `${row.symbol} (${row.sector}, ${Number(row.composite_score).toFixed(2)})`).join(' · ')
+        : 'No score is available until the input and minimum-sector-size gates pass.';
+      document.getElementById('sectorNeutralStrongest').textContent = describeScores(momentumRows.slice(0, 3));
+      document.getElementById('sectorNeutralWeakest').textContent = describeScores(momentumRows.slice(-3).reverse());
+      document.getElementById('sectorNeutralValidation').textContent =
+        `${validation.snapshots || 0} month-end snapshots · ${validation.state || 'not available'} · top-minus-bottom ${validation.mean_top_minus_bottom_pct === null || validation.mean_top_minus_bottom_pct === undefined ? '—' : `${Number(validation.mean_top_minus_bottom_pct).toFixed(2)}%`} on average. Current membership makes this provisional, not investable evidence.`;
     }
 
     async function loadFactorResearch(showSuccess = false) {
@@ -8411,6 +8498,109 @@
       } catch (_error) {
         document.getElementById('factorResearchNote').textContent = 'The local factor research service is unavailable.';
         return false;
+      }
+    }
+
+    function renderFundamentalsFoundation(result) {
+      const coverage = result.coverage || {};
+      document.getElementById('fundamentalsStatus').textContent = result.status === 'manual_import_pending'
+        ? 'Official filing import pending'
+        : 'Release-known evidence loaded';
+      document.getElementById('fundamentalsKnownValue').textContent = Number(coverage.symbols_with_filings || 0).toLocaleString('en-IN');
+      document.getElementById('fundamentalsQualityValue').textContent = Number(coverage.quality_ready || 0).toLocaleString('en-IN');
+      document.getElementById('fundamentalsValueValue').textContent = Number(coverage.value_ready || 0).toLocaleString('en-IN');
+      document.getElementById('fundamentalsDeferredValue').textContent = Number(coverage.financial_services_deferred || 0).toLocaleString('en-IN');
+      document.getElementById('fundamentalsNote').textContent =
+        `${result.contract_version || 'point-in-time-fundamentals'} · known at ${result.known_at || '—'} · ${Number(coverage.eligible_universe || 0)} market-data-admitted securities audited. Manual official NSE/BSE exports only.`;
+      document.getElementById('fundamentalsBoundaryNote').textContent =
+        'Consolidated filings are preferred and never mixed with standalone results. Financial services await a separate model. Raw ROE, margin, leverage, earnings-yield and book-to-market metrics remain unscored; composite ranks and candidates are disabled.';
+    }
+
+    async function loadFundamentalsFoundation(showSuccess = false) {
+      try {
+        const response = await fetch('/api/fundamentals', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) throw new Error(result.reason || 'fundamentals_unavailable');
+        renderFundamentalsFoundation(result);
+        if (showSuccess) showNotice('Point-in-time fundamentals readiness refreshed.');
+        return true;
+      } catch (_error) {
+        document.getElementById('fundamentalsStatus').textContent = 'Fundamentals service unavailable';
+        return false;
+      }
+    }
+
+    function localFileBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('file_read_failed'));
+        reader.onload = () => {
+          try {
+            const bytes = new Uint8Array(reader.result);
+            let binary = '';
+            for (let offset = 0; offset < bytes.length; offset += 32768) {
+              binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+            }
+            resolve(btoa(binary));
+          } catch (error) {
+            reject(error);
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    async function importFundamentals() {
+      const file = fundamentalsFile.files[0];
+      if (!file) {
+        showNotice('Choose an official NSE/BSE XBRL or Excel export first.');
+        return;
+      }
+      const reportedLocal = fundamentalsReportedAt.value;
+      const metadata = {
+        symbol: fundamentalsSymbol.value.trim(),
+        company_name: fundamentalsCompany.value.trim(),
+        sector: fundamentalsSector.value.trim(),
+        basis: fundamentalsBasis.value,
+        period_type: fundamentalsPeriodType.value,
+        period_end: fundamentalsPeriodEnd.value,
+        reported_at: reportedLocal ? new Date(reportedLocal).toISOString() : '',
+        revision_sequence: Number(fundamentalsRevision.value || 0),
+        unit_scale: fundamentalsUnitScale.value,
+        value_column: fundamentalsValueColumn.value ? Number(fundamentalsValueColumn.value) : null,
+        source_url: fundamentalsSourceUrl.value.trim(),
+      };
+      if (!metadata.symbol || !metadata.company_name || !metadata.sector || !metadata.period_end || !metadata.reported_at || !metadata.source_url) {
+        showNotice('Complete the required filing identity before importing.');
+        return;
+      }
+      importFundamentalsButton.disabled = true;
+      importFundamentalsButton.textContent = 'Normalizing…';
+      fundamentalsNormalizerAudit.textContent = 'Reading the official export and auditing taxonomy mappings…';
+      try {
+        const response = await fetch('/api/fundamentals/normalize-import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            file_name: file.name,
+            content_base64: await localFileBase64(file),
+            metadata,
+          }),
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) throw new Error(result.reason || 'invalid_fundamental_export');
+        renderFundamentalsFoundation(result);
+        const written = result.write_result || {};
+        const audit = (result.normalizer || {}).audit || {};
+        fundamentalsNormalizerAudit.textContent =
+          `${(result.normalizer || {}).contract_version || 'fundamental normalizer'} · ${Number((audit.mapped_facts || []).length)} facts mapped · ${Number(audit.unmapped_taxonomy_count ?? audit.unmapped_label_count ?? 0)} unmapped taxonomy/labels · ${Number((audit.ambiguous_facts || []).length)} ambiguous facts · ${Number((audit.missing_model_facts || []).length)} model facts still missing.`;
+        showNotice(`Official filing normalized · ${Number(written.inserted || 0)} new · ${Number(written.duplicates || 0)} already stored.`);
+      } catch (error) {
+        fundamentalsNormalizerAudit.textContent = `Import stopped: ${kiteFailureMessage(error.message || 'invalid_fundamental_export')}`;
+        showNotice(kiteFailureMessage(error.message || 'invalid_fundamental_export'));
+      } finally {
+        importFundamentalsButton.disabled = false;
+        importFundamentalsButton.textContent = 'Normalize and import';
       }
     }
 
@@ -8877,9 +9067,10 @@
     loadBacktestsButton.addEventListener('click', () => loadBacktests(true));
     backtestsIndexSelect.addEventListener('change', () => loadBacktests(false));
     refreshAlphaResearchButton.addEventListener('click', async () => {
-      await Promise.all([loadAlphaResearch(false), loadFactorResearch(false)]);
+      await Promise.all([loadAlphaResearch(false), loadFactorResearch(false), loadFundamentalsFoundation(false)]);
       showNotice('Architecture and factor-input readiness refreshed.');
     });
+    importFundamentalsButton.addEventListener('click', importFundamentals);
     regimeValidationIndexSelect.addEventListener('change', () => updateRegimeValidationSelection(true));
     regimeValidationBenchmarkSelect.addEventListener('change', () => {
       const benchmark = regimeValidationBenchmarkSelect.value === 'none' ? 'No relative benchmark' : 'Nifty 50 benchmark';
@@ -8996,9 +9187,10 @@
           loadHistoricalRegimes(false);
         } else if (isBacktests && !backtestsPayload) {
           loadBacktests(false);
-        } else if (isAlphaResearch && (!alphaResearchPayload || !factorResearchPayload)) {
-          loadAlphaResearch(false);
-          loadFactorResearch(false);
+        } else if (isAlphaResearch) {
+          if (!alphaResearchPayload) loadAlphaResearch(false);
+          if (!factorResearchPayload) loadFactorResearch(false);
+          loadFundamentalsFoundation(false);
         } else if (isEarnings && !earningsPayload) {
           loadEarnings(false);
         }

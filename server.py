@@ -37,6 +37,7 @@ from eod_store import (
     CandleConflictError,
     ConfirmedFpiConflictError,
     EODStore,
+    FundamentalFilingConflictError,
     FuturesSnapshotConflictError,
     GlobalRiskConflictError,
     HistoricalSeriesConflictError,
@@ -142,6 +143,13 @@ BACKTESTS_CONTRACT_VERSION = "backtests-v4"
 SEASONALITY_BACKTEST_CONTRACT_VERSION = "seasonality-all-indices-backtest-v1"
 ALPHA_RESEARCH_CONTRACT_VERSION = "alpha-research-foundation-v1"
 FACTOR_RESEARCH_CONTRACT_VERSION = "factor-research-foundation-v1"
+FACTOR_MARKET_DATA_ADMISSION_COVERAGE_PCT = 95.0
+SECTOR_NEUTRAL_MOMENTUM_CONTRACT_VERSION = "sector-neutral-momentum-v3"
+FUNDAMENTAL_NORMALIZER_CONTRACT_VERSION = "fundamental-xbrl-normalizer-v5"
+SECTOR_NEUTRAL_MINIMUM_GROUP_SIZE = 5
+SECTOR_NEUTRAL_WEIGHTS = {"12_1": 0.50, "6_1": 0.30, "3_1": 0.20}
+SECTOR_NEUTRAL_VALIDATION_MONTHS = 24
+SECTOR_NEUTRAL_ONE_WAY_COST_BPS = 20.0
 HISTORICAL_BULL_BEAR_THRESHOLD_PCT = 20.0
 HISTORICAL_CORRECTION_THRESHOLD_PCT = 10.0
 HISTORICAL_RAPID_BEAR_SESSIONS = 45
@@ -1565,6 +1573,7 @@ MAX_QUOTE_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_CONSTITUENT_BYTES = 128 * 1024
 MAX_NEWS_IMPORT_BYTES = 2 * 1024 * 1024
 MAX_EARNINGS_IMPORT_BYTES = 4 * 1024 * 1024
+MAX_FUNDAMENTAL_IMPORT_BYTES = 8 * 1024 * 1024
 MAX_PORTFOLIO_IMPORT_BYTES = 12 * 1024 * 1024
 MAX_PORTFOLIO_FILE_BYTES = 8 * 1024 * 1024
 MAX_PORTFOLIO_ROWS = 5000
@@ -9524,6 +9533,894 @@ def build_dashboard_screener_summary(
     }
 
 
+def _linear_quantile(values: list[float], quantile: float) -> float:
+    ordered = sorted(values)
+    if not ordered:
+        raise ValueError("empty_quantile")
+    position = (len(ordered) - 1) * quantile
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    if lower == upper:
+        return ordered[lower]
+    weight = position - lower
+    return ordered[lower] * (1 - weight) + ordered[upper] * weight
+
+
+def _sector_neutral_scores(
+    rows: list[dict[str, object]],
+    *,
+    minimum_group_size: int = SECTOR_NEUTRAL_MINIMUM_GROUP_SIZE,
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    """Winsorize and standardize each momentum horizon inside each sector."""
+    grouped: dict[str, list[dict[str, object]]] = {}
+    for row in rows:
+        sector = str(row.get("sector") or "").strip()
+        if sector:
+            grouped.setdefault(sector, []).append(row)
+
+    scores: dict[str, dict[str, float]] = {}
+    sector_audit: list[dict[str, object]] = []
+    for sector, sector_rows in sorted(grouped.items()):
+        audit = {
+            "sector": sector,
+            "symbols": len(sector_rows),
+            "minimum_group_size": minimum_group_size,
+            "state": "ready",
+            "reason": None,
+        }
+        if len(sector_rows) < minimum_group_size:
+            audit.update({"state": "excluded", "reason": "thin_sector_group"})
+            sector_audit.append(audit)
+            continue
+        sector_scores: dict[str, dict[str, float]] = {
+            str(row["symbol"]): {} for row in sector_rows
+        }
+        for horizon in SECTOR_NEUTRAL_WEIGHTS:
+            field = f"momentum_{horizon}_pct"
+            values = [float(row[field]) for row in sector_rows if row.get(field) is not None]
+            if len(values) != len(sector_rows):
+                audit.update({"state": "excluded", "reason": f"missing_{horizon}_evidence"})
+                break
+            lower = _linear_quantile(values, 0.05)
+            upper = _linear_quantile(values, 0.95)
+            winsorized = {
+                str(row["symbol"]): min(max(float(row[field]), lower), upper)
+                for row in sector_rows
+            }
+            mean = sum(winsorized.values()) / len(winsorized)
+            variance = sum((value - mean) ** 2 for value in winsorized.values()) / len(
+                winsorized
+            )
+            standard_deviation = math.sqrt(variance)
+            if standard_deviation <= 1e-12:
+                audit.update({"state": "excluded", "reason": f"zero_{horizon}_dispersion"})
+                break
+            for symbol, value in winsorized.items():
+                sector_scores[symbol][horizon] = (value - mean) / standard_deviation
+        if audit["state"] == "ready":
+            for symbol, horizon_scores in sector_scores.items():
+                scores[symbol] = horizon_scores
+        sector_audit.append(audit)
+
+    scored_rows: list[dict[str, object]] = []
+    for row in rows:
+        symbol = str(row["symbol"])
+        horizon_scores = scores.get(symbol)
+        if not horizon_scores:
+            continue
+        composite = sum(
+            horizon_scores[horizon] * weight
+            for horizon, weight in SECTOR_NEUTRAL_WEIGHTS.items()
+        )
+        scored_rows.append(
+            {
+                "symbol": symbol,
+                "sector": row["sector"],
+                "z_12_1": round(horizon_scores["12_1"], 4),
+                "z_6_1": round(horizon_scores["6_1"], 4),
+                "z_3_1": round(horizon_scores["3_1"], 4),
+                "composite_score": round(composite, 4),
+            }
+        )
+    scored_rows.sort(key=lambda row: (-float(row["composite_score"]), str(row["symbol"])))
+    for rank, row in enumerate(scored_rows, start=1):
+        row["diagnostic_rank"] = rank
+        row["percentile"] = round(
+            (len(scored_rows) - rank + 1) / len(scored_rows) * 100,
+            2,
+        )
+    return scored_rows, sector_audit
+
+
+def _rank_correlation(
+    first: dict[str, int], second: dict[str, int]
+) -> float | None:
+    common = sorted(set(first).intersection(second))
+    if len(common) < 3:
+        return None
+    first_values = [float(first[symbol]) for symbol in common]
+    second_values = [float(second[symbol]) for symbol in common]
+    first_mean = sum(first_values) / len(first_values)
+    second_mean = sum(second_values) / len(second_values)
+    numerator = sum(
+        (left - first_mean) * (right - second_mean)
+        for left, right in zip(first_values, second_values)
+    )
+    first_scale = math.sqrt(sum((value - first_mean) ** 2 for value in first_values))
+    second_scale = math.sqrt(sum((value - second_mean) ** 2 for value in second_values))
+    if first_scale <= 1e-12 or second_scale <= 1e-12:
+        return None
+    return numerator / (first_scale * second_scale)
+
+
+def build_sector_neutral_momentum_diagnostics(
+    factor_rows: list[dict[str, object]],
+    stock_histories: dict[str, list[dict[str, object]]],
+    benchmark_candles: list[dict[str, object]],
+    *,
+    as_of: date,
+) -> dict[str, object]:
+    """Build current sector-neutral diagnostics and a provisional monthly audit."""
+    admitted = [row for row in factor_rows if row.get("factor_input_admitted")]
+    current_rows, sector_audit = _sector_neutral_scores(admitted)
+    scored_symbols = {str(row["symbol"]) for row in current_rows}
+    thin_sectors = [row for row in sector_audit if row["state"] != "ready"]
+
+    benchmark = sorted(benchmark_candles, key=lambda item: item["date"])
+    benchmark_dates = [item["date"] for item in benchmark]
+    benchmark_close = {item["date"]: float(item["close"]) for item in benchmark}
+    stock_close = {
+        symbol: {item["date"]: float(item["close"]) for item in history}
+        for symbol, history in stock_histories.items()
+        if symbol in {str(row["symbol"]) for row in admitted}
+    }
+    sector_by_symbol = {str(row["symbol"]): str(row["sector"]) for row in admitted}
+    month_end_positions: dict[tuple[int, int], int] = {}
+    for position, session_date in enumerate(benchmark_dates):
+        month_end_positions[(session_date.year, session_date.month)] = position
+    eligible_positions = [
+        position
+        for position in month_end_positions.values()
+        if position >= 252 and position + 21 < len(benchmark_dates)
+    ][-SECTOR_NEUTRAL_VALIDATION_MONTHS:]
+
+    snapshots: list[dict[str, object]] = []
+    previous_ranks: dict[str, int] | None = None
+    previous_weights: dict[str, float] | None = None
+    for position in eligible_positions:
+        signal_date = benchmark_dates[position]
+        end_date = benchmark_dates[position - 21]
+        starts = {
+            "12_1": benchmark_dates[position - 252],
+            "6_1": benchmark_dates[position - 126],
+            "3_1": benchmark_dates[position - 63],
+        }
+        snapshot_input: list[dict[str, object]] = []
+        for symbol, closes in stock_close.items():
+            required_dates = [signal_date, end_date, *starts.values()]
+            if any(session_date not in closes for session_date in required_dates):
+                continue
+            snapshot_input.append(
+                {
+                    "symbol": symbol,
+                    "sector": sector_by_symbol[symbol],
+                    **{
+                        f"momentum_{horizon}_pct": (
+                            closes[end_date] / closes[start_date] - 1
+                        )
+                        * 100
+                        for horizon, start_date in starts.items()
+                    },
+                }
+            )
+        scored, _audit = _sector_neutral_scores(snapshot_input)
+        if len(scored) < 10:
+            continue
+        ranks = {str(row["symbol"]): int(row["diagnostic_rank"]) for row in scored}
+        quintile_size = max(1, math.ceil(len(scored) * 0.20))
+        top_symbols = [str(row["symbol"]) for row in scored[:quintile_size]]
+        bottom_symbols = [str(row["symbol"]) for row in scored[-quintile_size:]]
+        forward_date = benchmark_dates[position + 21]
+
+        def forward_return(symbol: str) -> float | None:
+            closes = stock_close[symbol]
+            if signal_date not in closes or forward_date not in closes:
+                return None
+            return (closes[forward_date] / closes[signal_date] - 1) * 100
+
+        top_returns = [value for symbol in top_symbols if (value := forward_return(symbol)) is not None]
+        bottom_returns = [
+            value for symbol in bottom_symbols if (value := forward_return(symbol)) is not None
+        ]
+        if not top_returns or not bottom_returns:
+            continue
+        top_return = sum(top_returns) / len(top_returns)
+        bottom_return = sum(bottom_returns) / len(bottom_returns)
+        benchmark_return = (
+            benchmark_close[forward_date] / benchmark_close[signal_date] - 1
+        ) * 100
+        weights = {symbol: 1 / len(top_symbols) for symbol in top_symbols}
+        turnover = None
+        cost_drag_bps = None
+        if previous_weights is not None:
+            turnover = 0.5 * sum(
+                abs(weights.get(symbol, 0.0) - previous_weights.get(symbol, 0.0))
+                for symbol in set(weights).union(previous_weights)
+            )
+            cost_drag_bps = turnover * SECTOR_NEUTRAL_ONE_WAY_COST_BPS
+        stability = _rank_correlation(previous_ranks, ranks) if previous_ranks else None
+        snapshots.append(
+            {
+                "signal_date": signal_date.isoformat(),
+                "forward_date": forward_date.isoformat(),
+                "scored_symbols": len(scored),
+                "top_quintile_return_pct": round(top_return, 3),
+                "bottom_quintile_return_pct": round(bottom_return, 3),
+                "top_minus_bottom_pct": round(top_return - bottom_return, 3),
+                "top_excess_vs_nifty_pct": round(top_return - benchmark_return, 3),
+                "rank_stability": round(stability, 4) if stability is not None else None,
+                "one_way_turnover_pct": round(turnover * 100, 2) if turnover is not None else None,
+                "estimated_cost_drag_bps": round(cost_drag_bps, 2) if cost_drag_bps is not None else None,
+                "cost_adjusted_top_excess_pct": (
+                    round(top_return - benchmark_return - cost_drag_bps / 100, 3)
+                    if cost_drag_bps is not None
+                    else None
+                ),
+            }
+        )
+        previous_ranks = ranks
+        previous_weights = weights
+
+    def mean_present(key: str) -> float | None:
+        values = [float(row[key]) for row in snapshots if row.get(key) is not None]
+        return sum(values) / len(values) if values else None
+
+    mean_spread = mean_present("top_minus_bottom_pct")
+    validation_state = (
+        "provisional_current_membership_only"
+        if len(snapshots) >= 12
+        else "insufficient_snapshots"
+    )
+    return {
+        "contract_version": SECTOR_NEUTRAL_MOMENTUM_CONTRACT_VERSION,
+        "status": "diagnostic_ready" if current_rows else "diagnostic_blocked",
+        "as_of_date": as_of.isoformat(),
+        "scoring_rule": {
+            "minimum_sector_group_size": SECTOR_NEUTRAL_MINIMUM_GROUP_SIZE,
+            "winsorization": "5th/95th percentile within sector and horizon",
+            "standardization": "population z-score within dated sector",
+            "weights": SECTOR_NEUTRAL_WEIGHTS,
+            "candidate_promotion": "disabled",
+        },
+        "coverage": {
+            "factor_input_admitted": len(admitted),
+            "sector_neutral_scored": len(current_rows),
+            "thin_or_invalid_sector_groups": len(thin_sectors),
+            "thin_or_invalid_symbols": len(admitted) - len(scored_symbols),
+        },
+        "sectors": sector_audit,
+        "rows": current_rows,
+        "validation": {
+            "state": validation_state,
+            "snapshots": len(snapshots),
+            "window": f"latest {SECTOR_NEUTRAL_VALIDATION_MONTHS} eligible month-ends",
+            "holding_period_sessions": 21,
+            "portfolio_definition": "equal-weight top and bottom diagnostic quintiles",
+            "one_way_cost_bps": SECTOR_NEUTRAL_ONE_WAY_COST_BPS,
+            "mean_rank_stability": (
+                round(value, 4)
+                if (value := mean_present("rank_stability")) is not None
+                else None
+            ),
+            "mean_one_way_turnover_pct": (
+                round(value, 2)
+                if (value := mean_present("one_way_turnover_pct")) is not None
+                else None
+            ),
+            "mean_top_minus_bottom_pct": round(mean_spread, 3) if mean_spread is not None else None,
+            "positive_spread_frequency_pct": (
+                round(
+                    sum(float(row["top_minus_bottom_pct"]) > 0 for row in snapshots)
+                    / len(snapshots)
+                    * 100,
+                    2,
+                )
+                if snapshots
+                else None
+            ),
+            "mean_cost_adjusted_top_excess_pct": (
+                round(value, 3)
+                if (value := mean_present("cost_adjusted_top_excess_pct")) is not None
+                else None
+            ),
+            "results": snapshots,
+        },
+        "ranked_candidates": [],
+        "limitations": [
+            "Ranks are factor diagnostics, not candidate recommendations or expected returns.",
+            "Historical snapshots apply the current frozen universe and current dated sector map, so they are not point-in-time investable evidence.",
+            "The cost assumption is a disclosed sensitivity, not observed slippage or market impact.",
+            "No regime, catalyst or portfolio-impact gate is applied in this milestone.",
+        ],
+    }
+
+
+FUNDAMENTAL_FACT_ALIASES = {
+    "revenue": {
+        "revenuefromoperations",
+        "revenuefromoperationsgross",
+        "incomefromoperations",
+    },
+    "ebit": {
+        "earningsbeforeinterestandtax",
+        "profitbeforeinterestandtax",
+        "profitbeforefinancecostsandtax",
+    },
+    "profit_after_tax": {
+        "profitlossfortheperiod",
+        "profitloss",
+        "netprofitlossfortheperiod",
+        "profitaftertax",
+    },
+    "total_assets": {"assets", "totalassets"},
+    "total_equity": {"equity", "totalequity"},
+    "total_debt": {"borrowings", "totalborrowings", "totaldebt"},
+    "cash_and_equivalents": {
+        "cashandcashequivalents",
+        "cashandcashequivalentsatendofperiod",
+    },
+    "operating_cash_flow": {
+        "cashflowsfromusedinoperatingactivities",
+        "netcashflowsfromusedinoperatingactivities",
+    },
+    "shares_outstanding": {
+        "numberofsharesoutstanding",
+        "numberofequitysharesoutstanding",
+    },
+}
+FUNDAMENTAL_FLOW_FACTS = {
+    "revenue",
+    "ebit",
+    "profit_after_tax",
+    "operating_cash_flow",
+}
+FUNDAMENTAL_UNIT_SCALES = {
+    "absolute": 1.0,
+    "thousand": 1_000.0,
+    "lakh": 100_000.0,
+    "crore": 10_000_000.0,
+    "million": 1_000_000.0,
+    "billion": 1_000_000_000.0,
+}
+
+
+def _fundamental_name(value: object) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
+
+
+def _fundamental_number(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        result = float(value)
+        return result if math.isfinite(result) else None
+    text = str(value or "").strip()
+    if not text or text.casefold() in {"-", "—", "na", "n/a", "nil"}:
+        return None
+    negative = text.startswith("(") and text.endswith(")")
+    text = text.strip("()").replace(",", "").replace("₹", "").strip()
+    try:
+        result = float(text)
+    except ValueError:
+        return None
+    if not math.isfinite(result):
+        return None
+    return -result if negative else result
+
+
+def _fundamental_metadata(metadata: dict[str, object]) -> dict[str, object]:
+    if not isinstance(metadata, dict):
+        raise ValueError("invalid_fundamental_metadata")
+    try:
+        symbol = str(metadata["symbol"]).strip().upper()
+        company_name = str(metadata["company_name"]).strip()
+        sector = str(metadata["sector"]).strip()
+        basis = str(metadata["basis"]).strip().lower()
+        period_type = str(metadata["period_type"]).strip().lower()
+        period_end = date.fromisoformat(str(metadata["period_end"]).strip())
+        reported_at = datetime.fromisoformat(
+            str(metadata["reported_at"]).strip().replace("Z", "+00:00")
+        )
+        revision_sequence = int(metadata.get("revision_sequence", 0))
+        source_url = str(metadata["source_url"]).strip()
+        unit_scale = str(metadata.get("unit_scale") or "absolute").strip().lower()
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("invalid_fundamental_metadata") from error
+    official_hosts = {
+        "www.nseindia.com",
+        "nseindia.com",
+        "nsearchives.nseindia.com",
+        "www.bseindia.com",
+        "bseindia.com",
+    }
+    parsed_url = urllib.parse.urlsplit(source_url)
+    if (
+        not re.fullmatch(r"[A-Z0-9&-]{1,32}", symbol)
+        or not company_name
+        or not sector
+        or basis not in {"consolidated", "standalone"}
+        or period_type not in {"quarterly", "annual"}
+        or reported_at.utcoffset() is None
+        or period_end > reported_at.date()
+        or revision_sequence < 0
+        or unit_scale not in FUNDAMENTAL_UNIT_SCALES
+        or parsed_url.scheme != "https"
+        or parsed_url.hostname not in official_hosts
+    ):
+        raise ValueError("invalid_fundamental_metadata")
+    value_column = metadata.get("value_column")
+    if value_column in {None, ""}:
+        parsed_column = None
+    else:
+        try:
+            parsed_column = int(value_column)
+        except (TypeError, ValueError) as error:
+            raise ValueError("invalid_fundamental_metadata") from error
+        if not 1 <= parsed_column <= 100:
+            raise ValueError("invalid_fundamental_metadata")
+    filing_id = str(metadata.get("filing_id") or "").strip()
+    if filing_id and not re.fullmatch(r"[A-Za-z0-9._:-]{1,160}", filing_id):
+        raise ValueError("invalid_fundamental_metadata")
+    return {
+        "symbol": symbol,
+        "company_name": company_name,
+        "sector": sector,
+        "basis": basis,
+        "period_type": period_type,
+        "period_end": period_end,
+        "reported_at": reported_at,
+        "revision_sequence": revision_sequence,
+        "source_url": source_url,
+        "unit_scale": unit_scale,
+        "value_column": parsed_column,
+        "filing_id": filing_id,
+    }
+
+
+def _fundamental_alias_for(name: object) -> str | None:
+    normalized = _fundamental_name(name)
+    for fact_key, aliases in FUNDAMENTAL_FACT_ALIASES.items():
+        if normalized in aliases:
+            return fact_key
+    return None
+
+
+def _parse_fundamental_xbrl(
+    payload: bytes,
+    *,
+    period_end: date,
+) -> tuple[dict[str, float], dict[str, object]]:
+    if b"<!DOCTYPE" in payload.upper() or b"<!ENTITY" in payload.upper():
+        raise ValueError("unsafe_fundamental_xbrl")
+    try:
+        root = ET.fromstring(payload)
+    except ET.ParseError as error:
+        raise ValueError("invalid_fundamental_xbrl") from error
+    contexts: dict[str, dict[str, object]] = {}
+    for context in root.findall(".//{*}context"):
+        context_id = context.attrib.get("id")
+        if not context_id:
+            continue
+        instant = context.find(".//{*}instant")
+        start = context.find(".//{*}startDate")
+        end = context.find(".//{*}endDate")
+        try:
+            start_date = date.fromisoformat((start.text or "").strip()) if start is not None else None
+            end_date = date.fromisoformat(
+                ((instant if instant is not None else end).text or "").strip()
+            )
+        except (AttributeError, ValueError):
+            continue
+        contexts[context_id] = {
+            "start": start_date,
+            "end": end_date,
+            "instant": instant is not None,
+        }
+    candidates: dict[str, list[tuple[tuple[int, int], float, str]]] = defaultdict(list)
+    numeric_taxonomy: set[str] = set()
+    mapped_taxonomy: set[str] = set()
+    for element in root.iter():
+        context_ref = element.attrib.get("contextRef")
+        if not context_ref or context_ref not in contexts or list(element):
+            continue
+        value = _fundamental_number(element.text)
+        if value is None:
+            continue
+        local_name = element.tag.rsplit("}", 1)[-1].split(":")[-1]
+        numeric_taxonomy.add(local_name)
+        fact_key = _fundamental_alias_for(local_name)
+        if not fact_key:
+            continue
+        context = contexts[context_ref]
+        if context["end"] != period_end:
+            continue
+        is_flow = fact_key in FUNDAMENTAL_FLOW_FACTS
+        if is_flow and context["instant"]:
+            continue
+        if not is_flow and not context["instant"]:
+            continue
+        start_date = context["start"]
+        duration = (period_end - start_date).days if isinstance(start_date, date) else 100000
+        priority = (0 if (is_flow or context["instant"]) else 1, duration)
+        scale = int(element.attrib.get("scale", "0") or 0)
+        candidates[fact_key].append((priority, value * (10 ** scale), local_name))
+        mapped_taxonomy.add(local_name)
+    facts: dict[str, float] = {}
+    ambiguous: list[str] = []
+    for fact_key, values in candidates.items():
+        best_priority = min(item[0] for item in values)
+        best = [item for item in values if item[0] == best_priority]
+        distinct = {round(item[1], 8) for item in best}
+        if len(distinct) != 1:
+            ambiguous.append(fact_key)
+            continue
+        facts[fact_key] = best[0][1]
+    unmapped = sorted(numeric_taxonomy - mapped_taxonomy)
+    return facts, {
+        "format": "xbrl",
+        "contexts_read": len(contexts),
+        "numeric_taxonomy_elements": len(numeric_taxonomy),
+        "mapped_taxonomy_elements": sorted(mapped_taxonomy),
+        "unmapped_taxonomy_count": len(unmapped),
+        "unmapped_taxonomy_sample": unmapped[:40],
+        "ambiguous_facts": sorted(ambiguous),
+    }
+
+
+def _parse_fundamental_xlsx(
+    payload: bytes,
+    *,
+    value_column: int | None,
+) -> tuple[dict[str, float], dict[str, object]]:
+    try:
+        sheets = _xlsx_sheet_matrices(
+            payload,
+            maximum_rows=6000,
+            maximum_columns=100,
+        )
+    except ValueError as error:
+        raise ValueError("invalid_fundamental_xlsx") from error
+    matches: dict[str, list[tuple[float, str, int]]] = defaultdict(list)
+    unmapped_labels: list[str] = []
+    for sheet_name, matrix in sheets:
+        for row_index, row in enumerate(matrix, start=1):
+            for column_index, cell in enumerate(row):
+                if not isinstance(cell, str) or not cell.strip():
+                    continue
+                fact_key = _fundamental_alias_for(cell)
+                if not fact_key:
+                    if any(character.isalpha() for character in cell) and len(unmapped_labels) < 100:
+                        unmapped_labels.append(cell.strip()[:160])
+                    continue
+                if value_column is not None:
+                    candidate_indexes = [value_column - 1]
+                else:
+                    candidate_indexes = list(range(column_index + 1, len(row)))
+                numeric = [
+                    (index, number)
+                    for index in candidate_indexes
+                    if 0 <= index < len(row)
+                    and (number := _fundamental_number(row[index])) is not None
+                ]
+                if value_column is None and len(numeric) != 1:
+                    continue
+                if numeric:
+                    matches[fact_key].append((numeric[0][1], sheet_name, row_index))
+    facts: dict[str, float] = {}
+    ambiguous: list[str] = []
+    mapped_rows: dict[str, str] = {}
+    for fact_key, values in matches.items():
+        distinct = {round(item[0], 8) for item in values}
+        if len(distinct) != 1:
+            ambiguous.append(fact_key)
+            continue
+        facts[fact_key] = values[0][0]
+        mapped_rows[fact_key] = f"{values[0][1]}!row {values[0][2]}"
+    return facts, {
+        "format": "xlsx",
+        "worksheets_read": len(sheets),
+        "value_column": value_column,
+        "mapped_rows": mapped_rows,
+        "unmapped_label_count": len(unmapped_labels),
+        "unmapped_label_sample": unmapped_labels[:40],
+        "ambiguous_facts": sorted(ambiguous),
+    }
+
+
+def normalize_official_fundamental_export(
+    file_name: str,
+    payload: bytes,
+    metadata: dict[str, object],
+) -> dict[str, object]:
+    """Normalize one manually supplied official filing without guessing metadata."""
+    if not isinstance(file_name, str) or not re.fullmatch(
+        r"[A-Za-z0-9._ -]{1,128}\.(?:xbrl|xml|xhtml|html|xlsx)",
+        file_name,
+        re.IGNORECASE,
+    ):
+        raise ValueError("unsupported_fundamental_export")
+    if not payload or len(payload) > MAX_FUNDAMENTAL_IMPORT_BYTES:
+        raise ValueError("invalid_fundamental_export_size")
+    parsed = _fundamental_metadata(metadata)
+    suffix = Path(file_name).suffix.lower()
+    if suffix == ".xlsx":
+        raw_facts, audit = _parse_fundamental_xlsx(
+            payload,
+            value_column=parsed["value_column"],
+        )
+    else:
+        raw_facts, audit = _parse_fundamental_xbrl(
+            payload,
+            period_end=parsed["period_end"],
+        )
+    scale = FUNDAMENTAL_UNIT_SCALES[str(parsed["unit_scale"])]
+    facts = {key: value * scale for key, value in raw_facts.items()}
+    if not facts:
+        raise ValueError("no_unambiguous_fundamental_facts")
+    identity_text = "|".join(
+        [
+            str(parsed["source_url"]),
+            str(parsed["symbol"]),
+            str(parsed["basis"]),
+            str(parsed["period_type"]),
+            parsed["period_end"].isoformat(),
+            parsed["reported_at"].isoformat(),
+            str(parsed["revision_sequence"]),
+        ]
+    )
+    filing_id = str(parsed["filing_id"] or "") or (
+        "official:" + hashlib.sha256(identity_text.encode("utf-8")).hexdigest()[:32]
+    )
+    filing = {
+        "filing_id": filing_id,
+        "symbol": parsed["symbol"],
+        "company_name": parsed["company_name"],
+        "sector": parsed["sector"],
+        "basis": parsed["basis"],
+        "period_type": parsed["period_type"],
+        "period_end": parsed["period_end"].isoformat(),
+        "reported_at": parsed["reported_at"].isoformat(),
+        "revision_sequence": parsed["revision_sequence"],
+        "currency": "INR",
+        "unit": "absolute",
+        "facts": facts,
+        "source_url": parsed["source_url"],
+    }
+    required = {
+        "revenue",
+        "ebit",
+        "profit_after_tax",
+        "total_equity",
+        "total_debt",
+        "cash_and_equivalents",
+        "shares_outstanding",
+    }
+    return {
+        "ok": True,
+        "contract_version": FUNDAMENTAL_NORMALIZER_CONTRACT_VERSION,
+        "filing": filing,
+        "audit": {
+            **audit,
+            "source_file_name": file_name,
+            "unit_scale_applied": parsed["unit_scale"],
+            "mapped_facts": sorted(facts),
+            "missing_model_facts": sorted(required - set(facts)),
+            "revision_preserved": True,
+            "metadata_inference": "disabled",
+        },
+    }
+
+
+def build_point_in_time_fundamentals_foundation(
+    filings: list[dict[str, object]],
+    factor_rows: list[dict[str, object]],
+    latest_prices: dict[str, float],
+    *,
+    known_at: datetime,
+) -> dict[str, object]:
+    """Audit release-known quality/value facts without producing factor ranks."""
+    if known_at.utcoffset() is None:
+        raise ValueError("invalid_fundamental_known_at")
+    eligible_symbols = {
+        str(row.get("symbol") or "").strip().upper(): str(row.get("sector") or "").strip()
+        for row in factor_rows
+        if row.get("factor_input_admitted") and str(row.get("symbol") or "").strip()
+    }
+    known_filings: list[dict[str, object]] = []
+    for filing in filings:
+        try:
+            reported_at = datetime.fromisoformat(str(filing["reported_at"]).replace("Z", "+00:00"))
+        except (KeyError, ValueError, TypeError):
+            continue
+        if reported_at <= known_at and str(filing.get("symbol") or "").upper() in eligible_symbols:
+            known_filings.append(filing)
+
+    latest_revision: dict[tuple[str, str, str, str], dict[str, object]] = {}
+    for filing in known_filings:
+        key = (
+            str(filing["symbol"]).upper(),
+            str(filing["basis"]),
+            str(filing["period_type"]),
+            str(filing["period_end"]),
+        )
+        current = latest_revision.get(key)
+        filing_order = (
+            str(filing["reported_at"]),
+            int(filing.get("revision_sequence") or 0),
+        )
+        current_order = (
+            str(current["reported_at"]),
+            int(current.get("revision_sequence") or 0),
+        ) if current else None
+        if current_order is None or filing_order > current_order:
+            latest_revision[key] = filing
+
+    filings_by_symbol: dict[str, list[dict[str, object]]] = {}
+    for filing in latest_revision.values():
+        filings_by_symbol.setdefault(str(filing["symbol"]).upper(), []).append(filing)
+
+    rows: list[dict[str, object]] = []
+    for symbol, sector in sorted(eligible_symbols.items()):
+        available = filings_by_symbol.get(symbol, [])
+        consolidated = [row for row in available if row["basis"] == "consolidated"]
+        selected_basis = "consolidated" if consolidated else "standalone"
+        quarterly = sorted(
+            [
+                row for row in available
+                if row["basis"] == selected_basis and row["period_type"] == "quarterly"
+            ],
+            key=lambda row: str(row["period_end"]),
+            reverse=True,
+        )
+        selected = quarterly[:5]
+        latest = selected[0] if selected else None
+        is_financial = sector == "Financial Services"
+        quality_ready = False
+        value_ready = False
+        metrics: dict[str, float | None] = {
+            "return_on_equity_pct": None,
+            "operating_margin_pct": None,
+            "net_debt_to_equity": None,
+            "earnings_yield_pct": None,
+            "book_to_market_pct": None,
+        }
+        missing: list[str] = []
+        if len(selected) < 5:
+            missing.append("five_release_known_quarters")
+        elif is_financial:
+            missing.append("financial_sector_model")
+        else:
+            trailing = selected[:4]
+            latest_facts = latest.get("facts") if isinstance(latest, dict) else None
+            oldest_facts = selected[4].get("facts") if len(selected) >= 5 else None
+            latest_facts = latest_facts if isinstance(latest_facts, dict) else {}
+            oldest_facts = oldest_facts if isinstance(oldest_facts, dict) else {}
+            required_flow = ("revenue", "ebit", "profit_after_tax")
+            if any(
+                not isinstance(row.get("facts"), dict)
+                or any(key not in row["facts"] for key in required_flow)
+                for row in trailing
+            ):
+                missing.append("ttm_income_statement_facts")
+            required_balance = (
+                "total_equity",
+                "total_debt",
+                "cash_and_equivalents",
+                "shares_outstanding",
+            )
+            if any(key not in latest_facts for key in required_balance):
+                missing.append("latest_balance_sheet_facts")
+            if "total_equity" not in oldest_facts:
+                missing.append("opening_equity")
+            if not missing:
+                ttm_revenue = sum(float(row["facts"]["revenue"]) for row in trailing)
+                ttm_ebit = sum(float(row["facts"]["ebit"]) for row in trailing)
+                ttm_profit = sum(float(row["facts"]["profit_after_tax"]) for row in trailing)
+                average_equity = (
+                    float(latest_facts["total_equity"])
+                    + float(oldest_facts["total_equity"])
+                ) / 2
+                metrics["return_on_equity_pct"] = round(ttm_profit / average_equity * 100, 3)
+                metrics["operating_margin_pct"] = round(ttm_ebit / ttm_revenue * 100, 3)
+                metrics["net_debt_to_equity"] = round(
+                    (
+                        float(latest_facts["total_debt"])
+                        - float(latest_facts["cash_and_equivalents"])
+                    )
+                    / float(latest_facts["total_equity"]),
+                    4,
+                )
+                quality_ready = True
+                price = latest_prices.get(symbol)
+                if price is None or price <= 0:
+                    missing.append("dated_market_price")
+                else:
+                    market_cap = price * float(latest_facts["shares_outstanding"])
+                    metrics["earnings_yield_pct"] = round(ttm_profit / market_cap * 100, 3)
+                    metrics["book_to_market_pct"] = round(
+                        float(latest_facts["total_equity"]) / market_cap * 100,
+                        3,
+                    )
+                    value_ready = True
+        rows.append(
+            {
+                "symbol": symbol,
+                "sector": sector,
+                "basis": selected_basis if selected else None,
+                "quarters_known": len(selected),
+                "latest_period_end": latest.get("period_end") if latest else None,
+                "latest_reported_at": latest.get("reported_at") if latest else None,
+                "quality_ready": quality_ready,
+                "value_ready": value_ready,
+                "missing_evidence": missing or ([] if selected else ["official_filings"]),
+                **metrics,
+            }
+        )
+
+    quality_ready_count = sum(bool(row["quality_ready"]) for row in rows)
+    value_ready_count = sum(bool(row["value_ready"]) for row in rows)
+    symbols_with_filings = sum(bool(row["quarters_known"]) for row in rows)
+    return {
+        "ok": True,
+        "contract_version": "point-in-time-fundamentals-v4",
+        "status": "evidence_partial" if symbols_with_filings else "manual_import_pending",
+        "known_at": known_at.isoformat(),
+        "source_contract": {
+            "authority": "NSE/BSE issuer-filed financial results",
+            "format": "manual official XBRL/XML/iXBRL or Excel export normalized locally",
+            "normalizer_contract": FUNDAMENTAL_NORMALIZER_CONTRACT_VERSION,
+            "accepted_extensions": ["xbrl", "xml", "xhtml", "html", "xlsx"],
+            "automated_collection": "disabled_by_source_terms",
+            "nse_financial_results_url": "https://www.nseindia.com/companies-listing/corporate-filings-financial-results",
+            "nse_xbrl_information_url": "https://www.nseindia.com/static/companies-listing/xbrl-information",
+            "nse_terms_url": "https://www.nseindia.com/static/nse-terms-of-use",
+        },
+        "definitions": {
+            "scope_preference": "consolidated; standalone only when consolidated is absent; never mixed",
+            "quality": {
+                "return_on_equity_pct": "TTM profit after tax / average opening and closing equity",
+                "operating_margin_pct": "TTM EBIT / TTM revenue",
+                "net_debt_to_equity": "(latest debt - latest cash) / latest equity",
+            },
+            "value": {
+                "earnings_yield_pct": "TTM profit after tax / dated market capitalization",
+                "book_to_market_pct": "latest equity / dated market capitalization",
+            },
+            "financial_services_policy": "excluded until a bank/NBFC-specific model is frozen",
+        },
+        "coverage": {
+            "eligible_universe": len(rows),
+            "symbols_with_filings": symbols_with_filings,
+            "quality_ready": quality_ready_count,
+            "value_ready": value_ready_count,
+            "financial_services_deferred": sum(
+                row["sector"] == "Financial Services" for row in rows
+            ),
+        },
+        "rows": rows,
+        "quality_scores": [],
+        "value_scores": [],
+        "composite_ranks": [],
+        "ranked_candidates": [],
+        "limitations": [
+            "No exchange website is scraped; only user-supplied official exports are admitted.",
+            "Every fact is gated by the filing broadcast timestamp and revision identity known at the evaluation date.",
+            "The first definitions exclude financial services because industrial-company leverage and margin formulas are not comparable.",
+            "Raw metrics are not factor scores, ranks, recommendations or forecasts.",
+        ],
+    }
+
+
 def build_factor_research_foundation(
     stock_histories: dict[str, list[dict[str, object]]],
     benchmark_candles: list[dict[str, object]],
@@ -9532,6 +10429,7 @@ def build_factor_research_foundation(
     constituent_snapshot: dict[str, object] | None = None,
     adjusted_price_evidence: bool = False,
     liquidity_evidence: bool = False,
+    market_data_evidence: dict[str, dict[str, object]] | None = None,
 ) -> dict[str, object]:
     """Audit the factor information set before any security can be ranked.
 
@@ -9596,6 +10494,11 @@ def build_factor_research_foundation(
     universe_hash = hashlib.sha256("\n".join(symbols).encode("utf-8")).hexdigest()
     freshness_ready = as_of >= expected_through
     rows: list[dict[str, object]] = []
+    evidence_lookup = {
+        str(symbol).strip().upper(): evidence
+        for symbol, evidence in (market_data_evidence or {}).items()
+        if str(symbol).strip() and isinstance(evidence, dict)
+    }
     for symbol in symbols:
         ordered = sorted(stock_histories.get(symbol, []), key=lambda item: item["date"])
         latest = ordered[-1]["date"] if ordered else None
@@ -9611,6 +10514,23 @@ def build_factor_research_foundation(
         }
         price_ready = bool(aligned and all(value is not None for value in raw.values()))
         sector = sector_lookup.get(symbol) if snapshot_usable else None
+        symbol_evidence = evidence_lookup.get(symbol)
+        adjustment_ready = (
+            bool(symbol_evidence.get("adjustment_provenance_ready"))
+            if symbol_evidence is not None
+            else adjusted_price_evidence
+        )
+        symbol_liquidity_ready = (
+            bool(symbol_evidence.get("liquidity_evidence_ready"))
+            if symbol_evidence is not None
+            else liquidity_evidence
+        )
+        factor_input_admitted = bool(
+            price_ready
+            and sector
+            and adjustment_ready
+            and symbol_liquidity_ready
+        )
         rows.append(
             {
                 "symbol": symbol,
@@ -9619,6 +10539,19 @@ def build_factor_research_foundation(
                 "price_history_ready": price_ready,
                 "sector": sector,
                 "sector_identity_ready": bool(sector),
+                "adjustment_provenance_ready": adjustment_ready,
+                "liquidity_evidence_ready": symbol_liquidity_ready,
+                "factor_input_admitted": factor_input_admitted,
+                "positive_volume_coverage_pct": (
+                    symbol_evidence.get("positive_volume_coverage_pct")
+                    if symbol_evidence is not None
+                    else None
+                ),
+                "median_daily_turnover_inr": (
+                    symbol_evidence.get("median_daily_turnover_inr")
+                    if symbol_evidence is not None
+                    else None
+                ),
                 "momentum_12_1_pct": round(raw["12_1"], 2) if raw["12_1"] is not None else None,
                 "momentum_6_1_pct": round(raw["6_1"], 2) if raw["6_1"] is not None else None,
                 "momentum_3_1_pct": round(raw["3_1"], 2) if raw["3_1"] is not None else None,
@@ -9626,18 +10559,27 @@ def build_factor_research_foundation(
                 "excess_6_1_vs_nifty_pct": round(excess["6_1"], 2) if excess["6_1"] is not None else None,
                 "excess_3_1_vs_nifty_pct": round(excess["3_1"], 2) if excess["3_1"] is not None else None,
                 "research_eligible": bool(
-                    price_ready
-                    and freshness_ready
-                    and sector
-                    and adjusted_price_evidence
-                    and liquidity_evidence
+                    factor_input_admitted and freshness_ready
                 ),
             }
         )
 
     price_ready_count = sum(bool(row["price_history_ready"]) for row in rows)
     sector_ready_count = sum(bool(row["sector_identity_ready"]) for row in rows)
+    adjustment_ready_count = sum(
+        bool(row["adjustment_provenance_ready"]) for row in rows
+    )
+    liquidity_ready_count = sum(bool(row["liquidity_evidence_ready"]) for row in rows)
     eligible_count = sum(bool(row["research_eligible"]) for row in rows)
+    minimum_admission_count = math.ceil(
+        len(rows) * FACTOR_MARKET_DATA_ADMISSION_COVERAGE_PCT / 100
+    )
+    adjustment_gate_ready = bool(
+        rows and adjustment_ready_count >= minimum_admission_count
+    )
+    liquidity_gate_ready = bool(
+        rows and liquidity_ready_count >= minimum_admission_count
+    )
 
     def gate(key: str, title: str, ready: bool, detail: str, next_gate: str) -> dict[str, object]:
         return {
@@ -9684,19 +10626,37 @@ def build_factor_research_foundation(
         gate(
             "adjusted_prices",
             "Corporate-action-adjusted prices",
-            adjusted_price_evidence,
-            "Adjustment provenance is recorded." if adjusted_price_evidence else "The current OHLC store does not identify split/dividend adjustment provenance.",
-            "Add an auditable adjustment source and prevent mixed adjusted/unadjusted histories.",
+            adjustment_gate_ready,
+            (
+                f"{adjustment_ready_count} of {len(rows)} symbols have explicit adjustment provenance; failed rows are excluded."
+                if evidence_lookup
+                else "Adjustment provenance is recorded."
+                if adjusted_price_evidence
+                else "The current OHLC store does not identify split/dividend adjustment provenance."
+            ),
+            "Keep provenance with every refresh and exclude any symbol whose adjustment state is unknown.",
         ),
         gate(
             "liquidity",
             "Liquidity evidence",
-            liquidity_evidence,
-            "Dated liquidity evidence is recorded." if liquidity_evidence else "Cash-market volume and investable capacity are not stored with daily candles.",
-            "Persist validated cash volume, turnover and a dated investability rule.",
+            liquidity_gate_ready,
+            (
+                f"{liquidity_ready_count} of {len(rows)} symbols pass the frozen volume-coverage and median-turnover rule; failed rows are excluded."
+                if evidence_lookup
+                else "Dated liquidity evidence is recorded."
+                if liquidity_evidence
+                else "Cash-market volume and investable capacity are not stored with daily candles."
+            ),
+            "Preserve the frozen rule, never impute missing volume, and review excluded symbols before each factor run.",
         ),
     ]
     all_gates_ready = all(item["state"] == "ready" for item in gates)
+    sector_neutral_momentum = build_sector_neutral_momentum_diagnostics(
+        rows,
+        stock_histories,
+        benchmark_candles,
+        as_of=as_of,
+    )
     return {
         "ok": True,
         "contract_version": FACTOR_RESEARCH_CONTRACT_VERSION,
@@ -9726,12 +10686,20 @@ def build_factor_research_foundation(
             "total": len(rows),
             "price_history_ready": price_ready_count,
             "sector_identity_ready": sector_ready_count,
+            "adjustment_provenance_ready": adjustment_ready_count,
+            "liquidity_evidence_ready": liquidity_ready_count,
+            "minimum_market_data_admission": minimum_admission_count,
             "research_eligible": eligible_count,
         },
         "gates": gates,
         "rows": rows,
+        "sector_neutral_momentum": sector_neutral_momentum,
         "ranked_candidates": [],
-        "ranking_state": "blocked_until_all_input_gates_pass",
+        "ranking_state": (
+            "inputs_ready_ranking_not_started"
+            if all_gates_ready
+            else "blocked_until_all_input_gates_pass"
+        ),
         "limitations": [
             "Momentum fields are diagnostics, not ranks, recommendations or expected returns.",
             "The final 21 sessions are skipped; windows are defined in completed trading sessions, not calendar months.",
@@ -9788,7 +10756,7 @@ def build_alpha_research_foundation(
                 if total_equities
                 else "No calculation-ready local equity universe is available."
             ),
-            "next_gate": "Persist adjustment provenance, dated sectors and liquidity evidence before sector-neutral momentum.",
+            "next_gate": "Add permitted point-in-time quality and value fundamentals; keep momentum validation provisional until historical membership is authoritative.",
         },
         {
             "key": "catalyst",
@@ -9844,15 +10812,14 @@ def build_alpha_research_foundation(
             "boundary": "Release-native MPC decisions only; pre-2016 reconstruction is not an immediate dependency.",
         },
         "current_focus": {
-            "key": "factor_market_data",
-            "title": "Factor market-data contract v2",
+            "key": "fundamental_coverage_audit",
+            "title": "Release-known fundamentals coverage v6",
             "sequence": [
-                "persist each official dated constituent and sector snapshot",
-                "record corporate-action adjustment provenance without relabelling old OHLC",
-                "persist validated cash volume and turnover",
-                "freeze investability and missing-data rules",
-                "then add sector-neutral momentum",
-                "add quality and value only from permitted point-in-time fundamentals",
+                "load representative official non-financial filings through the frozen normalizer",
+                "review unmapped and ambiguous taxonomy fields before extending aliases",
+                "reach five release-known quarters without filling missing facts",
+                "measure company and sector coverage separately",
+                "keep composite ranks and candidate promotion disabled until chronological validation",
             ],
         },
         "limitations": [
@@ -16149,6 +17116,9 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         if path == "/api/factor-research":
             self._send_factor_research()
             return
+        if path == "/api/fundamentals":
+            self._send_fundamentals_foundation()
+            return
         super().do_GET()
 
     def _send_domestic_sentiment_core(self) -> None:
@@ -16340,6 +17310,16 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             )
             market_data_coverage = store.factor_market_data_coverage()
             market_data_total = int(market_data_coverage.get("total") or 0)
+            market_data_instruments = market_data_coverage.get("instruments")
+            market_data_by_symbol = {
+                str(item.get("symbol") or "").strip().upper(): item
+                for item in (
+                    market_data_instruments
+                    if isinstance(market_data_instruments, list)
+                    else []
+                )
+                if isinstance(item, dict) and str(item.get("symbol") or "").strip()
+            }
             payload = build_factor_research_foundation(
                 histories,
                 store.load_candles(kind="index", display_name="Nifty 50"),
@@ -16357,12 +17337,34 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                     and int(market_data_coverage.get("liquidity_ready") or 0)
                     == market_data_total
                 ),
+                market_data_evidence=market_data_by_symbol,
             )
             payload["market_data_coverage"] = {
                 "minimum_sessions": market_data_coverage.get("minimum_sessions"),
+                "rule": market_data_coverage.get("rule"),
                 "total": market_data_total,
+                "volume_coverage_ready": market_data_coverage.get(
+                    "volume_coverage_ready"
+                ),
+                "turnover_floor_ready": market_data_coverage.get(
+                    "turnover_floor_ready"
+                ),
                 "adjustment_ready": market_data_coverage.get("adjustment_ready"),
                 "liquidity_ready": market_data_coverage.get("liquidity_ready"),
+                "excluded_symbols": [
+                    {
+                        "symbol": item.get("symbol"),
+                        "positive_volume_coverage_pct": item.get(
+                            "positive_volume_coverage_pct"
+                        ),
+                        "median_daily_turnover_inr": item.get(
+                            "median_daily_turnover_inr"
+                        ),
+                    }
+                    for item in market_data_by_symbol.values()
+                    if not item.get("liquidity_evidence_ready")
+                    or not item.get("adjustment_provenance_ready")
+                ],
                 "adjustment_source": KITE_ADJUSTMENT_PROVENANCE_URL,
                 "candle_schema_version": 2,
             }
@@ -16377,6 +17379,150 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 HTTPStatus.SERVICE_UNAVAILABLE,
                 {"ok": False, "reason": str(error)},
             )
+
+    @staticmethod
+    def _calculate_fundamentals_foundation_payload() -> dict[str, object]:
+        store = _get_eod_store()
+        stock_inventory = store.list_instruments(kind="stock")
+        histories = {
+            str(item["display_name"]): store.load_candles(
+                kind="stock", display_name=str(item["display_name"])
+            )
+            for item in stock_inventory
+        }
+        stored_snapshot = store.load_latest_workspace_snapshot(
+            "nifty500-constituent-snapshot"
+        )
+        snapshot_payload = (
+            stored_snapshot.get("payload")
+            if isinstance(stored_snapshot, dict)
+            and isinstance(stored_snapshot.get("payload"), dict)
+            else None
+        )
+        market_data_coverage = store.factor_market_data_coverage()
+        instruments = market_data_coverage.get("instruments")
+        evidence = {
+            str(item.get("symbol") or "").strip().upper(): item
+            for item in (instruments if isinstance(instruments, list) else [])
+            if isinstance(item, dict) and str(item.get("symbol") or "").strip()
+        }
+        factor_payload = build_factor_research_foundation(
+            histories,
+            store.load_candles(kind="index", display_name="Nifty 50"),
+            expected_through=completed_history_date(datetime.now(INDIA_TIMEZONE)),
+            constituent_snapshot=snapshot_payload,
+            market_data_evidence=evidence,
+        )
+        latest_prices = {
+            symbol: float(history[-1]["close"])
+            for symbol, history in histories.items()
+            if history
+        }
+        return build_point_in_time_fundamentals_foundation(
+            store.load_fundamental_filings(),
+            factor_payload["rows"],
+            latest_prices,
+            known_at=datetime.now(INDIA_TIMEZONE),
+        )
+
+    def _send_fundamentals_foundation(self) -> None:
+        try:
+            self._send_json(
+                HTTPStatus.OK,
+                self._calculate_fundamentals_foundation_payload(),
+            )
+        except ValueError as error:
+            self._send_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"ok": False, "reason": str(error)},
+            )
+
+    def _send_fundamentals_import(self, payload: dict[str, object]) -> None:
+        file_name = payload.get("file_name")
+        filings = payload.get("filings")
+        if (
+            not isinstance(file_name, str)
+            or not re.fullmatch(r"[A-Za-z0-9._ -]{1,128}\.json", file_name)
+            or not isinstance(filings, list)
+        ):
+            self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "reason": "invalid_fundamental_import"},
+            )
+            return
+        try:
+            write_result = _get_eod_store().append_fundamental_filings(
+                filings,
+                source_file_name=file_name,
+            )
+            result = self._calculate_fundamentals_foundation_payload()
+        except FundamentalFilingConflictError:
+            self._send_json(
+                HTTPStatus.CONFLICT,
+                {"ok": False, "reason": "stored_fundamental_filing_conflict"},
+            )
+            return
+        except ValueError as error:
+            self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "reason": str(error)},
+            )
+            return
+        self._send_json(
+            HTTPStatus.OK,
+            {**result, "write_result": write_result},
+        )
+
+    def _send_fundamentals_normalize_import(self, payload: dict[str, object]) -> None:
+        file_name = payload.get("file_name")
+        encoded = payload.get("content_base64")
+        metadata = payload.get("metadata")
+        if (
+            not isinstance(file_name, str)
+            or not isinstance(encoded, str)
+            or not isinstance(metadata, dict)
+        ):
+            self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "reason": "invalid_fundamental_export"},
+            )
+            return
+        try:
+            raw = base64.b64decode(encoded, validate=True)
+            normalized = normalize_official_fundamental_export(
+                file_name,
+                raw,
+                metadata,
+            )
+            write_result = _get_eod_store().append_fundamental_filings(
+                [normalized["filing"]],
+                source_file_name=file_name,
+            )
+            result = self._calculate_fundamentals_foundation_payload()
+        except FundamentalFilingConflictError:
+            self._send_json(
+                HTTPStatus.CONFLICT,
+                {"ok": False, "reason": "stored_fundamental_filing_conflict"},
+            )
+            return
+        except (ValueError, binascii.Error) as error:
+            reason = str(error) if isinstance(error, ValueError) else "invalid_fundamental_export"
+            self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "reason": reason},
+            )
+            return
+        self._send_json(
+            HTTPStatus.OK,
+            {
+                **result,
+                "normalizer": {
+                    "contract_version": normalized["contract_version"],
+                    "audit": normalized["audit"],
+                },
+                "write_result": write_result,
+            },
+        )
 
     def _send_local_news_events(self) -> None:
         live_items = _get_eod_store().load_news_event_records()
@@ -18826,6 +19972,18 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             payload = self._read_json_payload(MAX_EARNINGS_IMPORT_BYTES)
             if payload is not None:
                 self._send_earnings_import(payload)
+            return
+
+        if self.path == "/api/fundamentals/import":
+            payload = self._read_json_payload(MAX_FUNDAMENTAL_IMPORT_BYTES)
+            if payload is not None:
+                self._send_fundamentals_import(payload)
+            return
+
+        if self.path == "/api/fundamentals/normalize-import":
+            payload = self._read_json_payload(MAX_FUNDAMENTAL_IMPORT_BYTES * 2)
+            if payload is not None:
+                self._send_fundamentals_normalize_import(payload)
             return
 
         if self.path == "/api/news-events/nse-manual-import":

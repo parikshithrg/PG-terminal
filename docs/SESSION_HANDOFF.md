@@ -1,8 +1,8 @@
 # Session handoff
 
-Updated: 2026-10-16
+Updated: 2026-10-17
 
-## Alpha research build checkpoint — 2026-10-16
+## Alpha research build checkpoint — 2026-10-17
 
 - The authoritative sequence is now validated data → regime/risk budget →
   factor core → catalyst overlay → portfolio-impact gate → chronological
@@ -14,16 +14,47 @@ Updated: 2026-10-16
   F&O universe with a reproducible hash, audits aligned history and dated sector
   coverage, and exposes raw 12-1, 6-1 and 3-1 Nifty-relative momentum
   diagnostics. It does not rank securities.
-- The current OHLC store does not record corporate-action adjustment provenance
-  or cash-market volume/turnover. These remain blocking gates rather than
-  silently assumed inputs. Official NIFTY 500 constituent snapshots will now be
-  persisted by the market-breadth refresh for dated sector evidence.
-- `factor-market-data-v2` storage is implemented and awaits a connected EOD
-  refresh. Schema v2 records volume and adjustment provenance; the NIFTY 500
-  breadth pass performs metadata-only backfill for local F&O equities and
-  refuses to alter mismatched OHLC. Coverage and all conflicts remain visible.
-  Only after the live refresh passes should sector-neutral momentum,
-  point-in-time quality/value and composite rank validation begin.
+- `factor-market-data-v2` is complete and operational. The connected refresh
+  recorded adjustment provenance for all 210 stored F&O equities, persisted the
+  official dated NIFTY 500 constituent/sector snapshot and populated recent
+  cash volume without altering immutable OHLC.
+- The frozen `factor-liquidity-v1` admission rule requires 240 positive-volume
+  observations among the latest 252 completed sessions and at least ₹10 crore
+  median daily cash turnover. Missing volume is never imputed. The 15-Oct-26
+  audit admits 209/210 symbols; HINDUNILVR remains explicitly excluded because
+  only 210 recent sessions have matching volume metadata. All 210 pass the
+  turnover floor and adjustment-provenance gate.
+- `sector-neutral-momentum-v3` is complete as a diagnostic foundation. Frozen
+  50%/30%/20% 12-1, 6-1 and 3-1 weights are winsorized and standardized inside
+  sector groups of at least five stocks. On 15-Oct-26, 198/209 admitted stocks
+  score across 14 sectors; four thin sectors exclude 11 stocks. The provisional
+  24-month audit reports 0.8242 mean rank stability and 28.33% mean one-way
+  turnover under a disclosed 20-basis-point cost sensitivity. It remains
+  non-investable because current membership is applied historically, and no
+  candidate is promoted.
+- `point-in-time-fundamentals-v4` is complete as an ingestion and definition
+  foundation. A new append-only filing store accepts only normalized JSON from
+  user-supplied official NSE/BSE issuer filings, keeps fiscal period, broadcast
+  timestamp and revision identity, and rejects conflicting filing IDs. Automated
+  exchange-site collection is disabled. The first frozen non-financial-company
+  metrics are TTM ROE, operating margin, net-debt/equity, earnings yield and
+  book-to-market, with consolidated statements preferred and bases never mixed.
+  Financial Services is withheld pending a sector-specific model. The Alpha
+  Research page shows coverage and raw-metric readiness but returns no scores,
+  composite ranks or candidates.
+- `fundamental-xbrl-normalizer-v5` is complete as a defensive local parser. The
+  Alpha Research page accepts manually downloaded official NSE/BSE XBRL, XML,
+  iXBRL/HTML and Excel exports plus explicit filing identity. It matches XBRL
+  values only to the declared period context, requires an unambiguous or selected
+  Excel value column, applies the declared INR scale, preserves amendments and
+  exposes unmapped or ambiguous taxonomy fields. It never infers broadcast time,
+  statement basis, fiscal period or source; unsafe XML entity declarations are
+  rejected. Parsed facts enter the immutable v4 filing store and no score or
+  candidate is produced.
+- The active milestone is now `fundamental-coverage-audit-v6`: load
+  representative official non-financial filings through the frozen normalizer,
+  review taxonomy gaps explicitly and measure five-release-known-quarter company
+  and sector coverage without filling missing facts.
 - RBI MPC release-native coverage from February 2016 through October 2026 is
   complete for the current scope. Pre-2016 policy reconstruction is deferred.
 
@@ -702,12 +733,14 @@ orders or position sizing.
    overview rather than a table-heavy audit page: allocation, top similarity
    pairs, a coverage-labelled structural/regime-fit score, and concise review
    prompts are the only primary outputs.
-2. Build `factor-market-data-v2`: persist dated official sector snapshots,
-   corporate-action adjustment provenance, cash volume and turnover, then
-   freeze the investability and missing-data rules. The factor foundation and
-   raw momentum diagnostics are complete; sector-neutral scores and composite
-   ranks remain blocked until these data gates pass. Pre-2016 RBI policy
-   reconstruction is deferred and is not an immediate dependency.
+2. Build `fundamental-coverage-audit-v6`. The release-aware store, official
+   manual-import boundary, non-financial quality/value definitions and defensive
+   XBRL/Excel normalizer are frozen. Load representative manually downloaded
+   official filings, review unmapped and ambiguous taxonomy fields before adding
+   aliases, and measure at least five release-known quarters per admitted company
+   and sector. Do not scrape exchange websites, use aggregator fundamentals,
+   fill missing facts or calculate a composite rank. Pre-2016 RBI policy
+   reconstruction remains deferred.
 3. Live-check the first full NIFTY 500 five-year retrieval after reconnecting
    Kite, including year switching, coverage counts, and reverse ranking order.
 4. Begin the queued Portfolio performance and Alpha Opportunities roadmap:

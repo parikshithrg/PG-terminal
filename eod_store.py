@@ -10,6 +10,7 @@ import sqlite3
 from contextlib import closing
 from datetime import date, datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 
 SCHEMA_VERSION = 2
@@ -19,6 +20,9 @@ ADJUSTMENT_STATUSES = {
     "provider_reported_adjusted",
     "not_applicable_index",
 }
+FACTOR_LIQUIDITY_RULE_VERSION = "factor-liquidity-v1"
+FACTOR_LIQUIDITY_MIN_POSITIVE_COVERAGE_PCT = 95.0
+FACTOR_LIQUIDITY_MIN_MEDIAN_TURNOVER_INR = 100_000_000.0
 
 
 class CandleConflictError(ValueError):
@@ -47,6 +51,10 @@ class FuturesSnapshotConflictError(ValueError):
 
 class GlobalRiskConflictError(ValueError):
     """Raised when a stored global-risk observation changes."""
+
+
+class FundamentalFilingConflictError(ValueError):
+    """Raised when one immutable official filing identity changes."""
 
 
 class EODStore:
@@ -288,6 +296,29 @@ class EODStore:
 
                     CREATE INDEX IF NOT EXISTS earnings_records_period_idx
                     ON earnings_records(symbol, basis, period_end, imported_at);
+
+                    CREATE TABLE IF NOT EXISTS fundamental_filings (
+                        filing_id TEXT PRIMARY KEY,
+                        record_hash TEXT NOT NULL,
+                        symbol TEXT NOT NULL,
+                        company_name TEXT NOT NULL,
+                        sector TEXT NOT NULL,
+                        basis TEXT NOT NULL CHECK (basis IN ('consolidated', 'standalone')),
+                        period_type TEXT NOT NULL CHECK (period_type IN ('quarterly', 'annual')),
+                        period_end TEXT NOT NULL,
+                        reported_at TEXT NOT NULL,
+                        revision_sequence INTEGER NOT NULL,
+                        currency TEXT NOT NULL CHECK (currency = 'INR'),
+                        unit TEXT NOT NULL CHECK (unit = 'absolute'),
+                        facts_json TEXT NOT NULL,
+                        source_url TEXT NOT NULL,
+                        source_file_name TEXT NOT NULL,
+                        imported_at TEXT NOT NULL,
+                        schema_version INTEGER NOT NULL
+                    );
+
+                    CREATE INDEX IF NOT EXISTS fundamental_filings_point_in_time_idx
+                    ON fundamental_filings(symbol, reported_at, period_end, revision_sequence);
 
                     CREATE TABLE IF NOT EXISTS workspace_snapshots (
                         snapshot_key TEXT NOT NULL,
@@ -700,14 +731,23 @@ class EODStore:
         self,
         *,
         minimum_sessions: int = 252,
+        minimum_positive_volume_coverage_pct: float = FACTOR_LIQUIDITY_MIN_POSITIVE_COVERAGE_PCT,
+        minimum_median_turnover_inr: float = FACTOR_LIQUIDITY_MIN_MEDIAN_TURNOVER_INR,
     ) -> dict[str, object]:
         if minimum_sessions < 1 or minimum_sessions > 5000:
             raise ValueError("invalid_factor_coverage_window")
+        if not 0 < minimum_positive_volume_coverage_pct <= 100:
+            raise ValueError("invalid_factor_volume_coverage")
+        if not math.isfinite(minimum_median_turnover_inr) or minimum_median_turnover_inr < 0:
+            raise ValueError("invalid_factor_turnover_floor")
+        minimum_positive_sessions = math.ceil(
+            minimum_sessions * minimum_positive_volume_coverage_pct / 100
+        )
         with closing(self._connect()) as connection:
             rows = connection.execute(
                 """
                 WITH ranked AS (
-                    SELECT c.instrument_id, c.session_date, c.volume,
+                    SELECT c.instrument_id, c.session_date, c.close, c.volume,
                            ROW_NUMBER() OVER (
                                PARTITION BY c.instrument_id
                                ORDER BY c.session_date DESC
@@ -719,39 +759,103 @@ class EODStore:
                       AND c.validation_status = 'validated'
                 )
                 SELECT i.display_name, i.adjustment_status,
-                       i.adjustment_source_url,
-                       COUNT(r.session_date) AS recent_sessions,
-                       COUNT(r.volume) AS volume_sessions,
-                       SUM(CASE WHEN r.volume > 0 THEN 1 ELSE 0 END) AS positive_volume_sessions
+                       i.adjustment_source_url, r.session_date, r.close, r.volume
                 FROM instruments i
                 LEFT JOIN ranked r
                   ON r.instrument_id = i.instrument_id
                  AND r.recency_rank <= ?
                 WHERE i.kind = 'stock'
-                GROUP BY i.instrument_id
-                ORDER BY i.display_name
+                ORDER BY i.display_name, r.session_date
                 """,
                 (minimum_sessions,),
             ).fetchall()
-        instruments = [
-            {
-                "symbol": row["display_name"],
-                "recent_sessions": int(row["recent_sessions"]),
-                "volume_sessions": int(row["volume_sessions"]),
-                "positive_volume_sessions": int(row["positive_volume_sessions"] or 0),
-                "liquidity_evidence_ready": int(row["volume_sessions"]) >= minimum_sessions,
-                "adjustment_status": row["adjustment_status"],
-                "adjustment_source_url": row["adjustment_source_url"],
-                "adjustment_provenance_ready": bool(
-                    row["adjustment_status"] != "provider_unspecified"
-                    and row["adjustment_source_url"]
-                ),
-            }
-            for row in rows
-        ]
+        grouped: dict[str, dict[str, object]] = {}
+        for row in rows:
+            symbol = str(row["display_name"])
+            item = grouped.setdefault(
+                symbol,
+                {
+                    "symbol": symbol,
+                    "recent_sessions": 0,
+                    "volume_sessions": 0,
+                    "positive_volume_sessions": 0,
+                    "turnovers": [],
+                    "adjustment_status": row["adjustment_status"],
+                    "adjustment_source_url": row["adjustment_source_url"],
+                },
+            )
+            if row["session_date"] is None:
+                continue
+            item["recent_sessions"] = int(item["recent_sessions"]) + 1
+            volume = row["volume"]
+            if volume is not None:
+                item["volume_sessions"] = int(item["volume_sessions"]) + 1
+            if volume is not None and int(volume) > 0:
+                item["positive_volume_sessions"] = int(
+                    item["positive_volume_sessions"]
+                ) + 1
+                item["turnovers"].append(float(row["close"]) * int(volume))
+
+        instruments: list[dict[str, object]] = []
+        for item in grouped.values():
+            turnovers = sorted(float(value) for value in item.pop("turnovers"))
+            middle = len(turnovers) // 2
+            median_turnover = None
+            if turnovers:
+                median_turnover = (
+                    turnovers[middle]
+                    if len(turnovers) % 2
+                    else (turnovers[middle - 1] + turnovers[middle]) / 2
+                )
+            recent_sessions = int(item["recent_sessions"])
+            positive_sessions = int(item["positive_volume_sessions"])
+            positive_coverage_pct = (
+                positive_sessions / recent_sessions * 100 if recent_sessions else 0.0
+            )
+            volume_coverage_ready = bool(
+                recent_sessions >= minimum_sessions
+                and positive_sessions >= minimum_positive_sessions
+            )
+            turnover_ready = bool(
+                median_turnover is not None
+                and median_turnover >= minimum_median_turnover_inr
+            )
+            instruments.append(
+                {
+                    **item,
+                    "positive_volume_coverage_pct": round(positive_coverage_pct, 2),
+                    "median_daily_turnover_inr": (
+                        round(median_turnover, 2)
+                        if median_turnover is not None
+                        else None
+                    ),
+                    "volume_coverage_ready": volume_coverage_ready,
+                    "turnover_floor_ready": turnover_ready,
+                    "liquidity_evidence_ready": bool(
+                        volume_coverage_ready and turnover_ready
+                    ),
+                    "adjustment_provenance_ready": bool(
+                        item["adjustment_status"] != "provider_unspecified"
+                        and item["adjustment_source_url"]
+                    ),
+                }
+            )
         return {
             "minimum_sessions": minimum_sessions,
+            "rule": {
+                "version": FACTOR_LIQUIDITY_RULE_VERSION,
+                "minimum_positive_volume_coverage_pct": minimum_positive_volume_coverage_pct,
+                "minimum_positive_volume_sessions": minimum_positive_sessions,
+                "minimum_median_daily_turnover_inr": minimum_median_turnover_inr,
+                "missing_volume_policy": "exclude_symbol_when_gate_fails;do_not_impute",
+            },
             "total": len(instruments),
+            "volume_coverage_ready": sum(
+                bool(row["volume_coverage_ready"]) for row in instruments
+            ),
+            "turnover_floor_ready": sum(
+                bool(row["turnover_floor_ready"]) for row in instruments
+            ),
             "liquidity_ready": sum(
                 bool(row["liquidity_evidence_ready"]) for row in instruments
             ),
@@ -1458,6 +1562,211 @@ class EODStore:
                 (limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def append_fundamental_filings(
+        self,
+        rows: list[dict[str, object]],
+        *,
+        source_file_name: str,
+        imported_at: str | None = None,
+    ) -> dict[str, int]:
+        if (
+            not isinstance(rows, list)
+            or not rows
+            or not isinstance(source_file_name, str)
+            or not re.fullmatch(
+                r"[A-Za-z0-9._ -]{1,128}\.(?:json|xbrl|xml|xhtml|html|xlsx)",
+                source_file_name,
+                re.IGNORECASE,
+            )
+        ):
+            raise ValueError("invalid_fundamental_import")
+        timestamp = imported_at or datetime.now(timezone.utc).isoformat()
+        allowed_facts = {
+            "revenue",
+            "ebit",
+            "profit_after_tax",
+            "total_assets",
+            "total_equity",
+            "total_debt",
+            "cash_and_equivalents",
+            "operating_cash_flow",
+            "shares_outstanding",
+        }
+        official_hosts = {
+            "www.nseindia.com",
+            "nseindia.com",
+            "nsearchives.nseindia.com",
+            "www.bseindia.com",
+            "bseindia.com",
+        }
+        prepared: list[tuple[object, ...]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                raise ValueError("invalid_fundamental_import")
+            try:
+                filing_id = str(row["filing_id"]).strip()
+                symbol = str(row["symbol"]).strip().upper()
+                company_name = str(row["company_name"]).strip()
+                sector = str(row["sector"]).strip()
+                basis = str(row["basis"]).strip().lower()
+                period_type = str(row["period_type"]).strip().lower()
+                period_end = date.fromisoformat(str(row["period_end"]))
+                reported_text = str(row["reported_at"]).strip().replace("Z", "+00:00")
+                reported_at = datetime.fromisoformat(reported_text)
+                revision_sequence = int(row["revision_sequence"])
+                currency = str(row["currency"]).strip().upper()
+                unit = str(row["unit"]).strip().lower()
+                source_url = str(row["source_url"]).strip()
+                raw_facts = row["facts"]
+            except (KeyError, TypeError, ValueError) as error:
+                raise ValueError("invalid_fundamental_import") from error
+            if (
+                not re.fullmatch(r"[A-Za-z0-9._:-]{1,160}", filing_id)
+                or not re.fullmatch(r"[A-Z0-9&-]{1,32}", symbol)
+                or not company_name
+                or not sector
+                or basis not in {"consolidated", "standalone"}
+                or period_type not in {"quarterly", "annual"}
+                or reported_at.utcoffset() is None
+                or period_end > reported_at.date()
+                or revision_sequence < 0
+                or currency != "INR"
+                or unit != "absolute"
+                or urlsplit(source_url).scheme != "https"
+                or urlsplit(source_url).hostname not in official_hosts
+                or not isinstance(raw_facts, dict)
+                or not raw_facts
+                or not set(raw_facts).issubset(allowed_facts)
+            ):
+                raise ValueError("invalid_fundamental_import")
+            facts: dict[str, float] = {}
+            for key, raw_value in raw_facts.items():
+                if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
+                    raise ValueError("invalid_fundamental_import")
+                value = float(raw_value)
+                if not math.isfinite(value):
+                    raise ValueError("invalid_fundamental_import")
+                if key in {
+                    "revenue",
+                    "total_assets",
+                    "total_equity",
+                    "shares_outstanding",
+                } and value <= 0:
+                    raise ValueError("invalid_fundamental_import")
+                if key in {"total_debt", "cash_and_equivalents"} and value < 0:
+                    raise ValueError("invalid_fundamental_import")
+                facts[key] = value
+            facts_json = json.dumps(
+                facts, sort_keys=True, separators=(",", ":"), allow_nan=False
+            )
+            canonical = json.dumps(
+                {
+                    "filing_id": filing_id,
+                    "symbol": symbol,
+                    "company_name": company_name,
+                    "sector": sector,
+                    "basis": basis,
+                    "period_type": period_type,
+                    "period_end": period_end.isoformat(),
+                    "reported_at": reported_at.isoformat(),
+                    "revision_sequence": revision_sequence,
+                    "currency": currency,
+                    "unit": unit,
+                    "facts": facts,
+                    "source_url": source_url,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            record_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+            prepared.append(
+                (
+                    filing_id,
+                    record_hash,
+                    symbol,
+                    company_name,
+                    sector,
+                    basis,
+                    period_type,
+                    period_end.isoformat(),
+                    reported_at.isoformat(),
+                    revision_sequence,
+                    currency,
+                    unit,
+                    facts_json,
+                    source_url,
+                    source_file_name,
+                    timestamp,
+                    SCHEMA_VERSION,
+                )
+            )
+        inserted = 0
+        duplicates = 0
+        with closing(self._connect()) as connection:
+            with connection:
+                for record in prepared:
+                    existing = connection.execute(
+                        "SELECT record_hash FROM fundamental_filings WHERE filing_id = ?",
+                        (record[0],),
+                    ).fetchone()
+                    if existing is not None:
+                        if existing["record_hash"] != record[1]:
+                            raise FundamentalFilingConflictError(
+                                f"stored_fundamental_filing_conflict:{record[0]}"
+                            )
+                        duplicates += 1
+                        continue
+                    connection.execute(
+                        """
+                        INSERT INTO fundamental_filings (
+                            filing_id, record_hash, symbol, company_name, sector,
+                            basis, period_type, period_end, reported_at,
+                            revision_sequence, currency, unit, facts_json,
+                            source_url, source_file_name, imported_at, schema_version
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        record,
+                    )
+                    inserted += 1
+        return {"inserted": inserted, "duplicates": duplicates}
+
+    def load_fundamental_filings(
+        self,
+        *,
+        known_at: datetime | None = None,
+        limit: int = 50000,
+    ) -> list[dict[str, object]]:
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 100000:
+            raise ValueError("invalid_fundamental_limit")
+        clauses: list[str] = []
+        parameters: list[object] = []
+        if known_at is not None:
+            if known_at.utcoffset() is None:
+                raise ValueError("invalid_fundamental_known_at")
+            clauses.append("reported_at <= ?")
+            parameters.append(known_at.isoformat())
+        query = """
+            SELECT filing_id, record_hash, symbol, company_name, sector, basis,
+                   period_type, period_end, reported_at, revision_sequence,
+                   currency, unit, facts_json, source_url, source_file_name,
+                   imported_at
+            FROM fundamental_filings
+        """
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY reported_at DESC, symbol, period_end DESC, revision_sequence DESC LIMIT ?"
+        parameters.append(limit)
+        with closing(self._connect()) as connection:
+            rows = connection.execute(query, parameters).fetchall()
+        return [
+            {
+                **{key: row[key] for key in row.keys() if key != "facts_json"},
+                "facts": json.loads(row["facts_json"]),
+            }
+            for row in rows
+        ]
 
     def append_macro_snapshots(
         self,

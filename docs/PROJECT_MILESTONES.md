@@ -56,21 +56,61 @@ this section, this section wins.
    histories and dated sector coverage, and calculates raw 12-1, 6-1 and 3-1
    Nifty-relative momentum diagnostics. Corporate-action adjustment, liquidity
    and sector gates remain explicit; the contract returns no ranked candidates.
-3. `factor-market-data-v2` — **in progress; storage contract complete**. Schema
-   v2 stores cash-market volume plus explicit adjustment status/source, while
-   immutable OHLC remains unchanged. The NIFTY 500 breadth refresh now attempts
-   metadata-only backfill for locally stored F&O equities: volume is written
-   only when fetched OHLC matches exactly, and price/volume conflicts remain
-   visible. It also persists the official dated constituent/sector snapshot.
-   The next connected EOD refresh must populate and audit live coverage before
-   this milestone can be marked operational.
-4. Add sector-neutral momentum only after those gates pass; then admit quality
-   and value exclusively from permitted point-in-time fundamentals.
-5. Validate composite ranks chronologically and net of costs before connecting
+3. `factor-market-data-v2` — **complete and operational**. Schema v2 stores
+   cash-market volume plus explicit adjustment status/source, while immutable
+   OHLC remains unchanged. The connected NIFTY 500 breadth refresh populated
+   adjustment provenance for all 210 stored F&O equities and official dated
+   sector identity for the frozen universe. The frozen `factor-liquidity-v1`
+   rule requires at least 240 positive-volume observations among the latest
+   252 completed sessions (95%) and median daily cash turnover of at least
+   ₹10 crore; missing volume is never imputed. On the 15-Oct-26 audit, 209
+   symbols passed both liquidity tests and all 210 passed adjustment
+   provenance. HINDUNILVR remains visibly excluded with 210/252 matching volume
+   sessions after immutable-price conflict protection. A failed row is excluded
+   from factor admission rather than silently repaired or allowed to block the
+   other qualifying rows.
+4. `sector-neutral-momentum-v3` — **complete as a diagnostic foundation;
+   investable validation remains blocked**. The engine winsorizes each 12-1,
+   6-1 and 3-1 input at its sector's 5th/95th percentiles, standardizes within
+   sector, and combines them at frozen 50%/30%/20% weights. A sector needs at
+   least five admitted stocks. The 15-Oct-26 audit scores 198 of 209 admitted
+   equities across 14 sectors; Construction, Construction Materials,
+   Telecommunication and Textiles exclude 11 stocks as thin groups. A
+   24-month month-end audit reports 0.8242 mean rank stability, 28.33% mean
+   one-way turnover and a disclosed 20-basis-point cost sensitivity. It is
+   labelled `provisional_current_membership_only`: today's frozen universe and
+   sector map are not point-in-time historical membership. Diagnostic ranks are
+   visible, but candidate promotion remains disabled.
+5. `point-in-time-fundamentals-v4` — **complete as an ingestion and definition
+   foundation; filing coverage remains pending**. The approved evidence contract
+   is issuer-filed NSE/BSE financial results supplied as a manual official
+   XBRL/Excel export and normalized locally; automated exchange-site collection
+   remains disabled. The append-only store preserves filing, fiscal-period,
+   broadcast-time and revision identity. The first frozen industrial-company
+   definitions expose TTM ROE, operating margin, net-debt/equity, earnings yield
+   and book-to-market while preferring consolidated statements and never mixing
+   bases. Financial Services is explicitly deferred to a sector-specific model.
+   Raw metrics, coverage and missing evidence are visible, but factor scores,
+   composite ranks and candidates remain empty.
+6. `fundamental-xbrl-normalizer-v5` — **complete as a defensive local parser**.
+   The Alpha Research page accepts manually downloaded official NSE/BSE XBRL,
+   XML, iXBRL/HTML and Excel exports. Filing identity, broadcast time, statement
+   basis, fiscal period, amount scale, revision sequence and official source URL
+   are required rather than inferred. XBRL facts are matched only to the selected
+   period context; Excel files require a unique numeric value or an explicit
+   one-based value column. Ambiguous facts are withheld, unmapped taxonomy labels
+   are audited, XML entity declarations are rejected and normalized records enter
+   the immutable v4 filing store. No exchange scraping or aggregator fallback is
+   used.
+7. `fundamental-coverage-audit-v6` — **next**. Load representative official
+   non-financial filings, review each unmapped/ambiguous taxonomy field before
+   extending the alias registry, and measure five-release-known-quarter coverage
+   by company and sector without filling missing facts.
+8. Validate composite ranks chronologically and net of costs before connecting
    regime compatibility.
-6. Add the catalyst and portfolio-impact overlays only after their own evidence
+9. Add the catalyst and portfolio-impact overlays only after their own evidence
    gates pass.
-7. Produce auditable research cards last: hypothesis, evidence, uncertainty,
+10. Produce auditable research cards last: hypothesis, evidence, uncertainty,
    benchmark, horizon, risk budget, portfolio impact and invalidation.
 
 ### RBI policy scope decision
