@@ -33,6 +33,11 @@ from server import (
     build_alpha_research_foundation,
     build_factor_research_foundation,
     build_point_in_time_fundamentals_foundation,
+    build_fundamental_coverage_audit,
+    build_composite_factor_validation_contract,
+    build_candidate_overlay_contract,
+    build_research_card_contract,
+    build_alpha_research_story,
     normalize_official_fundamental_export,
     build_dashboard_seasonality_summary,
     build_dashboard_seasonality_universe_summary,
@@ -141,7 +146,8 @@ class AlphaResearchFoundationTest(unittest.TestCase):
         self.assertEqual(payload["contract_version"], "alpha-research-foundation-v1")
         self.assertEqual(payload["summary"]["ranked_ideas"], 0)
         self.assertEqual(payload["policy_history"]["state"], "complete_for_current_scope")
-        self.assertEqual(payload["current_focus"]["key"], "fundamental_coverage_audit")
+        self.assertEqual(payload["current_focus"]["key"], "alpha_research_progressive_disclosure")
+        self.assertEqual(payload["research_story"]["contract_version"], "alpha-research-story-v11")
         factor = next(layer for layer in payload["layers"] if layer["key"] == "factor_core")
         decision = next(layer for layer in payload["layers"] if layer["key"] == "decision")
         self.assertEqual(factor["state"], "partial")
@@ -155,6 +161,65 @@ class AlphaResearchFoundationTest(unittest.TestCase):
         catalyst = next(layer for layer in payload["layers"] if layer["key"] == "catalyst")
         self.assertEqual(factor["state"], "blocked")
         self.assertEqual(catalyst["state"], "blocked")
+
+    def test_candidate_overlay_contract_keeps_missing_evidence_explicit(self):
+        overlay = build_candidate_overlay_contract(
+            earnings_record_count=0,
+            macro_event_count=7,
+            reviewed_news_count=0,
+        )
+        self.assertEqual(overlay["contract_version"], "candidate-overlays-v9")
+        self.assertEqual(overlay["summary"]["catalyst_gates_ready"], 1)
+        self.assertEqual(overlay["summary"]["candidate_impacts"], 0)
+        self.assertEqual(overlay["catalyst_gates"][0]["state"], "ready")
+        self.assertEqual(overlay["catalyst_gates"][1]["state"], "blocked")
+        self.assertEqual(overlay["portfolio_gates"][0]["state"], "client_runtime_required")
+        self.assertEqual(overlay["outputs"]["ranked_candidates"], [])
+
+    def test_candidate_overlay_earnings_gate_uses_frozen_minimum(self):
+        overlay = build_candidate_overlay_contract(
+            earnings_record_count=20,
+            macro_event_count=1,
+            reviewed_news_count=3,
+        )
+        self.assertEqual(overlay["summary"]["catalyst_gates_ready"], 3)
+        self.assertEqual(overlay["catalyst_gates"][1]["state"], "ready")
+        self.assertEqual(overlay["catalyst_gates"][3]["state"], "blocked")
+
+    def test_research_card_contract_withholds_incomplete_cards(self):
+        result = build_research_card_contract({"outputs": {"ranked_candidates": []}})
+
+        self.assertEqual(result["contract_version"], "auditable-research-cards-v10")
+        self.assertEqual(result["status"], "publication_blocked")
+        self.assertEqual(result["summary"]["required_fields"], 8)
+        self.assertEqual(result["summary"]["publication_gates"], 4)
+        self.assertEqual(result["summary"]["gates_ready"], 0)
+        self.assertEqual(result["cards"], [])
+
+    def test_research_card_candidate_does_not_bypass_remaining_gates(self):
+        result = build_research_card_contract(
+            {"outputs": {"ranked_candidates": [{"symbol": "TEST"}]}}
+        )
+
+        self.assertEqual(result["summary"]["gates_ready"], 1)
+        self.assertEqual(result["publication_gates"][0]["state"], "ready")
+        self.assertEqual(result["status"], "publication_blocked")
+        self.assertEqual(result["cards"], [])
+
+    def test_alpha_research_story_names_first_blocker_without_inventing_an_idea(self):
+        layers = [
+            {"title": "Validated data", "state": "ready", "summary": "Ready", "next_gate": "Maintain it."},
+            {"title": "Factor core", "state": "partial", "summary": "Partial", "next_gate": "Add evidence."},
+            {"title": "Ranked research cards", "state": "blocked", "summary": "No candidates.", "next_gate": "Validate a candidate."},
+        ]
+        cards = build_research_card_contract({"outputs": {"ranked_candidates": []}})
+        story = build_alpha_research_story(layers, cards)
+
+        self.assertEqual(story["contract_version"], "alpha-research-story-v11")
+        self.assertEqual(story["status"], "evidence_incomplete")
+        self.assertEqual(story["summary"]["operational"], 1)
+        self.assertEqual(story["story_cards"][1]["title"], "Ranked research cards")
+        self.assertEqual(story["summary"]["cards_published"], 0)
 
 
 class FactorResearchFoundationTest(unittest.TestCase):
@@ -475,6 +540,137 @@ class FactorResearchFoundationTest(unittest.TestCase):
         self.assertEqual(result["filing"]["facts"]["revenue"], 1_200_000_000.0)
         self.assertEqual(result["filing"]["facts"]["profit_after_tax"], 150_000_000.0)
         self.assertEqual(result["audit"]["value_column"], 3)
+
+    def test_fundamental_coverage_audit_keeps_sector_and_taxonomy_gates_visible(self):
+        foundation = {
+            "known_at": "2026-10-31T00:00:00+05:30",
+            "rows": [
+                {
+                    "symbol": "AAA",
+                    "sector": "Industrials",
+                    "quarters_known": 5,
+                    "latest_period_end": "2026-09-30",
+                    "latest_reported_at": "2026-10-20T18:30:00+05:30",
+                    "quality_ready": True,
+                    "value_ready": True,
+                    "missing_evidence": [],
+                },
+                {
+                    "symbol": "BBB",
+                    "sector": "Industrials",
+                    "quarters_known": 2,
+                    "quality_ready": False,
+                    "value_ready": False,
+                    "missing_evidence": ["five_release_known_quarters"],
+                },
+                {
+                    "symbol": "BANK",
+                    "sector": "Financial Services",
+                    "quarters_known": 5,
+                    "quality_ready": False,
+                    "value_ready": False,
+                    "missing_evidence": ["financial_sector_model"],
+                },
+            ],
+        }
+        result = build_fundamental_coverage_audit(
+            foundation,
+            [
+                {
+                    "symbol": "AAA",
+                    "sector": "Industrials",
+                    "audit": {
+                        "mapped_facts": ["revenue", "profit_after_tax"],
+                        "unmapped_taxonomy_count": 1,
+                        "ambiguous_facts": [],
+                        "missing_model_facts": ["ebit"],
+                    },
+                }
+            ],
+        )
+        self.assertEqual(result["contract_version"], "fundamental-coverage-audit-v6")
+        self.assertEqual(result["summary"]["eligible_nonfinancial_companies"], 2)
+        self.assertEqual(result["summary"]["companies_with_five_quarters"], 1)
+        self.assertEqual(result["summary"]["five_quarter_coverage_pct"], 50.0)
+        self.assertEqual(result["taxonomy_audit"]["unmapped_observations"], 1)
+        self.assertFalse(result["admission_gates"]["overall_coverage_gate_passed"])
+        self.assertFalse(result["admission_gates"]["taxonomy_review_gate_passed"])
+        plan = result["population_plan"]
+        self.assertEqual(plan["contract_version"], "fundamental-evidence-population-v7")
+        self.assertEqual(plan["sectors_in_queue"], 1)
+        self.assertEqual(plan["representatives_ready"], 1)
+        self.assertEqual(plan["minimum_official_files_remaining"], 0)
+        self.assertEqual(plan["items"][0]["symbol"], "AAA")
+        self.assertEqual(result["ranked_candidates"], [])
+
+    def test_fundamental_population_queue_continues_partial_clean_history_first(self):
+        foundation = {
+            "known_at": "2026-10-31T00:00:00+05:30",
+            "rows": [
+                {"symbol": "AAA", "sector": "Industrials", "quarters_known": 0},
+                {"symbol": "BBB", "sector": "Industrials", "quarters_known": 3},
+                {"symbol": "CCC", "sector": "Healthcare", "quarters_known": 1},
+                {"symbol": "BANK", "sector": "Financial Services", "quarters_known": 5},
+            ],
+        }
+        result = build_fundamental_coverage_audit(foundation, [])
+        plan = result["population_plan"]
+        self.assertEqual(plan["sectors_in_queue"], 2)
+        self.assertEqual(plan["representatives_ready"], 0)
+        self.assertEqual(plan["minimum_official_files_remaining"], 6)
+        self.assertEqual(
+            [(row["sector"], row["symbol"], row["quarters_remaining"]) for row in plan["items"]],
+            [("Healthcare", "CCC", 4), ("Industrials", "BBB", 2)],
+        )
+
+    def test_composite_validation_contract_stays_empty_until_every_gate_passes(self):
+        factor = {
+            "gates": [
+                {"state": "ready"},
+                {"state": "ready"},
+                {"state": "blocked"},
+            ],
+            "sector_snapshot": {
+                "state": "ready",
+                "membership_type": "current_snapshot",
+            },
+            "sector_neutral_momentum": {"validation": {"snapshots": 24}},
+        }
+        coverage = {
+            "admission_gates": {
+                "overall_coverage_gate_passed": False,
+                "taxonomy_review_gate_passed": False,
+            }
+        }
+        result = build_composite_factor_validation_contract(factor, coverage)
+        self.assertEqual(result["contract_version"], "composite-factor-validation-v8")
+        self.assertEqual(result["status"], "blocked_by_evidence_gates")
+        self.assertEqual(result["summary"]["gates"], 5)
+        self.assertEqual(result["summary"]["gates_ready"], 0)
+        self.assertEqual(result["methodology"]["chronological_split"], "60% discovery, 20% validation, 20% untouched holdout; no random shuffle")
+        self.assertEqual(result["methodology"]["one_way_cost_bps"], 20.0)
+        self.assertEqual(result["results"]["ranked_candidates"], [])
+
+    def test_composite_validation_contract_can_become_ready_without_creating_ranks(self):
+        factor = {
+            "gates": [{"state": "ready"}, {"state": "ready"}],
+            "sector_snapshot": {
+                "state": "ready",
+                "membership_type": "effective_dated_snapshot",
+            },
+            "sector_neutral_momentum": {"validation": {"snapshots": 60}},
+        }
+        coverage = {
+            "admission_gates": {
+                "overall_coverage_gate_passed": True,
+                "taxonomy_review_gate_passed": True,
+            }
+        }
+        result = build_composite_factor_validation_contract(factor, coverage)
+        self.assertEqual(result["status"], "ready_to_run")
+        self.assertEqual(result["summary"]["gates_ready"], 5)
+        self.assertEqual(result["summary"]["candidate_ranks"], 0)
+        self.assertIsNone(result["results"]["holdout"])
 
 
 class KiteHandshakeHelpersTest(unittest.TestCase):

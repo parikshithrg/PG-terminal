@@ -453,6 +453,16 @@
     .portfolio-reading-guide p { margin: 8px 0 0; line-height: 1.55; }
     .portfolio-audit-details.portfolio-story-section { padding: 0; }
     .portfolio-audit-details.portfolio-story-section > summary { padding: 18px 22px; }
+    .alpha-audit-details { padding: 0; overflow: hidden; }
+    .alpha-audit-details > summary { list-style: none; cursor: pointer; padding: 20px 22px; display: flex; align-items: center; justify-content: space-between; gap: 18px; color: var(--heading); font-weight: 700; }
+    .alpha-audit-details > summary::-webkit-details-marker { display: none; }
+    .alpha-audit-details > summary::after { content: "+"; flex: 0 0 auto; color: var(--accent); font-size: 22px; font-weight: 500; }
+    .alpha-audit-details[open] > summary { border-bottom: 1px solid var(--line); }
+    .alpha-audit-details[open] > summary::after { content: "−"; }
+    .alpha-audit-summary-copy { display: grid; gap: 4px; }
+    .alpha-audit-summary-copy small { color: var(--muted); font-weight: 500; }
+    .alpha-audit-body { padding: 0 18px 18px; }
+    .alpha-audit-body > .analysis-section { margin-top: 18px; }
 
     .summary-card {
       min-height: 112px;
@@ -3673,6 +3683,18 @@
             <article class="summary-card"><div class="summary-value" id="alphaIdeasValue">0</div><div class="summary-meta">Ranked research ideas</div></article>
           </section>
 
+          <section class="analysis-section" id="alphaResearchStoryPanel" aria-label="Alpha Research evidence story">
+            <div class="section-heading-row"><div><div class="story-kicker">ALPHA RESEARCH STORY V11</div><h2 id="alphaStoryHeadline">Joining the evidence…</h2></div><div class="analysis-status" id="alphaStoryStatus">Checking readiness</div></div>
+            <p class="section-note" id="alphaStoryInterpretation">The page will summarize what is working, the first material blocker and the next evidence task.</p>
+            <div class="historical-architecture-grid" id="alphaStoryGrid">
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">AWAITING EVIDENCE</div><h3>No story loaded</h3><p>The detailed research contracts remain available below.</p></article>
+            </div>
+            <div class="analysis-note" id="alphaStoryBoundary">Research readiness only. No forecast, recommendation or order.</div>
+          </section>
+
+          <details class="analysis-section alpha-audit-details" id="alphaTechnicalAudit">
+            <summary><span class="alpha-audit-summary-copy"><span>Technical evidence and publication audits</span><small id="alphaAuditSummaryMeta">Open to review factor, filing, validation, overlay and research-card contracts.</small></span></summary>
+            <div class="alpha-audit-body">
           <section class="analysis-section">
             <div class="section-heading-row"><div><div class="story-kicker">THE JOINED ARCHITECTURE</div><h2>Evidence before candidates</h2></div><button class="panel-button" id="refreshAlphaResearchButton" type="button">Refresh readiness</button></div>
             <p class="section-note">A layer may be useful while still incomplete. Ranked ideas remain blocked until factor evidence, regime compatibility, chronological validation and portfolio impact can be reviewed together.</p>
@@ -3747,8 +3769,88 @@
               <article class="summary-card"><div class="summary-value" id="fundamentalsValueValue">0</div><div class="summary-meta">Value metrics ready</div></article>
               <article class="summary-card"><div class="summary-value" id="fundamentalsDeferredValue">—</div><div class="summary-meta">Financial-sector model deferred</div></article>
             </div>
+            <div class="story-kicker">FUNDAMENTAL COVERAGE AUDIT V6</div>
+            <div class="summary-grid" aria-label="Release-known fundamentals audit">
+              <article class="summary-card"><div class="summary-value" id="fundamentalsFiveQuarterValue">0</div><div class="summary-meta">Companies with five quarters</div></article>
+              <article class="summary-card"><div class="summary-value" id="fundamentalsCoveragePct">0%</div><div class="summary-meta">Non-financial coverage</div></article>
+              <article class="summary-card"><div class="summary-value" id="fundamentalsTaxonomyValue">0</div><div class="summary-meta">Unresolved taxonomy observations</div></article>
+              <article class="summary-card"><div class="summary-value" id="fundamentalsFilesAuditedValue">0</div><div class="summary-meta">Official files audited</div></article>
+            </div>
+            <div class="historical-architecture-grid" id="fundamentalsSectorGrid">
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting filings</div><h3>No sector coverage yet</h3><p>Import official non-financial filings to begin the five-quarter audit.</p></article>
+            </div>
+            <div class="analysis-note" id="fundamentalsCoverageNote">Coverage gates are visible but candidate promotion remains disabled.</div>
+            <div class="story-kicker">EVIDENCE POPULATION V7</div>
+            <div class="section-heading-row"><div><h2>Next official filing batches</h2><p class="section-note">A deterministic acquisition queue, not a company ranking.</p></div><div class="analysis-status" id="fundamentalsPopulationStatus">Official files required</div></div>
+            <div class="summary-grid" aria-label="Fundamental evidence population plan">
+              <article class="summary-card"><div class="summary-value" id="fundamentalsPopulationSectors">—</div><div class="summary-meta">Sectors represented</div></article>
+              <article class="summary-card"><div class="summary-value" id="fundamentalsPopulationReady">0</div><div class="summary-meta">Representatives with five quarters</div></article>
+              <article class="summary-card"><div class="summary-value" id="fundamentalsPopulationFiles">—</div><div class="summary-meta">Minimum official files remaining</div></article>
+              <article class="summary-card"><div class="summary-value">5</div><div class="summary-meta">Release-known quarters per company</div></article>
+            </div>
+            <div class="historical-architecture-grid" id="fundamentalsPopulationGrid">
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting coverage audit</div><h3>No population queue loaded</h3><p>The queue will select one non-financial representative per sector.</p></article>
+            </div>
+            <div class="analysis-note" id="fundamentalsPopulationNote">Only manually downloaded official NSE/BSE filing exports may enter this queue.</div>
+            <div class="story-kicker">COMPOSITE FACTOR VALIDATION V8</div>
+            <div class="section-heading-row"><div><h2>Chronological validation gates</h2><p class="section-note">The contract is frozen before any composite result or candidate is calculated.</p></div><div class="analysis-status" id="compositeValidationStatus">Evidence gates blocked</div></div>
+            <div class="summary-grid" aria-label="Composite factor validation readiness">
+              <article class="summary-card"><div class="summary-value" id="compositeValidationGates">0 / 5</div><div class="summary-meta">Evidence gates ready</div></article>
+              <article class="summary-card"><div class="summary-value" id="compositeValidationSnapshots">—</div><div class="summary-meta">Eligible monthly snapshots</div></article>
+              <article class="summary-card"><div class="summary-value" id="compositeValidationCost">20 bps</div><div class="summary-meta">One-way cost assumption</div></article>
+              <article class="summary-card"><div class="summary-value" id="compositeValidationRanks">0</div><div class="summary-meta">Candidate ranks produced</div></article>
+            </div>
+            <div class="historical-fingerprint-grid" id="compositeValidationGateGrid">
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting contract</div><h3>No validation gates loaded</h3><p>No score or candidate is produced.</p></article>
+            </div>
+            <div class="analysis-note" id="compositeValidationNote">60% discovery, 20% validation and 20% untouched holdout; no random shuffle.</div>
             <div class="analysis-note" id="fundamentalsBoundaryNote">Raw metrics remain unscored. Composite ranks and candidates are disabled.</div>
           </section>
+
+          <section class="analysis-section" id="candidateOverlayPanel">
+            <div class="section-heading-row"><div><div class="story-kicker">CATALYST + PORTFOLIO OVERLAYS V9</div><h2>Context after validation</h2></div><div class="analysis-status" id="candidateOverlayStatus">Upstream evidence required</div></div>
+            <p class="section-note">Catalysts may change timing and portfolio impact may reject or resize an idea, but neither can rescue a failed factor or validation gate.</p>
+            <div class="summary-grid" aria-label="Candidate overlay readiness">
+              <article class="summary-card"><div class="summary-value" id="candidateMacroValue">—</div><div class="summary-meta">Upcoming macro events</div></article>
+              <article class="summary-card"><div class="summary-value" id="candidateEarningsValue">0</div><div class="summary-meta">Reviewed earnings records</div></article>
+              <article class="summary-card"><div class="summary-value" id="candidatePortfolioValue">Not loaded</div><div class="summary-meta">Local portfolio</div></article>
+              <article class="summary-card"><div class="summary-value" id="candidateImpactValue">0</div><div class="summary-meta">Candidate impacts calculated</div></article>
+            </div>
+            <div class="story-kicker">CATALYST GATES</div>
+            <div class="historical-fingerprint-grid" id="candidateCatalystGrid">
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting contract</div><h3>No catalyst gates loaded</h3><p>No event score is produced.</p></article>
+            </div>
+            <div class="story-kicker">PORTFOLIO-IMPACT GATES</div>
+            <div class="historical-fingerprint-grid" id="candidatePortfolioGrid">
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting contract</div><h3>No portfolio gates loaded</h3><p>No marginal impact is calculated.</p></article>
+            </div>
+            <div class="analysis-note" id="candidateOverlayNote">No overlay score, candidate impact, recommendation or order is active.</div>
+          </section>
+
+          <section class="analysis-section" id="researchCardPanel" aria-label="Research card publication readiness">
+            <div class="section-heading-row"><div><div class="story-kicker">AUDITABLE RESEARCH CARDS V10</div><h2>Publish only complete research</h2></div><div class="analysis-status" id="researchCardStatus">Publication blocked</div></div>
+            <p class="section-note">A card is withheld in full unless the candidate, catalyst context, portfolio impact and audit trail are all complete. A research card is not a recommendation or order.</p>
+            <div class="summary-grid" aria-label="Research card contract summary">
+              <article class="summary-card"><div class="summary-value" id="researchCardFieldValue">—</div><div class="summary-meta">Required fields</div></article>
+              <article class="summary-card"><div class="summary-value" id="researchCardGateValue">—</div><div class="summary-meta">Publication gates</div></article>
+              <article class="summary-card"><div class="summary-value" id="researchCardReadyValue">0</div><div class="summary-meta">Gates ready</div></article>
+              <article class="summary-card"><div class="summary-value" id="researchCardPublishedValue">0</div><div class="summary-meta">Cards published</div></article>
+            </div>
+            <div class="story-kicker">REQUIRED CARD FIELDS</div>
+            <div class="historical-fingerprint-grid" id="researchCardFieldGrid">
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting contract</div><h3>No card schema loaded</h3><p>Incomplete research cannot be published.</p></article>
+            </div>
+            <div class="story-kicker">PUBLICATION GATES</div>
+            <div class="historical-fingerprint-grid" id="researchCardGateGrid">
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting contract</div><h3>No publication gates loaded</h3><p>No research card is available.</p></article>
+            </div>
+            <div class="historical-architecture-grid" id="researchCardsGrid">
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">NO CARD PUBLISHED</div><h3>Upstream evidence is incomplete</h3><p>The absence of a card is an explicit research result.</p></article>
+            </div>
+            <div class="analysis-note" id="researchCardNote">No card, recommendation or order is active.</div>
+          </section>
+            </div>
+          </details>
 
           <section class="analysis-section">
             <h2>Policy evidence boundary</h2>
@@ -7409,6 +7511,7 @@
         setPortfolioProgress(48, 'Holdings separated', `${stockCount.toLocaleString('en-IN')} stocks and ${fundCount.toLocaleString('en-IN')} mutual funds detected`);
         portfolioPreview = result.combined_preview || result.stock_preview || null;
         portfolioAnalysis = null;
+        if (alphaResearchPayload && alphaResearchPayload.candidate_overlays) renderCandidateOverlays(alphaResearchPayload.candidate_overlays);
         renderHomeLoanTracker(result.loan_tracker || (portfolioPreview && portfolioPreview.loan_tracker));
 
         let stockReady = false;
@@ -7628,6 +7731,7 @@
 
     function renderPortfolioAnalysis(result) {
       portfolioAnalysis = result;
+      if (alphaResearchPayload && alphaResearchPayload.candidate_overlays) renderCandidateOverlays(alphaResearchPayload.candidate_overlays);
       const coverage = result.coverage || {};
       const summary = result.portfolio_summary || {};
       const benchmark = result.benchmark || {};
@@ -7739,6 +7843,7 @@
       portfolioProgressDetail.textContent = 'Choose a file to begin.';
       portfolioPreview = null;
       portfolioAnalysis = null;
+      if (alphaResearchPayload && alphaResearchPayload.candidate_overlays) renderCandidateOverlays(alphaResearchPayload.candidate_overlays);
       homeLoanTracker = null;
       clearMutualFundAnalysis(false);
       portfolioFileInput.value = '';
@@ -8391,6 +8496,8 @@
       document.getElementById('alphaReadyValue').textContent = Number(summary.ready || 0).toLocaleString('en-IN');
       document.getElementById('alphaPartialValue').textContent = Number(summary.partial_or_foundation || 0).toLocaleString('en-IN');
       document.getElementById('alphaIdeasValue').textContent = Number(summary.ranked_ideas || 0).toLocaleString('en-IN');
+      document.getElementById('alphaAuditSummaryMeta').textContent =
+        `${Number(summary.layers || 0)} layers · ${Number(summary.ready || 0)} operational · ${Number(summary.partial_or_foundation || 0)} developing · ${Number(summary.blocked || 0)} blocked. Open for the full audit trail.`;
       document.getElementById('alphaArchitectureGrid').innerHTML = layers.length
         ? layers.map((layer, index) => `<article class="historical-fingerprint-card ${layer.state === 'ready' ? 'ready' : layer.state === 'blocked' ? 'unavailable' : 'partial'}">
             <div class="historical-step">${String(index + 1).padStart(2, '0')} · ${escapeHtml(stateLabel[layer.state] || layer.state || 'Unknown')}</div>
@@ -8409,9 +8516,95 @@
         `${policy.state === 'complete_for_current_scope' ? 'Complete for the current scope.' : 'Incomplete.'} ${policy.coverage || ''}. ${policy.boundary || ''}`;
       document.getElementById('alphaResearchContractNote').textContent =
         `${result.contract_version || 'alpha-research-foundation'}. ${limitations.join(' ')}`;
+      if (result.candidate_overlays) renderCandidateOverlays(result.candidate_overlays);
+      if (result.research_cards) renderResearchCards(result.research_cards);
+      if (result.research_story) renderAlphaResearchStory(result.research_story);
       alphaResearchStatus.textContent = Number(summary.ranked_ideas || 0)
         ? 'Research candidates available'
         : 'Architecture ready · candidate ranking blocked';
+    }
+
+    function renderAlphaResearchStory(result) {
+      const summary = result.summary || {};
+      const cards = Array.isArray(result.story_cards) ? result.story_cards : [];
+      document.getElementById('alphaStoryStatus').textContent = result.status === 'candidate_available'
+        ? 'Candidate ready for review'
+        : 'Evidence incomplete';
+      document.getElementById('alphaStoryHeadline').textContent = result.headline || 'Research readiness is unavailable.';
+      document.getElementById('alphaStoryInterpretation').textContent = result.interpretation || '';
+      document.getElementById('alphaStoryGrid').innerHTML = cards.length
+        ? cards.map((card) => `<article class="historical-fingerprint-card ${card.tone === 'ready' ? 'ready' : card.tone === 'blocked' ? 'unavailable' : 'partial'}">
+            <div class="historical-step">${escapeHtml(card.eyebrow || 'EVIDENCE')}</div>
+            <h3>${escapeHtml(card.title || 'Research status')}</h3>
+            <p>${escapeHtml(card.detail || '')}</p>
+          </article>`).join('')
+        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">NO STORY</div><h3>Evidence unavailable</h3><p>The detailed contracts remain visible below.</p></article>';
+      document.getElementById('alphaStoryBoundary').textContent =
+        `${result.contract_version || 'alpha-research-story'} · ${Number(summary.operational || 0)} operational · ${Number(summary.developing || 0)} developing · ${Number(summary.blocked || 0)} blocked · ${result.boundary || ''}`;
+    }
+
+    function renderCandidateOverlays(result) {
+      const summary = result.summary || {};
+      const catalystGates = Array.isArray(result.catalyst_gates) ? result.catalyst_gates : [];
+      const portfolioGates = Array.isArray(result.portfolio_gates) ? result.portfolio_gates : [];
+      const positions = portfolioAnalysis && Array.isArray(portfolioAnalysis.positions) ? portfolioAnalysis.positions : [];
+      const localPortfolioReady = positions.length > 0;
+      const riskReady = Boolean(portfolioAnalysis && portfolioAnalysis.risk_metrics && portfolioAnalysis.risk_metrics.status === 'available');
+      document.getElementById('candidateOverlayStatus').textContent = result.status === 'ready'
+        ? 'Overlay evidence ready'
+        : 'Upstream evidence required';
+      document.getElementById('candidateMacroValue').textContent = Number(summary.upcoming_macro_events || 0).toLocaleString('en-IN');
+      document.getElementById('candidateEarningsValue').textContent = Number(summary.reviewed_earnings_records || 0).toLocaleString('en-IN');
+      document.getElementById('candidatePortfolioValue').textContent = localPortfolioReady ? `${positions.length} positions` : 'Not loaded';
+      document.getElementById('candidateImpactValue').textContent = Number(summary.candidate_impacts || 0).toLocaleString('en-IN');
+      const gateCards = (gates, portfolio = false) => gates.length
+        ? gates.map((gate, index) => {
+            let state = gate.state || 'blocked';
+            let detail = gate.detail || '';
+            if (portfolio && gate.key === 'local_holdings') {
+              state = localPortfolioReady ? 'ready' : 'blocked';
+              detail = localPortfolioReady ? `${positions.length} current positions are available in browser memory.` : detail;
+            }
+            if (portfolio && gate.key === 'risk_history') {
+              state = riskReady ? 'ready' : 'blocked';
+              detail = riskReady ? 'Aligned current-holdings beta and drawdown history is available.' : detail;
+            }
+            return `<article class="historical-fingerprint-card ${state === 'ready' ? 'ready' : 'unavailable'}">
+              <div class="historical-step">${String(index + 1).padStart(2, '0')} · ${escapeHtml(String(state).replaceAll('_', ' ').toUpperCase())}</div>
+              <h3>${escapeHtml(gate.title || 'Overlay gate')}</h3><p>${escapeHtml(detail)}</p>
+            </article>`;
+          }).join('')
+        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">No gates returned</div><h3>Overlay unavailable</h3><p>No score or impact is produced.</p></article>';
+      document.getElementById('candidateCatalystGrid').innerHTML = gateCards(catalystGates);
+      document.getElementById('candidatePortfolioGrid').innerHTML = gateCards(portfolioGates, true);
+      document.getElementById('candidateOverlayNote').textContent =
+        `${result.contract_version || 'candidate-overlays'} · ${Number(summary.catalyst_gates_ready || 0)} of ${Number(summary.catalyst_gates || 0)} server-side catalyst gates ready · holdings remain browser-local · no overlay score, candidate impact, recommendation or order is active.`;
+    }
+
+    function renderResearchCards(result) {
+      const summary = result.summary || {};
+      const fields = Array.isArray(result.required_fields) ? result.required_fields : [];
+      const gates = Array.isArray(result.publication_gates) ? result.publication_gates : [];
+      const cards = Array.isArray(result.cards) ? result.cards : [];
+      document.getElementById('researchCardStatus').textContent = result.status === 'ready_to_publish'
+        ? 'Publication gates ready'
+        : 'Publication blocked';
+      document.getElementById('researchCardFieldValue').textContent = Number(summary.required_fields || 0).toLocaleString('en-IN');
+      document.getElementById('researchCardGateValue').textContent = Number(summary.publication_gates || 0).toLocaleString('en-IN');
+      document.getElementById('researchCardReadyValue').textContent = `${Number(summary.gates_ready || 0)} / ${Number(summary.publication_gates || 0)}`;
+      document.getElementById('researchCardPublishedValue').textContent = Number(summary.cards_published || 0).toLocaleString('en-IN');
+      document.getElementById('researchCardFieldGrid').innerHTML = fields.length
+        ? fields.map((field, index) => `<article class="historical-fingerprint-card partial"><div class="historical-step">${String(index + 1).padStart(2, '0')} · REQUIRED</div><h3>${escapeHtml(field.title || 'Card field')}</h3><p>${escapeHtml(field.requirement || '')}</p></article>`).join('')
+        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">No schema</div><h3>Required fields unavailable</h3><p>No card can be published.</p></article>';
+      document.getElementById('researchCardGateGrid').innerHTML = gates.length
+        ? gates.map((gate, index) => `<article class="historical-fingerprint-card ${gate.state === 'ready' ? 'ready' : 'unavailable'}"><div class="historical-step">${String(index + 1).padStart(2, '0')} · ${escapeHtml(String(gate.state || 'blocked').toUpperCase())}</div><h3>${escapeHtml(gate.title || 'Publication gate')}</h3><p>${escapeHtml(gate.detail || '')}</p></article>`).join('')
+        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">No gates</div><h3>Publication unavailable</h3><p>No card can be published.</p></article>';
+      document.getElementById('researchCardsGrid').innerHTML = cards.length
+        ? cards.map((card) => `<article class="historical-fingerprint-card ready"><div class="historical-step">RESEARCH CARD</div><h3>${escapeHtml(card.title || card.symbol || 'Validated candidate')}</h3><p>${escapeHtml(card.hypothesis || '')}</p></article>`).join('')
+        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">NO CARD PUBLISHED</div><h3>Upstream evidence is incomplete</h3><p>The absence of a card is an explicit research result; no partial narrative is shown.</p></article>';
+      const rules = Array.isArray(result.publication_rules) ? result.publication_rules : [];
+      document.getElementById('researchCardNote').textContent =
+        `${result.contract_version || 'auditable-research-cards'} · ${Number(summary.gates_ready || 0)} of ${Number(summary.publication_gates || 0)} publication gates ready · ${rules.join(' ')}`;
     }
 
     async function loadAlphaResearch(showSuccess = false) {
@@ -8514,6 +8707,67 @@
         `${result.contract_version || 'point-in-time-fundamentals'} · known at ${result.known_at || '—'} · ${Number(coverage.eligible_universe || 0)} market-data-admitted securities audited. Manual official NSE/BSE exports only.`;
       document.getElementById('fundamentalsBoundaryNote').textContent =
         'Consolidated filings are preferred and never mixed with standalone results. Financial services await a separate model. Raw ROE, margin, leverage, earnings-yield and book-to-market metrics remain unscored; composite ranks and candidates are disabled.';
+      if (result.composite_validation) renderCompositeValidation(result.composite_validation);
+    }
+
+    function renderCompositeValidation(result) {
+      const summary = result.summary || {};
+      const methodology = result.methodology || {};
+      const gates = Array.isArray(result.gates) ? result.gates : [];
+      document.getElementById('compositeValidationStatus').textContent = result.status === 'ready_to_run'
+        ? 'Contract ready to run'
+        : 'Evidence gates blocked';
+      document.getElementById('compositeValidationGates').textContent = `${Number(summary.gates_ready || 0)} / ${Number(summary.gates || 0)}`;
+      document.getElementById('compositeValidationSnapshots').textContent = Number(summary.monthly_snapshots || 0).toLocaleString('en-IN');
+      document.getElementById('compositeValidationCost').textContent = `${Number(methodology.one_way_cost_bps || 0).toFixed(0)} bps`;
+      document.getElementById('compositeValidationRanks').textContent = Number(summary.candidate_ranks || 0).toLocaleString('en-IN');
+      document.getElementById('compositeValidationGateGrid').innerHTML = gates.length
+        ? gates.map((gate, index) => `<article class="historical-fingerprint-card ${gate.state === 'ready' ? 'ready' : 'unavailable'}">
+            <div class="historical-step">${String(index + 1).padStart(2, '0')} · ${escapeHtml(String(gate.state || 'blocked').toUpperCase())}</div>
+            <h3>${escapeHtml(gate.title || 'Evidence gate')}</h3>
+            <p>${escapeHtml(gate.detail || '')}</p>
+          </article>`).join('')
+        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting contract</div><h3>No validation gates loaded</h3><p>No score or candidate is produced.</p></article>';
+      const mix = methodology.factor_mix || {};
+      document.getElementById('compositeValidationNote').textContent =
+        `${result.contract_version || 'composite-factor-validation'} · ${(Number(mix.sector_neutral_momentum || 0) * 100).toFixed(0)}% momentum, ${(Number(mix.quality || 0) * 100).toFixed(0)}% quality, ${(Number(mix.value || 0) * 100).toFixed(0)}% value · ${methodology.chronological_split || 'chronological split required'} · turnover costs applied at every rebalance. Candidate promotion disabled.`;
+    }
+
+    function renderFundamentalsCoverage(result) {
+      const summary = result.summary || {};
+      const taxonomy = result.taxonomy_audit || {};
+      const gates = result.admission_gates || {};
+      const sectors = Array.isArray(result.sectors) ? result.sectors : [];
+      document.getElementById('fundamentalsFiveQuarterValue').textContent = Number(summary.companies_with_five_quarters || 0).toLocaleString('en-IN');
+      document.getElementById('fundamentalsCoveragePct').textContent = `${Number(summary.five_quarter_coverage_pct || 0).toFixed(1)}%`;
+      document.getElementById('fundamentalsTaxonomyValue').textContent = Number((taxonomy.unmapped_observations || 0) + (taxonomy.ambiguous_fact_observations || 0)).toLocaleString('en-IN');
+      document.getElementById('fundamentalsFilesAuditedValue').textContent = Number(taxonomy.files_audited || 0).toLocaleString('en-IN');
+      document.getElementById('fundamentalsSectorGrid').innerHTML = sectors.length
+        ? sectors.map((row) => `<article class="historical-fingerprint-card ${row.coverage_gate_passed ? 'ready' : 'partial'}">
+            <div class="historical-step">${row.coverage_gate_passed ? 'Coverage gate passed' : 'Coverage accumulating'}</div>
+            <h3>${escapeHtml(row.sector || 'Unclassified')}</h3>
+            <p>${Number(row.five_quarters || 0).toLocaleString('en-IN')} of ${Number(row.eligible_companies || 0).toLocaleString('en-IN')} companies have five release-known quarters · ${Number(row.five_quarter_coverage_pct || 0).toFixed(1)}%.</p>
+          </article>`).join('')
+        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting filings</div><h3>No sector coverage yet</h3><p>Import official non-financial filings to begin the five-quarter audit.</p></article>';
+      document.getElementById('fundamentalsCoverageNote').textContent =
+        `${result.contract_version || 'fundamental coverage audit'} · ${result.status || 'not ready'} · overall 80% and every-sector 60% five-quarter gates: ${gates.overall_coverage_gate_passed ? 'passed' : 'not passed'} · taxonomy review: ${gates.taxonomy_review_gate_passed ? 'passed' : 'not passed'} · candidate promotion disabled.`;
+      const plan = result.population_plan || {};
+      const items = Array.isArray(plan.items) ? plan.items : [];
+      document.getElementById('fundamentalsPopulationStatus').textContent = plan.status === 'representative_batches_ready_for_review'
+        ? 'Representative batches ready for review'
+        : 'Official files required';
+      document.getElementById('fundamentalsPopulationSectors').textContent = Number(plan.sectors_in_queue || 0).toLocaleString('en-IN');
+      document.getElementById('fundamentalsPopulationReady').textContent = Number(plan.representatives_ready || 0).toLocaleString('en-IN');
+      document.getElementById('fundamentalsPopulationFiles').textContent = Number(plan.minimum_official_files_remaining || 0).toLocaleString('en-IN');
+      document.getElementById('fundamentalsPopulationGrid').innerHTML = items.length
+        ? items.map((row) => `<article class="historical-fingerprint-card ${row.state === 'five_quarters_ready' ? 'ready' : 'partial'}">
+            <div class="historical-step">${escapeHtml(row.sector || 'Unclassified')}</div>
+            <h3>${escapeHtml(row.symbol || '—')}</h3>
+            <p>${Number(row.quarters_known || 0)} of ${Number(plan.target_quarters_per_company || 5)} release-known quarters stored · ${Number(row.quarters_remaining || 0)} official files remaining${row.taxonomy_review_required ? ' · taxonomy review required' : ''}.</p>
+          </article>`).join('')
+        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting coverage audit</div><h3>No population queue loaded</h3><p>The queue will select one non-financial representative per sector.</p></article>';
+      document.getElementById('fundamentalsPopulationNote').textContent =
+        `${plan.contract_version || 'fundamental-evidence-population-v7'} · ${plan.selection_rule || 'one representative per sector'} · manual official NSE/BSE exports only; no scraping, aggregator substitution, synthetic facts or silent gap filling.`;
     }
 
     async function loadFundamentalsFoundation(showSuccess = false) {
@@ -8522,10 +8776,24 @@
         const result = await response.json();
         if (!response.ok || result.ok !== true) throw new Error(result.reason || 'fundamentals_unavailable');
         renderFundamentalsFoundation(result);
+        if (result.coverage_audit) renderFundamentalsCoverage(result.coverage_audit);
         if (showSuccess) showNotice('Point-in-time fundamentals readiness refreshed.');
         return true;
       } catch (_error) {
         document.getElementById('fundamentalsStatus').textContent = 'Fundamentals service unavailable';
+        return false;
+      }
+    }
+
+    async function loadFundamentalsCoverage() {
+      try {
+        const response = await fetch('/api/fundamentals/coverage', { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) throw new Error(result.reason || 'fundamental_coverage_unavailable');
+        renderFundamentalsCoverage(result);
+        return true;
+      } catch (_error) {
+        document.getElementById('fundamentalsCoverageNote').textContent = 'The local fundamentals coverage audit is unavailable.';
         return false;
       }
     }
@@ -8590,6 +8858,7 @@
         const result = await response.json();
         if (!response.ok || result.ok !== true) throw new Error(result.reason || 'invalid_fundamental_export');
         renderFundamentalsFoundation(result);
+        if (result.coverage_audit) renderFundamentalsCoverage(result.coverage_audit);
         const written = result.write_result || {};
         const audit = (result.normalizer || {}).audit || {};
         fundamentalsNormalizerAudit.textContent =

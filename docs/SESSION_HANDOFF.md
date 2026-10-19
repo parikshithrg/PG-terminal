@@ -51,10 +51,47 @@ Updated: 2026-10-17
   statement basis, fiscal period or source; unsafe XML entity declarations are
   rejected. Parsed facts enter the immutable v4 filing store and no score or
   candidate is produced.
-- The active milestone is now `fundamental-coverage-audit-v6`: load
-  representative official non-financial filings through the frozen normalizer,
-  review taxonomy gaps explicitly and measure five-release-known-quarter company
-  and sector coverage without filling missing facts.
+- `fundamental-coverage-audit-v6` is complete as an audit foundation. Normalizer
+  audits are stored by filing and normalizer version, remain idempotent and reject
+  conflicting replacements. The live service reports any-filing and five-quarter
+  company coverage, quality/value readiness, sector coverage and unresolved
+  taxonomy observations. Admission requires 80% overall and 60% in every sector
+  plus completed taxonomy review; these gates permit later validation only and
+  do not produce scores or candidates. Current live coverage remains empty.
+- `fundamental-evidence-population-v7` now has a deterministic acquisition queue:
+  one non-financial representative per sector, continuing the most complete clean
+  history first, with five-quarter deficits visible in Alpha Research. Actual
+  population remains pending because no manually downloaded official NSE/BSE
+  corporate filing exports are present. Populate five release-known quarters and
+  review every taxonomy gap without scraping, synthetic data, aggregator
+  substitution or silent filling.
+- `composite-factor-validation-v8` is complete as a precommitted validation
+  contract but has not run. It freezes 40% sector-neutral momentum, 30% quality
+  and 30% value; monthly rebalancing; a 60/20/20 chronological split; and 20 bps
+  one-way turnover costs. It requires all market-data gates, the v7 coverage and
+  taxonomy gates, effective-dated membership and 60 eligible monthly snapshots.
+  The live service exposes every failed gate and returns no results or candidates.
+- `candidate-overlays-v9` is complete as a gated foundation. It exposes separate
+  scheduled-macro, release-known earnings, reviewed-news and candidate-mapping
+  gates plus browser-local holdings, transaction-history, aligned-risk-history
+  and marginal-impact gates. The UI updates local holdings and risk readiness from
+  the in-memory portfolio only. Missing catalyst evidence is not neutral;
+  current-holdings backtests are not transaction-based performance; no overlay
+  score, portfolio impact, candidate, recommendation or order is produced.
+- `auditable-research-cards-v10` is complete as the final background publication
+  contract. It freezes eight required card fields and four whole-card gates:
+  validated candidate, catalyst review, portfolio impact and complete audit
+  trail. Any incomplete gate withholds the full card. The live output therefore
+  contains zero cards and never promotes a partial narrative into a recommendation.
+- `alpha-research-story-v11` begins the presentation phase. Alpha Research now
+  opens with a concise evidence story showing what works, the first blocked layer
+  and the next evidence task. Detailed contracts remain below for audit, and the
+  story continues to publish zero candidates while evidence gates are incomplete.
+- `alpha-research-progressive-disclosure-v12` keeps the headline metrics and
+  evidence story visible while consolidating all dense technical contracts into
+  one expandable audit area. The closed control reports layer readiness; opening
+  it exposes the complete factor, filing, validation, overlay and publication
+  evidence without deleting or weakening any gate.
 - RBI MPC release-native coverage from February 2016 through October 2026 is
   complete for the current scope. Pre-2016 policy reconstruction is deferred.
 
@@ -733,14 +770,14 @@ orders or position sizing.
    overview rather than a table-heavy audit page: allocation, top similarity
    pairs, a coverage-labelled structural/regime-fit score, and concise review
    prompts are the only primary outputs.
-2. Build `fundamental-coverage-audit-v6`. The release-aware store, official
-   manual-import boundary, non-financial quality/value definitions and defensive
-   XBRL/Excel normalizer are frozen. Load representative manually downloaded
-   official filings, review unmapped and ambiguous taxonomy fields before adding
-   aliases, and measure at least five release-known quarters per admitted company
-   and sector. Do not scrape exchange websites, use aggregator fundamentals,
-   fill missing facts or calculate a composite rank. Pre-2016 RBI policy
-   reconstruction remains deferred.
+2. Populate `fundamental-evidence-population-v7`. The release-aware store,
+   official manual-import boundary, non-financial quality/value definitions,
+   defensive XBRL/Excel normalizer and company/sector coverage audit are frozen.
+   Import representative manually downloaded official filings, review unmapped
+   and ambiguous taxonomy fields before adding aliases, and retain at least five
+   release-known quarters per admitted company. Do not scrape exchange websites,
+   use aggregator or synthetic fundamentals, fill missing facts or calculate a
+   composite rank. Pre-2016 RBI policy reconstruction remains deferred.
 3. Live-check the first full NIFTY 500 five-year retrieval after reconnecting
    Kite, including year switching, coverage counts, and reverse ranking order.
 4. Begin the queued Portfolio performance and Alpha Opportunities roadmap:

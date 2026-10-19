@@ -207,6 +207,56 @@ class EODStoreTest(unittest.TestCase):
                 [changed], source_file_name="official-results.json"
             )
 
+    def test_fundamental_normalization_audits_are_versioned_and_idempotent(self):
+        filing = {
+            "filing_id": "official:audit-test",
+            "symbol": "AAA",
+            "company_name": "AAA Limited",
+            "sector": "Industrials",
+            "basis": "consolidated",
+            "period_type": "quarterly",
+            "period_end": "2026-09-30",
+            "reported_at": "2026-10-20T18:30:00+05:30",
+            "revision_sequence": 0,
+            "currency": "INR",
+            "unit": "absolute",
+            "source_url": "https://nsearchives.nseindia.com/corporate/AAA.xbrl",
+            "facts": {"revenue": 100.0, "profit_after_tax": 10.0},
+        }
+        self.store.append_fundamental_filings([filing], source_file_name="AAA.xbrl")
+        audit = {
+            "format": "xbrl",
+            "mapped_facts": ["profit_after_tax", "revenue"],
+            "unmapped_taxonomy_count": 2,
+            "unmapped_taxonomy_sample": ["OtherDisclosure", "TaxExpense"],
+            "ambiguous_facts": [],
+            "missing_model_facts": ["ebit"],
+            "source_file_name": "AAA.xbrl",
+            "unit_scale_applied": "absolute",
+            "revision_preserved": True,
+            "metadata_inference": "disabled",
+        }
+        first = self.store.append_fundamental_normalization_audit(
+            filing_id=filing["filing_id"],
+            normalizer_contract="fundamental-xbrl-normalizer-v5",
+            symbol="AAA",
+            sector="Industrials",
+            audit=audit,
+        )
+        second = self.store.append_fundamental_normalization_audit(
+            filing_id=filing["filing_id"],
+            normalizer_contract="fundamental-xbrl-normalizer-v5",
+            symbol="AAA",
+            sector="Industrials",
+            audit=audit,
+        )
+        loaded = self.store.load_fundamental_normalization_audits(
+            normalizer_contract="fundamental-xbrl-normalizer-v5"
+        )
+        self.assertEqual(first, {"inserted": 1, "duplicates": 0})
+        self.assertEqual(second, {"inserted": 0, "duplicates": 1})
+        self.assertEqual(loaded[0]["audit"]["unmapped_taxonomy_count"], 2)
+
     def test_metadata_backfill_reports_price_conflict_without_overwrite(self):
         session = date(2026, 9, 22)
         self.store.append_candles(

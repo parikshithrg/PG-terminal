@@ -102,16 +102,65 @@ this section, this section wins.
    are audited, XML entity declarations are rejected and normalized records enter
    the immutable v4 filing store. No exchange scraping or aggregator fallback is
    used.
-7. `fundamental-coverage-audit-v6` — **next**. Load representative official
-   non-financial filings, review each unmapped/ambiguous taxonomy field before
-   extending the alias registry, and measure five-release-known-quarter coverage
-   by company and sector without filling missing facts.
-8. Validate composite ranks chronologically and net of costs before connecting
-   regime compatibility.
-9. Add the catalyst and portfolio-impact overlays only after their own evidence
-   gates pass.
-10. Produce auditable research cards last: hypothesis, evidence, uncertainty,
-   benchmark, horizon, risk budget, portfolio impact and invalidation.
+7. `fundamental-coverage-audit-v6` — **complete as an audit foundation; live
+   evidence coverage remains empty**. Every normalized filing now stores a
+   versioned, idempotent taxonomy audit beside the immutable filing. The coverage
+   service reports non-financial companies with any filings, five release-known
+   quarters, quality/value readiness and sector-level gaps. Unmapped and ambiguous
+   observations remain failures rather than zero values. The disclosed admission
+   gates are 80% overall five-quarter coverage, 60% in every represented sector
+   and a completed taxonomy review. Passing them permits validation work only;
+   scores and candidates remain empty.
+8. `fundamental-evidence-population-v7` — **acquisition queue complete; official
+   filing population pending**. The coverage service now produces a deterministic
+   queue with one non-financial representative per sector, continuing the most
+   complete clean history first and disclosing the minimum files still required
+   for five release-known quarters. The Alpha Research page exposes this queue and
+   its exact evidence deficit. Import still requires manually downloaded official
+   NSE/BSE filings through the frozen normalizer and review of every taxonomy gap
+   before aliases are extended. Synthetic, scraped or aggregator data must not be
+   used to satisfy coverage.
+9. `composite-factor-validation-v8` — **validation contract complete; execution
+   blocked by evidence gates**. The frozen contract requires all market-data
+   admission gates, the v7 five-quarter coverage and taxonomy gates,
+   effective-dated membership, and at least 60 eligible monthly snapshots. The
+   precommitted mix is 40% sector-neutral momentum, 30% quality and 30% value,
+   normalized within dated sectors. Validation uses a 60/20/20 chronological
+   discovery/validation/untouched-holdout split, monthly equal-weight top-quintile
+   portfolios and a disclosed 20 bps one-way turnover cost. No result, composite
+   rank or candidate is produced while any gate is blocked.
+10. `candidate-overlays-v9` — **overlay contracts complete; scoring and impacts
+    blocked**. The catalyst contract separates the reviewed macro calendar,
+    release-known earnings history, reviewed unscheduled news and candidate-event
+    mapping; missing evidence is unavailable rather than neutral. The portfolio
+    contract keeps holdings in browser memory, distinguishes current-holdings risk
+    history from transaction-based performance, and blocks marginal concentration,
+    beta and drawdown calculations until a chronologically validated candidate
+    exists. Catalysts can affect context and timing, while portfolio impact may
+    reject or resize an idea; neither can rescue a failed upstream gate. All
+    overlay scores, candidate impacts and recommendations remain empty.
+11. `auditable-research-cards-v10` — **publication contract complete; cards
+    blocked by upstream evidence gates**. Every card requires hypothesis,
+    evidence, uncertainty, benchmark, horizon, risk budget, portfolio impact and
+    invalidation. Four whole-card publication gates require a chronologically
+    validated candidate, reviewed catalyst context, calculated portfolio impact
+    and a complete source/calculation audit trail. A failed gate withholds the
+    entire card rather than allowing a persuasive but incomplete narrative. The
+    live contract currently publishes zero cards, recommendations or orders.
+12. `alpha-research-story-v11` — **first presentation milestone complete**.
+    The Alpha Research page now leads with one plain-language evidence statement,
+    three compact inference cards and a visible research boundary. It identifies
+    what is operational, the first blocked layer and one concrete next evidence
+    task while keeping the detailed contracts below for audit. Missing evidence
+    remains explicit; the story cannot manufacture a candidate, forecast,
+    recommendation or order.
+13. `alpha-research-progressive-disclosure-v12` — **complete**. The headline
+    metrics and evidence story remain immediately visible, while the factor,
+    fundamentals, chronological-validation, catalyst, portfolio-impact and
+    research-card contracts sit behind one keyboard-accessible technical-audit
+    disclosure. Its closed state still reports operational, developing and
+    blocked layer counts. Expanding it restores every technical field; no audit
+    evidence is removed merely to make the page cleaner.
 
 ### RBI policy scope decision
 

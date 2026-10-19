@@ -57,6 +57,10 @@ class FundamentalFilingConflictError(ValueError):
     """Raised when one immutable official filing identity changes."""
 
 
+class FundamentalAuditConflictError(ValueError):
+    """Raised when one versioned normalizer audit changes after storage."""
+
+
 class EODStore:
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -319,6 +323,22 @@ class EODStore:
 
                     CREATE INDEX IF NOT EXISTS fundamental_filings_point_in_time_idx
                     ON fundamental_filings(symbol, reported_at, period_end, revision_sequence);
+
+                    CREATE TABLE IF NOT EXISTS fundamental_normalization_audits (
+                        filing_id TEXT NOT NULL,
+                        normalizer_contract TEXT NOT NULL,
+                        audit_hash TEXT NOT NULL,
+                        symbol TEXT NOT NULL,
+                        sector TEXT NOT NULL,
+                        audit_json TEXT NOT NULL,
+                        recorded_at TEXT NOT NULL,
+                        schema_version INTEGER NOT NULL,
+                        PRIMARY KEY (filing_id, normalizer_contract),
+                        FOREIGN KEY (filing_id) REFERENCES fundamental_filings(filing_id)
+                    );
+
+                    CREATE INDEX IF NOT EXISTS fundamental_normalization_audits_symbol_idx
+                    ON fundamental_normalization_audits(symbol, sector, normalizer_contract);
 
                     CREATE TABLE IF NOT EXISTS workspace_snapshots (
                         snapshot_key TEXT NOT NULL,
@@ -1764,6 +1784,123 @@ class EODStore:
             {
                 **{key: row[key] for key in row.keys() if key != "facts_json"},
                 "facts": json.loads(row["facts_json"]),
+            }
+            for row in rows
+        ]
+
+    def append_fundamental_normalization_audit(
+        self,
+        *,
+        filing_id: str,
+        normalizer_contract: str,
+        symbol: str,
+        sector: str,
+        audit: dict[str, object],
+        recorded_at: str | None = None,
+    ) -> dict[str, int]:
+        if (
+            not re.fullmatch(r"[A-Za-z0-9._:-]{1,160}", str(filing_id or ""))
+            or not re.fullmatch(r"[a-z0-9-]{1,80}", str(normalizer_contract or ""))
+            or not re.fullmatch(r"[A-Z0-9&-]{1,32}", str(symbol or ""))
+            or not str(sector or "").strip()
+            or not isinstance(audit, dict)
+        ):
+            raise ValueError("invalid_fundamental_normalization_audit")
+        allowed_keys = {
+            "format",
+            "contexts_read",
+            "numeric_taxonomy_elements",
+            "mapped_taxonomy_elements",
+            "unmapped_taxonomy_count",
+            "unmapped_taxonomy_sample",
+            "ambiguous_facts",
+            "worksheets_read",
+            "value_column",
+            "mapped_rows",
+            "unmapped_label_count",
+            "unmapped_label_sample",
+            "source_file_name",
+            "unit_scale_applied",
+            "mapped_facts",
+            "missing_model_facts",
+            "revision_preserved",
+            "metadata_inference",
+        }
+        if not set(audit).issubset(allowed_keys):
+            raise ValueError("invalid_fundamental_normalization_audit")
+        audit_json = json.dumps(
+            audit, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+        audit_hash = hashlib.sha256(audit_json.encode("utf-8")).hexdigest()
+        timestamp = recorded_at or datetime.now(timezone.utc).isoformat()
+        with closing(self._connect()) as connection:
+            with connection:
+                filing = connection.execute(
+                    "SELECT filing_id FROM fundamental_filings WHERE filing_id = ?",
+                    (filing_id,),
+                ).fetchone()
+                if filing is None:
+                    raise ValueError("unknown_fundamental_filing")
+                existing = connection.execute(
+                    """
+                    SELECT audit_hash FROM fundamental_normalization_audits
+                    WHERE filing_id = ? AND normalizer_contract = ?
+                    """,
+                    (filing_id, normalizer_contract),
+                ).fetchone()
+                if existing is not None:
+                    if existing["audit_hash"] != audit_hash:
+                        raise FundamentalAuditConflictError(
+                            f"stored_fundamental_audit_conflict:{filing_id}:{normalizer_contract}"
+                        )
+                    return {"inserted": 0, "duplicates": 1}
+                connection.execute(
+                    """
+                    INSERT INTO fundamental_normalization_audits (
+                        filing_id, normalizer_contract, audit_hash, symbol, sector,
+                        audit_json, recorded_at, schema_version
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        filing_id,
+                        normalizer_contract,
+                        audit_hash,
+                        symbol,
+                        sector.strip(),
+                        audit_json,
+                        timestamp,
+                        SCHEMA_VERSION,
+                    ),
+                )
+        return {"inserted": 1, "duplicates": 0}
+
+    def load_fundamental_normalization_audits(
+        self,
+        *,
+        normalizer_contract: str | None = None,
+        limit: int = 50000,
+    ) -> list[dict[str, object]]:
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 100000:
+            raise ValueError("invalid_fundamental_audit_limit")
+        parameters: list[object] = []
+        query = """
+            SELECT filing_id, normalizer_contract, audit_hash, symbol, sector,
+                   audit_json, recorded_at
+            FROM fundamental_normalization_audits
+        """
+        if normalizer_contract is not None:
+            if not re.fullmatch(r"[a-z0-9-]{1,80}", normalizer_contract):
+                raise ValueError("invalid_fundamental_normalizer_contract")
+            query += " WHERE normalizer_contract = ?"
+            parameters.append(normalizer_contract)
+        query += " ORDER BY recorded_at DESC, symbol, filing_id LIMIT ?"
+        parameters.append(limit)
+        with closing(self._connect()) as connection:
+            rows = connection.execute(query, parameters).fetchall()
+        return [
+            {
+                **{key: row[key] for key in row.keys() if key != "audit_json"},
+                "audit": json.loads(row["audit_json"]),
             }
             for row in rows
         ]
