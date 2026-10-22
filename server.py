@@ -13,6 +13,7 @@ import json
 import math
 import re
 import socket
+import sqlite3
 import ssl
 import subprocess
 import threading
@@ -156,6 +157,7 @@ PORTFOLIO_IMPACT_VERSION = "portfolio-impact-v19"
 CANDIDATE_RANKING_VERSION = "candidate-ranking-v20"
 RESEARCH_CARD_PUBLICATION_VERSION = "research-card-publication-v21"
 FULL_SITE_STORY_UX_VERSION = "full-site-story-and-ux-v22"
+PRODUCTION_READINESS_VERSION = "production-readiness-v23"
 CANDIDATE_OVERLAY_CONTRACT_VERSION = "candidate-overlays-v9"
 RESEARCH_CARD_CONTRACT_VERSION = "auditable-research-cards-v10"
 ALPHA_RESEARCH_STORY_VERSION = "alpha-research-story-v11"
@@ -13035,17 +13037,18 @@ def build_alpha_research_foundation(
             "boundary": "Release-native MPC decisions only; pre-2016 reconstruction is not an immediate dependency.",
         },
         "current_focus": {
-            "key": "full_site_story_and_ux",
-            "title": "Full-site story and UX v22",
+            "key": "terminal_interface_revamp",
+            "title": "Terminal interface revamp v24",
             "sequence": [
-                "lead every workspace with a concise statement of the current situation",
-                "surface the strongest inference, evidence state and next useful action before dense output",
-                "reuse each workspace's existing calculated values instead of creating parallel presentation calculations",
-                "place detailed tables and contracts behind clearly labelled expandable evidence audits",
-                "preserve missing-data, provenance and research-only boundaries throughout the interface",
+                "implement the approved command and status bar without hard-coding concept values",
+                "translate Dashboard, Market Sentiment, Seasonality and Historical Regimes first",
+                "extend the compact terminal grid to the remaining workspaces",
+                "preserve keyboard access, responsive reading and expandable evidence audits",
+                "retain provenance, missing-data states and the no-recommendation boundary",
             ],
         },
         "site_story_ux": build_full_site_story_ux_contract(),
+        "production_readiness": build_production_readiness_contract(),
         "candidate_overlays": candidate_overlays,
         "research_cards": research_cards,
         "research_story": research_story,
@@ -13090,6 +13093,101 @@ def build_full_site_story_ux_contract() -> dict[str, object]:
         "calculation_policy": "presentation_reuses_existing_workspace_outputs",
         "missing_data_policy": "missing_or_blocked_evidence_remains_explicit",
         "safety_policy": "research_context_only_no_recommendations_or_execution",
+    }
+
+
+def build_production_readiness_contract() -> dict[str, object]:
+    """Freeze the operational gates required before the visual v24 pass."""
+    stages = [
+        "index_snapshot",
+        "index_candles",
+        "institutional_flows",
+        "confirmed_fpi",
+        "macro_context",
+        "global_risk",
+        "futures_open_interest",
+        "nifty_500_breadth",
+        "nifty_500_stock_history",
+        "monthly_leaders",
+        "ten_year_history",
+        "official_rbi_history",
+        "market_sentiment",
+        "sentiment_snapshot",
+        "workspace_refresh",
+    ]
+    return {
+        "contract_version": PRODUCTION_READINESS_VERSION,
+        "status": "implemented",
+        "eod_orchestration": {
+            "stages": stages,
+            "stage_count": len(stages),
+            "maximum_attempts_per_stage": 2,
+            "progress_is_visible": True,
+            "final_failures_remain_visible": True,
+        },
+        "database": {
+            "integrity_check": "PRAGMA quick_check(1)",
+            "journal_mode": "WAL",
+            "backup_method": "sqlite_online_backup",
+            "backup_overwrite": "forbidden",
+            "backup_verification": "PRAGMA quick_check(1)",
+        },
+        "health_endpoint": "/api/health",
+        "required_static_assets": [
+            "index.html",
+            "styles.css",
+            "reference-universes.js",
+            "earnings-template.csv",
+        ],
+        "release_boundary": "local_research_workspace_no_recommendations_or_execution",
+        "next_milestone": "terminal-interface-revamp-v24",
+    }
+
+
+def build_production_health_report(
+    store: EODStore,
+    static_directory: str | Path,
+) -> dict[str, object]:
+    """Report local runtime readiness without performing provider requests."""
+    contract = build_production_readiness_contract()
+    required_assets = list(contract["required_static_assets"])
+    static_root = Path(static_directory)
+    assets = {
+        name: {
+            "present": (static_root / name).is_file(),
+            "bytes": (static_root / name).stat().st_size if (static_root / name).is_file() else 0,
+        }
+        for name in required_assets
+    }
+    try:
+        database = store.integrity_report()
+    except (OSError, sqlite3.DatabaseError) as error:
+        database = {
+            "ok": False,
+            "quick_check": "unavailable",
+            "error": error.__class__.__name__,
+            "tables": [],
+            "table_count": 0,
+            "row_counts": {},
+        }
+    failed_assets = [name for name, state in assets.items() if not state["present"]]
+    checks = {
+        "database_integrity": bool(database.get("ok")),
+        "static_assets": not failed_assets,
+        "eod_retry_contract": contract["eod_orchestration"]["maximum_attempts_per_stage"] == 2,
+        "backup_contract": contract["database"]["backup_method"] == "sqlite_online_backup",
+    }
+    return {
+        "ok": all(checks.values()),
+        "contract_version": PRODUCTION_READINESS_VERSION,
+        "status": "ready" if all(checks.values()) else "degraded",
+        "checked_at": datetime.now(INDIA_TIMEZONE).isoformat(),
+        "checks": checks,
+        "database": database,
+        "static_assets": assets,
+        "failed_assets": failed_assets,
+        "provider_requests_performed": False,
+        "contract": contract,
     }
 
 
@@ -19291,6 +19389,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def __init__(self, *args, static_directory: str, **kwargs):
+        self.static_directory = Path(static_directory)
         super().__init__(*args, directory=static_directory, **kwargs)
 
     def end_headers(self) -> None:
@@ -19300,6 +19399,16 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib handler name
         path = urllib.parse.urlsplit(self.path).path
+        if path == "/api/health":
+            report = build_production_health_report(
+                _get_eod_store(),
+                self.static_directory,
+            )
+            self._send_json(
+                HTTPStatus.OK if report["ok"] else HTTPStatus.SERVICE_UNAVAILABLE,
+                report,
+            )
+            return
         if path == "/api/kite/status":
             with _SESSION_LOCK:
                 connected = bool(_ACTIVE_KITE_SESSION)

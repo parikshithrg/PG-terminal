@@ -255,9 +255,126 @@ research pipeline before the final full-site presentation and operating pass.
     story-first summaries. Dense workspace tables are labelled as evidence
     audits and collapsed by default, while all existing calculations, element
     identities, missing-data states and research-only guardrails remain intact.
-24. `production-readiness-v23` — finish EOD orchestration, progress/retry and
-    stale-data handling, backup/recovery checks, end-to-end tests and operating
-    documentation.
+24. `production-readiness-v23` — **local operational readiness complete**. The
+    15-stage browser EOD update now retries each failed stage once, keeps the
+    active stage and percentage visible, continues unrelated stages and reports
+    final failures without converting missing evidence to neutral. `/api/health`
+    verifies SQLite integrity and required static assets without contacting a
+    provider. The EOD store exposes a table/row inventory and a consistent,
+    verified, non-overwriting SQLite backup operation. A command-line backup and
+    verification tool, recovery drill, release checklist and automated ready/
+    degraded/backup-restore tests are included. The live local store passes
+    `PRAGMA quick_check(1)` and the health endpoint reports ready.
+25. `terminal-interface-revamp-v24` — **in progress; Dashboard pass complete**.
+    Implement the approved PG-terminal visual system across the final site
+    after production behaviour is stable. Rebuild
+    the information hierarchy around compact command/status bars, dense
+    rectangular analytical grids, terminal typography, restrained semantic
+    colour and one-screen narratives. Preserve responsive access, keyboard
+    navigation, readable focus states, expandable audits and every existing
+    missing-data and research-safety boundary. The four approved concept images
+    below are the visual acceptance references for the first implementation
+    pass; they are not literal data specifications. The first page pass now
+    gives Dashboard an original PG-terminal command shell, live IST clock,
+    compact index ribbon, rectangular connected-story grid and dense portfolio,
+    workspace, breadth and readiness panels without changing any loader,
+    calculation or evidence identity. The treatment is deliberately scoped by
+    active page so each remaining workspace can be migrated and verified in
+    sequence. Its second visual pass adds data-derived regime scales, signal
+    rings, analogue return/hit-rate bars, relative-strength bars and a catalyst
+    timeline so the story scans graphically rather than relying on prose alone.
+    The completed Dashboard template, including its persistent light/dark
+    switcher and matched semantic status treatments in both palettes, is now the
+    approved implementation baseline to carry across every remaining page.
+    Resume that page-by-page rollout with Market Sentiment when development
+    restarts.
+    The command field is intentionally non-interactive during the page migration;
+    at the end of v24 it must either become a real cross-workspace search/command
+    palette or be removed. Market Sentiment is the next page.
+
+### Final UI revamp direction — approved concept set
+
+- Use the approved Bloomberg-terminal-inspired concept set as the visual
+  acceptance reference for `terminal-interface-revamp-v24`. Keep the result an
+  original PG-terminal product rather than a replica of another terminal.
+- Approved visual references:
+  - [`Dashboard`](design-concepts/dashboard-terminal-concept.png)
+  - [`Market Sentiment`](design-concepts/market-sentiment-terminal-concept.png)
+  - [`Seasonality Analysis`](design-concepts/seasonality-terminal-concept.png)
+  - [`Historical Regimes`](design-concepts/historical-regimes-terminal-concept.png)
+- Preserve the current connected-market-story logic, but express it through a
+  dense institutional grid: command/status bar, regime, breadth, derivatives,
+  relative-strength heatmap, historical analogues, portfolio impact and upcoming
+  catalysts visible in one screen.
+- Prefer compact typography, thin separators, restrained amber/red/green/cyan
+  signalling and keyboard-terminal clarity. Avoid consumer-style glossy cards,
+  excessive rounded containers and explanatory prose that duplicates visible
+  data.
+- Simplification means stronger hierarchy and faster scanning, not removal of
+  provenance, missing-data states, research guardrails or expandable audits.
+- Do not copy Bloomberg trademarks, logos or proprietary screen layouts; retain
+  an original PG-terminal identity and the existing no-recommendation boundary.
+
+#### Shared terminal design system
+
+- Persistent top command bar: product identity, global search, selected
+  instrument or workspace context, exchange/session time, data-as-of time,
+  connection state and EOD refresh status.
+- Compact left navigation: icon plus short label, clear selected state and no
+  oversized consumer-app navigation treatment.
+- Information grid: thin borders, square or minimally rounded panels, tight
+  spacing, compact monospaced data, amber section labels, off-white primary
+  values, red/green directional states and cyan neutral or policy context.
+- Every page must answer, in order: what is happening, what evidence supports
+  it, what changed, what historically followed, what could invalidate the view,
+  and where the detailed audit lives.
+- Tables and charts must earn their space. Replace repeated explanatory prose
+  with inline labels, units, confidence, as-of dates and concise inference
+  blocks; keep full methods and source contracts expandable.
+- Generated concept values and dates are illustrative. Production screens must
+  bind only to the existing validated contracts and must never hard-code mock
+  values from the images.
+
+#### Dashboard acceptance reference
+
+- One-screen command centre joining current regime, NIFTY 500 breadth,
+  derivatives positioning, realised volatility and the connected market story.
+- Show relative-strength leaders/laggards as a compact index/sector board and
+  heatmap, followed by historical analogues, portfolio impact and upcoming
+  catalysts/watchpoints.
+- The dashboard remains a synthesis surface; detailed calculation tables stay
+  in their owning workspaces.
+
+#### Market Sentiment acceptance reference
+
+- Lead with the current regime, score, confidence and freshness, then show the
+  domestic tape and evidence coverage.
+- Give the six evidence clusters—cash trend, participation, volatility,
+  institutional flows, currency/rates and global risk—equal, compact treatment.
+- Keep the decision board explicitly research-only. Historical regime outcomes,
+  transition/recovery evidence and conditions that could change the view remain
+  visible without implying a trade instruction.
+
+#### Seasonality acceptance reference
+
+- Lead with the selected instrument and current-month context, a 12-month
+  heatmap and an evidence-quality verdict.
+- Place the seasonality curve, current leaders and weekday observations beneath
+  the headline, while giving held-out validation and turn-of-month testing equal
+  visual weight to attractive historical averages.
+- Explicitly show sample count, dispersion, chronological survival and
+  survivorship bias; failed seasonal effects are valid visible outcomes.
+
+#### Historical Regimes acceptance reference
+
+- Build a long-run regime timeline and a selected-episode story with five phases:
+  before, trigger, transmission, policy response and recovery.
+- Pair the narrative with an indexed market path, entry/trough/recovery evidence,
+  episode comparisons, recurring behavioural traits and the observed sequence
+  by which markets stabilized.
+- Allow daily, weekly, monthly or quarterly evidence according to defensible
+  historical availability. Similarity remains descriptive, and lower-confidence
+  narrative evidence must be visibly distinguished from point-in-time data.
 
 Official historical filings are the main external dependency. Missing evidence
 must continue to produce zero validated candidates. Automated recommendations,

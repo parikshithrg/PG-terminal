@@ -70,6 +70,44 @@ class EODStoreTest(unittest.TestCase):
         loaded = self.store.load_candles(kind="stock", display_name="INFY")
         self.assertEqual(loaded[0]["close"], 102.0)
 
+    def test_integrity_report_lists_operational_store_state(self):
+        self.store.append_candles(
+            kind="index",
+            display_name="Nifty 50",
+            provider_token="256265",
+            candles=[self.candle(date(2026, 9, 22), 102.0)],
+        )
+
+        report = self.store.integrity_report()
+
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["quick_check"], "ok")
+        self.assertEqual(report["journal_mode"], "wal")
+        self.assertIn("candles", report["tables"])
+        self.assertEqual(report["row_counts"]["candles"], 1)
+        self.assertGreater(report["database_bytes"], 0)
+
+    def test_consistent_backup_is_verified_and_never_overwritten(self):
+        self.store.append_candles(
+            kind="index",
+            display_name="Nifty 50",
+            provider_token="256265",
+            candles=[self.candle(date(2026, 9, 22), 102.0)],
+        )
+        destination = Path(self.temporary_directory.name) / "backups" / "eod-backup.sqlite3"
+
+        result = self.store.create_backup(destination)
+        restored = EODStore(destination)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["quick_check"], "ok")
+        self.assertEqual(
+            restored.load_candles(kind="index", display_name="Nifty 50")[0]["close"],
+            102.0,
+        )
+        with self.assertRaisesRegex(ValueError, "backup_destination_exists"):
+            self.store.create_backup(destination)
+
     def test_duplicate_dates_in_one_provider_snapshot_are_consolidated(self):
         result = self.store.append_candles(
             kind="index",

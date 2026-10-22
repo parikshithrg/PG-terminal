@@ -10,8 +10,11 @@ Updated: 2026-10-22
   readiness foundation is now complete. Resume by importing reviewed official
   historical membership files, or proceed to `fundamental-evidence-execution-v14`
   while those external files are assembled.
-- `full-site-story-and-ux-v22` is complete. Resume with
-  `production-readiness-v23`.
+- `full-site-story-and-ux-v22` and `production-readiness-v23` are complete.
+  `terminal-interface-revamp-v24` is now active: the Dashboard pass is complete
+  and the next page is Market Sentiment. Keep the operations guide frozen until
+  every page is migrated, then rewrite it against the final navigation and
+  visual states.
 - Official historical NSE/BSE filing exports are the main external dependency.
   No missing evidence may be replaced with synthetic, scraped or aggregator
   values, and no candidate may be published before every frozen gate passes.
@@ -80,6 +83,37 @@ Updated: 2026-10-22
   Dense tables are collapsed under labelled evidence audits without changing
   their DOM identities or calculations. The server exposes the frozen v22 UX
   contract and keeps missing-data and research-only boundaries explicit.
+- `production-readiness-v23` now retries each of the 15 EOD stages once while
+  preserving visible progress and final failures. `/api/health` performs a
+  provider-free SQLite integrity and static-asset check. The store supports a
+  verified, non-overwriting online backup, and
+  `scripts/backup_eod_store.py` plus `docs/OPERATIONS.md` document verification,
+  backup, recovery and release procedures. The 125.6 MB live store passes
+  `PRAGMA quick_check(1)`, all required assets are present and local health is
+  ready.
+- Final UI direction is frozen for `terminal-interface-revamp-v24`. Four
+  approved concept images now live in `docs/design-concepts/`: Dashboard,
+  Market Sentiment, Seasonality Analysis and Historical Regimes. They specify a
+  compact institutional grid, persistent command/status bar, terminal
+  typography, restrained semantic colour and page-specific one-screen stories.
+  They are visual acceptance references, not sources of production values.
+  Keep the PG-terminal identity, evidence provenance, missing-data states,
+  accessibility and research-only guardrails. Dashboard now implements the
+  first scoped terminal pass: command/status header, IST clock, compact index
+  ribbon, dense rectangular evidence grid and terminal colour/typography tokens.
+  Existing IDs, calculations, loaders, missing-data states and safety copy are
+  unchanged. The Dashboard visual pass now includes data-derived regime scales,
+  signal rings, analogue bars, relative-strength bars and a catalyst timeline.
+  The owner approved this live Dashboard template as the baseline for every
+  remaining page. Its top-bar light/dark switcher is functional, persists the
+  browser preference and now covers the full Dashboard, including portfolio and
+  workspace-summary status badges. Continue the same two-palette design system
+  page by page; Market Sentiment remains next.
+  The top command field is a deferred decision: make it a functional
+  cross-workspace search/command palette at the end of v24 or remove it; do not
+  ship it as decorative UI. Continue page-by-page with Market Sentiment,
+  Seasonality Analysis and Historical Regimes before applying the system to the
+  remaining pages.
 
 - The authoritative sequence is now validated data → regime/risk budget →
   factor core → catalyst overlay → portfolio-impact gate → chronological

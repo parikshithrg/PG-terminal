@@ -384,6 +384,7 @@ class EODStore:
                     ON workspace_snapshots(snapshot_key, as_of_date, created_at);
                     """
                 )
+
                 instrument_columns = {
                     row["name"]
                     for row in connection.execute("PRAGMA table_info(instruments)").fetchall()
@@ -406,6 +407,61 @@ class EODStore:
                     connection.execute(
                         "ALTER TABLE candles ADD COLUMN metadata_retrieved_at TEXT"
                     )
+
+    def integrity_report(self) -> dict[str, object]:
+        """Return a read-only integrity and inventory report for operations."""
+        with closing(self._connect()) as connection:
+            quick_check = str(connection.execute("PRAGMA quick_check(1)").fetchone()[0])
+            journal_mode = str(connection.execute("PRAGMA journal_mode").fetchone()[0])
+            table_rows = connection.execute(
+                """
+                SELECT name FROM sqlite_master
+                WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+                ORDER BY name
+                """
+            ).fetchall()
+            tables = [str(row["name"]) for row in table_rows]
+            row_counts = {
+                table: int(connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0])
+                for table in tables
+            }
+        return {
+            "ok": quick_check == "ok",
+            "quick_check": quick_check,
+            "journal_mode": journal_mode.lower(),
+            "schema_version": SCHEMA_VERSION,
+            "database_bytes": self.path.stat().st_size if self.path.exists() else 0,
+            "tables": tables,
+            "table_count": len(tables),
+            "row_counts": row_counts,
+        }
+
+    def create_backup(self, destination: str | Path) -> dict[str, object]:
+        """Create and verify a consistent SQLite backup without overwriting files."""
+        target = Path(destination)
+        if target.exists():
+            raise ValueError("backup_destination_exists")
+        if target.resolve() == self.path.resolve():
+            raise ValueError("backup_destination_matches_source")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with closing(self._connect()) as source, closing(sqlite3.connect(target)) as backup:
+                source.backup(backup)
+                quick_check = str(backup.execute("PRAGMA quick_check(1)").fetchone()[0])
+                if quick_check != "ok":
+                    raise ValueError("backup_integrity_check_failed")
+                backup.commit()
+        except Exception:
+            if target.exists():
+                target.unlink()
+            raise
+        return {
+            "ok": True,
+            "destination": str(target),
+            "database_bytes": target.stat().st_size,
+            "quick_check": "ok",
+            "schema_version": SCHEMA_VERSION,
+        }
 
     def save_workspace_snapshot(
         self,

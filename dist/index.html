@@ -1695,15 +1695,25 @@
       .mutual-fund-position-row { grid-template-columns: minmax(110px, 1fr) 1fr auto; }
     }
   </style>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=terminal-interface-v24-theme-switcher-3">
 </head>
-<body>
+<body data-active-page="dashboard">
   <header class="topbar">
     <button class="menu-button" id="menuButton" aria-label="Open navigation" aria-expanded="false">☰</button>
     <div class="brand" aria-label="PG-terminal">
       <div class="brand-mark">PG</div>
       <div class="brand-name">PG-terminal</div>
       <div class="brand-note">private market workspace</div>
+    </div>
+    <div class="terminal-command" aria-hidden="true">
+      <span>⌕</span>
+      <span>Search securities, indices, functions…</span>
+      <kbd>CTRL K</kbd>
+    </div>
+    <div class="terminal-clock" aria-label="Local market terminal time">
+      <span id="terminalClockDate">—</span>
+      <strong id="terminalClockTime">—</strong>
+      <span>IST</span>
     </div>
     <div class="top-actions">
       <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch to dark theme" aria-pressed="false" title="Switch to dark theme">
@@ -1783,7 +1793,7 @@
             <div class="as-of" id="dashboardAsOf">Connect Kite for current index data</div>
           </div>
 
-        <section class="summary-grid" aria-label="Market summary" hidden>
+        <section class="summary-grid terminal-market-strip" aria-label="Market summary">
           <article class="summary-card">
             <div class="summary-label">NIFTY 50</div>
             <div class="summary-value" id="nifty50Value">—</div>
@@ -4495,7 +4505,7 @@
       const context = canvas.getContext('2d');
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
       context.clearRect(0, 0, width, height);
-      context.font = "11px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      context.font = "10px Calibri, 'Segoe UI', Arial, sans-serif";
       return { context, width, height };
     }
 
@@ -4980,24 +4990,38 @@
       document.getElementById('dashboardStoryScoreFill').style.width = `${Math.max(0, Math.min(100, (Number(regime.score || 0) + 100) / 2))}%`;
 
       const signals = Array.isArray(result.signals) ? result.signals : [];
-      document.getElementById('dashboardStorySignals').innerHTML = signals.map((signal) => `<article class="story-signal ${escapeHtml(signal.state || 'mixed')}">
+      document.getElementById('dashboardStorySignals').innerHTML = signals.map((signal) => {
+        const meter = Math.max(0, Math.min(100, Number(signal.meter_pct || 0)));
+        return `<article class="story-signal ${escapeHtml(signal.state || 'mixed')}">
         <div class="story-signal-head"><span class="story-signal-label">${escapeHtml(signal.label || 'Signal')}</span><i class="story-signal-dot" aria-hidden="true"></i></div>
-        <strong>${escapeHtml(signal.value === null || signal.value === undefined ? '—' : String(signal.value))}</strong>
+        <div class="story-signal-main">
+          <strong>${escapeHtml(signal.value === null || signal.value === undefined ? '—' : String(signal.value))}</strong>
+          <div class="story-signal-ring" style="--meter:${meter}" aria-hidden="true"><span>${Math.round(meter)}</span></div>
+        </div>
         <p>${escapeHtml(signal.detail || '')}</p>
-        <div class="story-signal-track" aria-hidden="true"><div class="story-signal-fill" style="width:${Math.max(0, Math.min(100, Number(signal.meter_pct || 0)))}%"></div></div>
-      </article>`).join('');
+        <div class="story-signal-track" aria-hidden="true"><div class="story-signal-fill" style="width:${meter}%"></div></div>
+      </article>`;
+      }).join('');
 
       const analogue = result.historical_analogue || {};
       document.getElementById('dashboardStoryHistoryNote').textContent = `${analogue.label || regime.label || 'Current regime'} · ${Number(analogue.sessions_observed || 0).toLocaleString('en-IN')} historical sessions. Forward windows overlap and are descriptive, not forecasts.`;
       const horizons = Array.isArray(analogue.horizons) ? analogue.horizons : [];
       document.getElementById('dashboardStoryHorizons').innerHTML = horizons.length
-        ? horizons.map((row) => `<div class="story-horizon">
+        ? horizons.map((row) => {
+          const meanReturn = Number(row.mean_return_pct || 0);
+          const returnMagnitude = Math.min(50, Math.abs(meanReturn) * 5);
+          const returnLeft = meanReturn < 0 ? 50 - returnMagnitude : 50;
+          const positiveRate = Math.max(0, Math.min(100, Number(row.positive_rate_pct || 0)));
+          return `<div class="story-horizon">
           <span class="story-horizon-label">Next ${Number(row.sessions)} sessions</span>
           <strong class="${stockYtdMetricClass(row.mean_return_pct)}">${dashboardStoryPercent(row.mean_return_pct)}</strong>
+          <div class="story-horizon-return" aria-hidden="true"><i></i><span class="${meanReturn < 0 ? 'negative' : 'positive'}" style="left:${returnLeft}%;width:${returnMagnitude}%"></span></div>
+          <div class="story-horizon-hit" aria-hidden="true"><span style="width:${positiveRate}%"></span></div>
           <span>Mean return · median ${dashboardStoryPercent(row.median_return_pct)}</span>
           <span>${Number(row.positive_rate_pct || 0).toFixed(1)}% positive · worst <span class="negative">${dashboardStoryPercent(row.worst_return_pct, false)}</span></span>
           <span>Mean max drawdown ${dashboardStoryPercent(row.mean_max_drawdown_pct, false)}</span>
-        </div>`).join('')
+        </div>`;
+        }).join('')
         : '<div class="story-horizon"><span>Historical analogue unavailable.</span></div>';
 
       const catalysts = Array.isArray(result.catalysts) ? result.catalysts : [];
@@ -5032,9 +5056,12 @@
       document.getElementById('dashboardStoryRelativeGrid').innerHTML = availableStrengthRows.length
         ? availableStrengthRows.map(([label, row, state]) => {
           const stockCount = row.stocks_evaluated ? ` · ${Number(row.stocks_evaluated)} stocks` : '';
+          const excess = Number(row.excess_vs_nifty50_pct || 0);
+          const barWidth = Math.min(100, Math.abs(excess) * 10);
           return `<article class="story-strength-card ${state}">
             <span class="story-strength-label">${escapeHtml(label)}</span>
             <strong>${escapeHtml(row.name || '—')}</strong>
+            <div class="story-strength-bar" aria-hidden="true"><span class="${excess < 0 ? 'negative' : 'positive'}" style="width:${barWidth}%"></span></div>
             <span><span class="${stockYtdMetricClass(row.excess_vs_nifty50_pct)}">${dashboardStoryPercent(row.excess_vs_nifty50_pct)} vs Nifty 50</span> · return ${dashboardStoryPercent(row.return_pct)}${stockCount}</span>
           </article>`;
         }).join('')
@@ -5068,6 +5095,30 @@
         refreshDashboardStoryButton.disabled = false;
         refreshDashboardStoryButton.textContent = 'Refresh story';
       }
+    }
+
+    let dashboardWorkspaceLoadPromise = null;
+
+    function loadDashboardWorkspace() {
+      if (dashboardWorkspaceLoadPromise) return dashboardWorkspaceLoadPromise;
+      const task = (async () => {
+        // The connected story is the page's primary evidence. Load it before
+        // the secondary cards so concurrent SQLite summaries cannot delay the
+        // first meaningful visual state.
+        await loadDashboardMarketStory(false);
+        await Promise.allSettled([
+          loadDashboardMarketSentimentSummary(false),
+          loadDashboardFnoSummary(false),
+          loadDashboardScreenerSummary(false),
+          loadDashboardSeasonalitySummary(false),
+          loadDashboardEventsSummary(false),
+        ]);
+      })();
+      dashboardWorkspaceLoadPromise = task;
+      task.finally(() => {
+        if (dashboardWorkspaceLoadPromise === task) dashboardWorkspaceLoadPromise = null;
+      });
+      return task;
     }
 
     function renderDashboardMarketSentimentSummary(result) {
@@ -9308,6 +9359,7 @@
       const totalStages = 15;
       let completedStages = 0;
       const failedStages = [];
+      const retriedStages = [];
       const updateProgress = (stage) => {
         const percentage = Math.round(completedStages * 100 / totalStages);
         eodUpdateButton.classList.add('eod-running');
@@ -9321,10 +9373,18 @@
       const runStage = async (stage, operation) => {
         updateProgress(stage);
         let result = false;
-        try {
-          result = await operation();
-        } catch (_error) {
-          result = false;
+        for (let attempt = 1; attempt <= 2; attempt += 1) {
+          try {
+            result = await operation();
+          } catch (_error) {
+            result = false;
+          }
+          if (result === true) break;
+          if (attempt === 1) {
+            retriedStages.push(stage);
+            updateProgress(`Retrying ${stage.toLowerCase()} · attempt 2 of 2`);
+            await new Promise((resolve) => window.setTimeout(resolve, 250));
+          }
         }
         if (result !== true) failedStages.push(stage);
         completedStages += 1;
@@ -9358,7 +9418,10 @@
         );
         const workspacesRefreshed = await runStage('Refreshing every workspace and portfolio story', refreshAllWorkspaceViewsAfterEod);
         if (indexUpdated && eodIndicesUpdated && institutionalFlowsUpdated && confirmedFpiUpdated && macroContextUpdated && globalRiskUpdated && futuresOiUpdated && breadthUpdated && stockHistoryUpdated && monthlyLeadersUpdated && historicalLeadersUpdated && officialHistoryUpdated && sentimentUpdated && factorSnapshotSaved && workspacesRefreshed) {
-          showNotice('EOD update completed. All market data, workspaces, and the in-memory portfolio story are refreshed.');
+          const retrySummary = retriedStages.length
+            ? ` ${retriedStages.length} stage${retriedStages.length === 1 ? '' : 's'} recovered on retry.`
+            : '';
+          showNotice(`EOD update completed. All market data, workspaces, and the in-memory portfolio story are refreshed.${retrySummary}`);
         } else {
           const failedSummary = failedStages.slice(0, 3).join(' · ');
           const remaining = Math.max(0, failedStages.length - 3);
@@ -9936,6 +9999,22 @@
 
     initializeWorkspaceStories();
 
+    function updateTerminalClock() {
+      const now = new Date();
+      const dateNode = document.getElementById('terminalClockDate');
+      const timeNode = document.getElementById('terminalClockTime');
+      if (!dateNode || !timeNode) return;
+      dateNode.textContent = new Intl.DateTimeFormat('en-IN', {
+        weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata'
+      }).format(now);
+      timeNode.textContent = new Intl.DateTimeFormat('en-IN', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Kolkata'
+      }).format(now);
+    }
+
+    updateTerminalClock();
+    window.setInterval(updateTerminalClock, 1000);
+
     document.querySelectorAll('.nav-button').forEach((button) => {
       button.addEventListener('click', () => {
         document.querySelectorAll('.nav-button').forEach((item) => item.classList.remove('active'));
@@ -9953,6 +10032,7 @@
         const isAlphaResearch = button.dataset.page === 'Alpha Research';
         const isEarnings = button.dataset.page === 'Earnings Analysis';
         const isPortfolio = button.dataset.page === 'Portfolio Analysis';
+        document.body.dataset.activePage = button.dataset.page.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
         dashboardView.hidden = !isDashboard;
         marketSentimentView.hidden = !isMarketSentiment;
         fnoView.hidden = !isFno;
@@ -9970,12 +10050,7 @@
         if (isDashboard) {
           renderDashboardPortfolioSummary(portfolioAnalysis);
           renderDashboardStoryPortfolio(portfolioAnalysis, dashboardMarketStory);
-          loadDashboardMarketStory(false);
-          loadDashboardMarketSentimentSummary(false);
-          loadDashboardFnoSummary(false);
-          loadDashboardScreenerSummary(false);
-          loadDashboardSeasonalitySummary(false);
-          loadDashboardEventsSummary(false);
+          loadDashboardWorkspace();
         }
         if ((isMarketSentiment || isFno) && document.getElementById('sentimentAsOfValue').textContent === '—') {
           loadDomesticSentiment(false);
@@ -10025,12 +10100,7 @@
     restoreKiteStatus();
     renderDashboardPortfolioSummary(null);
     renderDashboardStoryPortfolio(null, null);
-    loadDashboardMarketStory(false);
-    loadDashboardMarketSentimentSummary(false);
-    loadDashboardFnoSummary(false);
-    loadDashboardScreenerSummary(false);
-    loadDashboardSeasonalitySummary(false);
-    loadDashboardEventsSummary(false);
+    loadDashboardWorkspace();
   </script>
 </body>
 </html>

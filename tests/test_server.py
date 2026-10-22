@@ -3,10 +3,13 @@ import socket
 import urllib.error
 import io
 import json
+import tempfile
 import zipfile
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+from eod_store import EODStore
 
 from server import (
     NIFTY_INDICES_PUBLIC_USER_AGENT,
@@ -44,6 +47,8 @@ from server import (
     build_candidate_ranking,
     build_research_card_publication,
     build_full_site_story_ux_contract,
+    build_production_readiness_contract,
+    build_production_health_report,
     build_candidate_overlay_contract,
     build_research_card_contract,
     build_alpha_research_story,
@@ -156,10 +161,14 @@ class AlphaResearchFoundationTest(unittest.TestCase):
         self.assertEqual(payload["contract_version"], "alpha-research-foundation-v1")
         self.assertEqual(payload["summary"]["ranked_ideas"], 0)
         self.assertEqual(payload["policy_history"]["state"], "complete_for_current_scope")
-        self.assertEqual(payload["current_focus"]["key"], "full_site_story_and_ux")
+        self.assertEqual(payload["current_focus"]["key"], "terminal_interface_revamp")
         self.assertEqual(
             payload["site_story_ux"]["contract_version"],
             "full-site-story-and-ux-v22",
+        )
+        self.assertEqual(
+            payload["production_readiness"]["contract_version"],
+            "production-readiness-v23",
         )
         self.assertEqual(payload["research_story"]["contract_version"], "alpha-research-story-v11")
         factor = next(layer for layer in payload["layers"] if layer["key"] == "factor_core")
@@ -187,6 +196,46 @@ class AlphaResearchFoundationTest(unittest.TestCase):
         self.assertIn("historical_regimes", result["story_workspaces"])
         self.assertIn("alpha_research", result["existing_story_workspaces"])
         self.assertIn("collapsed_by_default", result["evidence_policy"])
+
+    def test_production_readiness_contract_freezes_retry_and_backup_rules(self):
+        result = build_production_readiness_contract()
+
+        self.assertEqual(result["contract_version"], "production-readiness-v23")
+        self.assertEqual(result["eod_orchestration"]["stage_count"], 15)
+        self.assertEqual(result["eod_orchestration"]["maximum_attempts_per_stage"], 2)
+        self.assertEqual(result["database"]["backup_method"], "sqlite_online_backup")
+        self.assertEqual(result["database"]["backup_overwrite"], "forbidden")
+        self.assertEqual(result["next_milestone"], "terminal-interface-revamp-v24")
+
+    def test_production_health_report_checks_store_and_static_assets(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            store = EODStore(root / "eod.sqlite3")
+            static_root = root / "dist"
+            static_root.mkdir()
+            for name in build_production_readiness_contract()["required_static_assets"]:
+                (static_root / name).write_text("ready", encoding="utf-8")
+
+            result = build_production_health_report(store, static_root)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["status"], "ready")
+        self.assertTrue(result["checks"]["database_integrity"])
+        self.assertTrue(result["checks"]["static_assets"])
+        self.assertFalse(result["provider_requests_performed"])
+
+    def test_production_health_report_exposes_missing_static_asset(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            store = EODStore(root / "eod.sqlite3")
+            static_root = root / "dist"
+            static_root.mkdir()
+
+            result = build_production_health_report(store, static_root)
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["status"], "degraded")
+        self.assertIn("index.html", result["failed_assets"])
 
     def test_candidate_overlay_contract_keeps_missing_evidence_explicit(self):
         overlay = build_candidate_overlay_contract(
