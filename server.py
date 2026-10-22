@@ -42,6 +42,7 @@ from eod_store import (
     FuturesSnapshotConflictError,
     GlobalRiskConflictError,
     HistoricalSeriesConflictError,
+    IndexMembershipConflictError,
     InstitutionalFlowConflictError,
     MacroSnapshotConflictError,
 )
@@ -148,9 +149,19 @@ FACTOR_MARKET_DATA_ADMISSION_COVERAGE_PCT = 95.0
 SECTOR_NEUTRAL_MOMENTUM_CONTRACT_VERSION = "sector-neutral-momentum-v3"
 FUNDAMENTAL_NORMALIZER_CONTRACT_VERSION = "fundamental-xbrl-normalizer-v5"
 COMPOSITE_VALIDATION_CONTRACT_VERSION = "composite-factor-validation-v8"
+COMPOSITE_FACTOR_RUN_VERSION = "composite-factor-run-v16"
+INVESTABLE_VALIDATION_VERSION = "investable-validation-v17"
+CATALYST_EVIDENCE_VERSION = "catalyst-evidence-v18"
+PORTFOLIO_IMPACT_VERSION = "portfolio-impact-v19"
+CANDIDATE_RANKING_VERSION = "candidate-ranking-v20"
+RESEARCH_CARD_PUBLICATION_VERSION = "research-card-publication-v21"
+FULL_SITE_STORY_UX_VERSION = "full-site-story-and-ux-v22"
 CANDIDATE_OVERLAY_CONTRACT_VERSION = "candidate-overlays-v9"
 RESEARCH_CARD_CONTRACT_VERSION = "auditable-research-cards-v10"
 ALPHA_RESEARCH_STORY_VERSION = "alpha-research-story-v11"
+POINT_IN_TIME_UNIVERSE_VERSION = "point-in-time-universe-v13"
+FUNDAMENTAL_EVIDENCE_EXECUTION_VERSION = "fundamental-evidence-execution-v14"
+FINANCIAL_SECTOR_FACTOR_MODEL_VERSION = "financial-sector-factor-model-v15"
 SECTOR_NEUTRAL_MINIMUM_GROUP_SIZE = 5
 SECTOR_NEUTRAL_WEIGHTS = {"12_1": 0.50, "6_1": 0.30, "3_1": 0.20}
 SECTOR_NEUTRAL_VALIDATION_MONTHS = 24
@@ -10241,6 +10252,13 @@ def build_point_in_time_fundamentals_foundation(
         for row in factor_rows
         if row.get("factor_input_admitted") and str(row.get("symbol") or "").strip()
     }
+    financial_subsectors = {
+        str(row.get("symbol") or "").strip().upper(): str(
+            row.get("financial_subsector") or ""
+        ).strip().casefold()
+        for row in factor_rows
+        if row.get("factor_input_admitted") and str(row.get("symbol") or "").strip()
+    }
     known_filings: list[dict[str, object]] = []
     for filing in filings:
         try:
@@ -10361,6 +10379,11 @@ def build_point_in_time_fundamentals_foundation(
             {
                 "symbol": symbol,
                 "sector": sector,
+                "financial_subsector": (
+                    financial_subsectors.get(symbol)
+                    if financial_subsectors.get(symbol) in {"bank", "nbfc", "insurer", "other_financial"}
+                    else None
+                ),
                 "basis": selected_basis if selected else None,
                 "quarters_known": len(selected),
                 "latest_period_end": latest.get("period_end") if latest else None,
@@ -10653,6 +10676,277 @@ def build_fundamental_coverage_audit(
     }
 
 
+def build_fundamental_evidence_execution(
+    coverage_audit: dict[str, object],
+) -> dict[str, object]:
+    """Turn the coverage queue into a deterministic official-file work batch."""
+    summary = coverage_audit.get("summary")
+    summary = summary if isinstance(summary, dict) else {}
+    taxonomy = coverage_audit.get("taxonomy_audit")
+    taxonomy = taxonomy if isinstance(taxonomy, dict) else {}
+    admission = coverage_audit.get("admission_gates")
+    admission = admission if isinstance(admission, dict) else {}
+    plan = coverage_audit.get("population_plan")
+    plan = plan if isinstance(plan, dict) else {}
+    sectors = coverage_audit.get("sectors")
+    sectors = sectors if isinstance(sectors, list) else []
+    items = plan.get("items")
+    items = items if isinstance(items, list) else []
+    pending = [
+        item
+        for item in items
+        if isinstance(item, dict) and int(item.get("quarters_remaining") or 0) > 0
+    ]
+    next_batch = [
+        {
+            "sequence": index + 1,
+            "symbol": str(item.get("symbol") or ""),
+            "sector": str(item.get("sector") or "Unclassified"),
+            "quarters_known": int(item.get("quarters_known") or 0),
+            "quarters_requested": min(5, int(item.get("quarters_remaining") or 0)),
+            "taxonomy_review_required": bool(item.get("taxonomy_review_required")),
+        }
+        for index, item in enumerate(pending[:5])
+    ]
+    eligible = int(summary.get("eligible_nonfinancial_companies") or 0)
+    five_quarters = int(summary.get("companies_with_five_quarters") or 0)
+    overall_target = math.ceil(eligible * 0.80) if eligible else 0
+    minimum_overall_pct = float(
+        admission.get("minimum_overall_five_quarter_coverage_pct") or 80.0
+    )
+    overall_pct = float(summary.get("five_quarter_coverage_pct") or 0.0)
+    overall_coverage_ready = bool(eligible) and overall_pct >= minimum_overall_pct
+    sector_coverage_ready = bool(sectors) and all(
+        isinstance(row, dict) and bool(row.get("coverage_gate_passed"))
+        for row in sectors
+    )
+    gates = [
+        {
+            "key": "official_files",
+            "title": "Official files admitted",
+            "state": "ready" if int(taxonomy.get("files_audited") or 0) > 0 else "blocked",
+            "detail": f"{int(taxonomy.get('files_audited') or 0)} manually supplied official files have passed the normalizer.",
+        },
+        {
+            "key": "overall_coverage",
+            "title": "Overall five-quarter coverage",
+            "state": "ready" if overall_coverage_ready else "blocked",
+            "detail": f"{five_quarters} of {eligible} companies are ready; at least {overall_target} are required by the 80% gate.",
+        },
+        {
+            "key": "sector_coverage",
+            "title": "Every-sector coverage",
+            "state": "ready" if sector_coverage_ready else "blocked",
+            "detail": "Every represented non-financial sector must reach 60% five-quarter coverage.",
+        },
+        {
+            "key": "taxonomy_review",
+            "title": "Taxonomy review complete",
+            "state": "ready" if admission.get("taxonomy_review_gate_passed") else "blocked",
+            "detail": f"{int(taxonomy.get('unmapped_observations') or 0)} unmapped and {int(taxonomy.get('ambiguous_fact_observations') or 0)} ambiguous observations remain.",
+        },
+    ]
+    ready_count = sum(gate["state"] == "ready" for gate in gates)
+    return {
+        "ok": True,
+        "contract_version": FUNDAMENTAL_EVIDENCE_EXECUTION_VERSION,
+        "status": "coverage_ready_for_validation" if ready_count == len(gates) else "official_files_required",
+        "summary": {
+            "eligible_companies": eligible,
+            "five_quarter_ready": five_quarters,
+            "overall_target_companies": overall_target,
+            "files_audited": int(taxonomy.get("files_audited") or 0),
+            "minimum_files_remaining": int(plan.get("minimum_official_files_remaining") or 0),
+            "queue_sectors": int(plan.get("sectors_in_queue") or 0),
+            "next_batch_companies": len(next_batch),
+            "gates_ready": ready_count,
+            "gates": len(gates),
+        },
+        "next_batch": next_batch,
+        "gates": gates,
+        "execution_rules": [
+            "Process at most five companies in one review batch and preserve deterministic queue order.",
+            "Each quarter requires its own official export, explicit broadcast time, fiscal period, basis and source URL.",
+            "An import conflict stops that file; an exact replay is idempotent.",
+            "Review every unmapped or ambiguous fact before extending a taxonomy alias.",
+            "Coverage progress cannot produce a score, rank, candidate, recommendation or order.",
+        ],
+    }
+
+
+def build_financial_sector_factor_model(
+    foundation: dict[str, object],
+) -> dict[str, object]:
+    """Freeze comparable financial-sector models without manufacturing scores."""
+    rows = foundation.get("rows") if isinstance(foundation, dict) else None
+    if not isinstance(rows, list):
+        raise ValueError("invalid_fundamental_foundation")
+    financial_rows = [
+        row
+        for row in rows
+        if isinstance(row, dict) and row.get("sector") == "Financial Services"
+    ]
+    model_subsectors = {"bank", "nbfc", "insurer"}
+    accepted_subsectors = model_subsectors | {"other_financial"}
+    assignments: list[dict[str, object]] = []
+    for row in financial_rows:
+        raw_subsector = str(row.get("financial_subsector") or "").strip().casefold()
+        subsector = raw_subsector if raw_subsector in accepted_subsectors else None
+        assignments.append(
+            {
+                "symbol": str(row.get("symbol") or ""),
+                "financial_subsector": subsector,
+                "quarters_known": int(row.get("quarters_known") or 0),
+                "state": (
+                    "official_history_ready"
+                    if subsector in model_subsectors and int(row.get("quarters_known") or 0) >= 5
+                    else "official_history_required"
+                    if subsector in model_subsectors
+                    else "separate_model_required"
+                    if subsector == "other_financial"
+                    else "subsector_classification_required"
+                ),
+            }
+        )
+    classified = sum(bool(row["financial_subsector"]) for row in assignments)
+    model_eligible = sum(
+        row["financial_subsector"] in model_subsectors for row in assignments
+    )
+    deferred_other = sum(
+        row["financial_subsector"] == "other_financial" for row in assignments
+    )
+    history_ready = sum(
+        row["state"] == "official_history_ready" for row in assignments
+    )
+    total = len(assignments)
+    model_definitions = [
+        {
+            "key": "bank",
+            "title": "Banks",
+            "quality": [
+                "return on average assets",
+                "return on average equity",
+                "net interest margin",
+                "gross and net NPA ratios",
+                "provision coverage",
+                "CET1 and capital adequacy",
+            ],
+            "value": ["price to book", "earnings yield"],
+            "required_evidence": [
+                "profit after tax",
+                "average assets and equity",
+                "net interest income and earning assets",
+                "gross and net advances",
+                "gross and net NPAs",
+                "provisions",
+                "CET1 and capital adequacy ratios",
+                "shares outstanding and dated price",
+            ],
+        },
+        {
+            "key": "nbfc",
+            "title": "NBFCs",
+            "quality": [
+                "return on average assets",
+                "return on average equity",
+                "net interest margin",
+                "gross and net stage-3 ratios",
+                "provision coverage",
+                "capital adequacy",
+            ],
+            "value": ["price to book", "earnings yield"],
+            "required_evidence": [
+                "profit after tax",
+                "average assets and equity",
+                "net interest income and average earning assets",
+                "loan assets and stage-3 assets",
+                "impairment provisions",
+                "capital adequacy ratio",
+                "shares outstanding and dated price",
+            ],
+        },
+        {
+            "key": "insurer",
+            "title": "Insurers",
+            "quality": [
+                "solvency ratio",
+                "value of new business margin for life insurers",
+                "persistency for life insurers",
+                "combined ratio for general insurers",
+                "embedded-value growth when officially disclosed",
+            ],
+            "value": [
+                "price to embedded value for life insurers",
+                "price to book when embedded value is not applicable",
+            ],
+            "required_evidence": [
+                "solvency ratio",
+                "premium and claims disclosures",
+                "life-insurer VNB, APE, persistency and embedded value where applicable",
+                "general-insurer combined ratio where applicable",
+                "equity, shares outstanding and dated price",
+            ],
+        },
+    ]
+    gates = [
+        {
+            "key": "definitions",
+            "title": "Subsector definitions frozen",
+            "state": "ready",
+            "detail": "Banks, NBFCs and insurers use separate quality, risk and valuation evidence.",
+        },
+        {
+            "key": "classification",
+            "title": "Point-in-time subsector identity",
+            "state": "ready" if total and classified == total else "blocked",
+            "detail": f"{classified} of {total} financial companies have an explicit bank, NBFC, insurer or deferred-other identity; names are never guessed.",
+        },
+        {
+            "key": "official_history",
+            "title": "Five release-known quarters",
+            "state": "ready" if model_eligible and history_ready == model_eligible else "blocked",
+            "detail": f"{history_ready} of {model_eligible} bank, NBFC and insurer companies have five official release-known quarters; {deferred_other} other financial businesses remain outside these three models.",
+        },
+        {
+            "key": "comparable_metrics",
+            "title": "Comparable model facts",
+            "state": "blocked",
+            "detail": "Financial-specific facts must pass a dedicated normalizer and taxonomy audit before any score is calculated.",
+        },
+    ]
+    ready = sum(gate["state"] == "ready" for gate in gates)
+    return {
+        "ok": True,
+        "contract_version": FINANCIAL_SECTOR_FACTOR_MODEL_VERSION,
+        "status": "evidence_ready" if ready == len(gates) else "definitions_ready_evidence_pending",
+        "summary": {
+            "financial_companies": total,
+            "subsector_classified": classified,
+            "model_eligible": model_eligible,
+            "deferred_other_financial": deferred_other,
+            "five_quarter_ready": history_ready,
+            "models": len(model_definitions),
+            "gates_ready": ready,
+            "gates": len(gates),
+        },
+        "models": model_definitions,
+        "assignments": assignments,
+        "gates": gates,
+        "outputs": {
+            "quality_scores": [],
+            "value_scores": [],
+            "composite_ranks": [],
+            "ranked_candidates": [],
+        },
+        "limitations": [
+            "Financial companies remain excluded from the industrial-company margin and leverage model.",
+            "Subsector identity must be explicit and effective-dated; company names or current labels are not projected backwards. Exchanges, asset managers, brokers and fintechs remain deferred-other until their own comparable model is frozen.",
+            "Insurer metrics are not forced into bank or NBFC definitions.",
+            "Frozen definitions do not imply that official evidence is available or that a factor is predictive.",
+        ],
+    }
+
+
 def build_composite_factor_validation_contract(
     factor_foundation: dict[str, object],
     coverage_audit: dict[str, object],
@@ -10751,6 +11045,1192 @@ def build_composite_factor_validation_contract(
             "Factor weights and cost assumptions are frozen before observing holdout results.",
             "Passing a holdout would support further research; it would not create a recommendation or execution instruction.",
             "Regime compatibility, catalysts and portfolio impact remain outside this validation milestone.",
+        ],
+    }
+
+
+def build_composite_factor_run(
+    validation_contract: dict[str, object],
+    monthly_snapshots: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    """Run the frozen composite chronologically only after every evidence gate passes."""
+    methodology = validation_contract.get("methodology")
+    methodology = methodology if isinstance(methodology, dict) else {}
+    minimum_months = int(methodology.get("minimum_monthly_snapshots") or 60)
+    cost_bps = float(methodology.get("one_way_cost_bps") or 20.0)
+    snapshots = monthly_snapshots if isinstance(monthly_snapshots, list) else []
+    blocked = validation_contract.get("status") != "ready_to_run"
+    base = {
+        "ok": True,
+        "contract_version": COMPOSITE_FACTOR_RUN_VERSION,
+        "methodology": {
+            "factor_mix": {
+                "sector_neutral_momentum": 0.40,
+                "quality": 0.30,
+                "value": 0.30,
+            },
+            "selection": "equal-weight top quintile after point-in-time sector-neutral normalization",
+            "rebalance_frequency": "monthly",
+            "one_way_cost_bps": cost_bps,
+            "chronological_split": "60% discovery, 20% validation, 20% untouched holdout",
+            "minimum_monthly_snapshots": minimum_months,
+        },
+        "outputs": {
+            "discovery": None,
+            "validation": None,
+            "holdout": None,
+            "monthly_results": [],
+            "ranked_candidates": [],
+        },
+        "limitations": [
+            "The runner cannot execute while any upstream evidence gate is blocked.",
+            "Each snapshot must contain only identities, sectors, factors and prices known on its rebalance date.",
+            "The untouched holdout is evaluated once under the frozen methodology; it is not used to tune weights.",
+            "A completed research run does not create a recommendation, candidate rank or execution instruction.",
+        ],
+    }
+    if blocked:
+        return {
+            **base,
+            "status": "blocked_by_evidence_gates",
+            "summary": {
+                "snapshots_supplied": len(snapshots),
+                "snapshots_required": minimum_months,
+                "snapshots_processed": 0,
+                "splits_completed": 0,
+                "candidate_ranks": 0,
+            },
+        }
+    if len(snapshots) < minimum_months:
+        return {
+            **base,
+            "status": "insufficient_monthly_snapshots",
+            "summary": {
+                "snapshots_supplied": len(snapshots),
+                "snapshots_required": minimum_months,
+                "snapshots_processed": 0,
+                "splits_completed": 0,
+                "candidate_ranks": 0,
+            },
+        }
+
+    if any(not isinstance(row, dict) for row in snapshots):
+        raise ValueError("invalid_composite_snapshot")
+    parsed: list[dict[str, object]] = []
+    previous_weights: dict[str, float] | None = None
+    for raw_snapshot in sorted(snapshots, key=lambda row: str(row.get("as_of_date") or "")):
+        try:
+            as_of_date = date.fromisoformat(str(raw_snapshot["as_of_date"]))
+            forward_date = date.fromisoformat(str(raw_snapshot["forward_date"]))
+            benchmark_return = float(raw_snapshot["benchmark_return_pct"])
+            universe_return = float(raw_snapshot["universe_return_pct"])
+            rows = raw_snapshot["rows"]
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError("invalid_composite_snapshot") from error
+        if (
+            forward_date <= as_of_date
+            or not math.isfinite(benchmark_return)
+            or not math.isfinite(universe_return)
+            or not isinstance(rows, list)
+            or len(rows) < 10
+        ):
+            raise ValueError("invalid_composite_snapshot")
+        scored: list[dict[str, object]] = []
+        seen_symbols: set[str] = set()
+        for raw_row in rows:
+            if not isinstance(raw_row, dict):
+                raise ValueError("invalid_composite_snapshot")
+            symbol = str(raw_row.get("symbol") or "").strip().upper()
+            sector = str(raw_row.get("sector") or "").strip()
+            try:
+                momentum = float(raw_row["momentum_z"])
+                quality = float(raw_row["quality_z"])
+                value = float(raw_row["value_z"])
+                forward_return = float(raw_row["forward_return_pct"])
+            except (KeyError, TypeError, ValueError) as error:
+                raise ValueError("invalid_composite_snapshot") from error
+            if (
+                not symbol
+                or not sector
+                or symbol in seen_symbols
+                or not all(math.isfinite(item) for item in (momentum, quality, value, forward_return))
+            ):
+                raise ValueError("invalid_composite_snapshot")
+            seen_symbols.add(symbol)
+            scored.append(
+                {
+                    "symbol": symbol,
+                    "sector": sector,
+                    "score": 0.40 * momentum + 0.30 * quality + 0.30 * value,
+                    "forward_return_pct": forward_return,
+                }
+            )
+        scored.sort(key=lambda row: (-float(row["score"]), str(row["symbol"])))
+        selection_count = max(1, math.ceil(len(scored) * 0.20))
+        selected = scored[:selection_count]
+        gross_return = sum(float(row["forward_return_pct"]) for row in selected) / selection_count
+        weights = {str(row["symbol"]): 1 / selection_count for row in selected}
+        turnover = 1.0 if previous_weights is None else 0.5 * sum(
+            abs(weights.get(symbol, 0.0) - previous_weights.get(symbol, 0.0))
+            for symbol in set(weights).union(previous_weights)
+        )
+        cost_drag_pct = turnover * cost_bps / 100
+        parsed.append(
+            {
+                "as_of_date": as_of_date.isoformat(),
+                "forward_date": forward_date.isoformat(),
+                "eligible_securities": len(scored),
+                "selected_securities": selection_count,
+                "one_way_turnover_pct": round(turnover * 100, 3),
+                "cost_drag_bps": round(turnover * cost_bps, 3),
+                "gross_return_pct": round(gross_return, 4),
+                "net_return_pct": round(gross_return - cost_drag_pct, 4),
+                "net_excess_vs_nifty_pct": round(gross_return - cost_drag_pct - benchmark_return, 4),
+                "net_excess_vs_universe_pct": round(gross_return - cost_drag_pct - universe_return, 4),
+            }
+        )
+        previous_weights = weights
+
+    discovery_count = math.floor(len(parsed) * 0.60)
+    validation_count = math.floor(len(parsed) * 0.20)
+    split_rows = {
+        "discovery": parsed[:discovery_count],
+        "validation": parsed[discovery_count : discovery_count + validation_count],
+        "holdout": parsed[discovery_count + validation_count :],
+    }
+
+    def summarize(rows: list[dict[str, object]]) -> dict[str, object]:
+        def average(key: str) -> float:
+            return round(sum(float(row[key]) for row in rows) / len(rows), 4)
+
+        return {
+            "months": len(rows),
+            "mean_net_return_pct": average("net_return_pct"),
+            "mean_net_excess_vs_nifty_pct": average("net_excess_vs_nifty_pct"),
+            "mean_net_excess_vs_universe_pct": average("net_excess_vs_universe_pct"),
+            "positive_excess_vs_nifty_frequency_pct": round(
+                sum(float(row["net_excess_vs_nifty_pct"]) > 0 for row in rows)
+                / len(rows)
+                * 100,
+                2,
+            ),
+            "mean_one_way_turnover_pct": average("one_way_turnover_pct"),
+        }
+
+    return {
+        **base,
+        "status": "completed_research_only",
+        "summary": {
+            "snapshots_supplied": len(snapshots),
+            "snapshots_required": minimum_months,
+            "snapshots_processed": len(parsed),
+            "splits_completed": 3,
+            "candidate_ranks": 0,
+        },
+        "outputs": {
+            "discovery": summarize(split_rows["discovery"]),
+            "validation": summarize(split_rows["validation"]),
+            "holdout": summarize(split_rows["holdout"]),
+            "monthly_results": parsed,
+            "ranked_candidates": [],
+        },
+    }
+
+
+def build_investable_validation(
+    composite_run: dict[str, object],
+    execution_evidence: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    """Stress a completed factor run with explicit execution and capacity evidence."""
+    outputs = composite_run.get("outputs")
+    outputs = outputs if isinstance(outputs, dict) else {}
+    monthly_results = outputs.get("monthly_results")
+    monthly_results = monthly_results if isinstance(monthly_results, list) else []
+    evidence = execution_evidence if isinstance(execution_evidence, list) else []
+    completed = composite_run.get("status") == "completed_research_only"
+    base = {
+        "ok": True,
+        "contract_version": INVESTABLE_VALIDATION_VERSION,
+        "methodology": {
+            "signal_to_execution_lag_sessions": 1,
+            "execution_price": "next completed-session official open; no same-close fills",
+            "minimum_price_coverage_pct": 95.0,
+            "minimum_turnover_coverage_pct": 95.0,
+            "maximum_order_participation_pct": 5.0,
+            "slippage_model": "half observed spread plus 25 bps times square root of order participation",
+            "stress_case": "double modelled slippage at every rebalance",
+            "base_cost_boundary": "the composite run already includes its disclosed 20 bps one-way base cost",
+        },
+        "outputs": {
+            "summary": None,
+            "monthly_results": [],
+            "ranked_candidates": [],
+        },
+        "limitations": [
+            "No same-session close is used as an executable fill after a signal is formed.",
+            "Missing price or turnover observations fail the month rather than being interpolated.",
+            "The slippage equation is a disclosed sensitivity, not a broker quote or guaranteed fill.",
+            "Passing this layer supports further research only; it does not create a recommendation or order.",
+        ],
+    }
+    if not completed:
+        gates = [
+            {
+                "key": "composite_run",
+                "title": "Composite holdout completed",
+                "state": "blocked",
+                "detail": "The upstream composite run has not completed its frozen chronological splits.",
+            },
+            {
+                "key": "execution_evidence",
+                "title": "Next-session execution evidence",
+                "state": "blocked",
+                "detail": "No execution month can be admitted before the composite run completes.",
+            },
+            {
+                "key": "price_coverage",
+                "title": "Execution-price coverage",
+                "state": "blocked",
+                "detail": "At least 95% next-session official-open coverage is required in every month.",
+            },
+            {
+                "key": "liquidity_coverage",
+                "title": "Turnover coverage",
+                "state": "blocked",
+                "detail": "At least 95% observed turnover coverage is required in every month.",
+            },
+            {
+                "key": "capacity",
+                "title": "Five-percent participation cap",
+                "state": "blocked",
+                "detail": "Every rebalance must remain at or below 5% of median daily turnover.",
+            },
+        ]
+        return {
+            **base,
+            "status": "blocked_by_composite_run",
+            "summary": {
+                "gates": len(gates),
+                "gates_ready": 0,
+                "months_required": len(monthly_results),
+                "months_admitted": 0,
+                "capacity_breaches": 0,
+                "candidate_ranks": 0,
+            },
+            "gates": gates,
+        }
+    if any(not isinstance(row, dict) for row in evidence):
+        raise ValueError("invalid_execution_evidence")
+    evidence_by_date = {
+        str(row.get("as_of_date") or ""): row
+        for row in evidence
+        if str(row.get("as_of_date") or "")
+    }
+    if len(evidence_by_date) != len(evidence):
+        raise ValueError("invalid_execution_evidence")
+    diagnostics: list[dict[str, object]] = []
+    price_coverage_ready = True
+    turnover_coverage_ready = True
+    capacity_breaches = 0
+    for monthly in monthly_results:
+        if not isinstance(monthly, dict):
+            raise ValueError("invalid_composite_run_output")
+        as_of_date = str(monthly.get("as_of_date") or "")
+        row = evidence_by_date.get(as_of_date)
+        if row is None:
+            price_coverage_ready = False
+            turnover_coverage_ready = False
+            continue
+        try:
+            price_coverage = float(row["next_session_price_coverage_pct"])
+            turnover_coverage = float(row["turnover_coverage_pct"])
+            median_turnover = float(row["median_daily_turnover_inr"])
+            order_notional = float(row["rebalance_notional_inr"])
+            spread_bps = float(row["observed_spread_bps"])
+            base_net_return = float(monthly["net_return_pct"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError("invalid_execution_evidence") from error
+        if (
+            not all(
+                math.isfinite(value)
+                for value in (
+                    price_coverage,
+                    turnover_coverage,
+                    median_turnover,
+                    order_notional,
+                    spread_bps,
+                    base_net_return,
+                )
+            )
+            or not 0 <= price_coverage <= 100
+            or not 0 <= turnover_coverage <= 100
+            or median_turnover <= 0
+            or order_notional < 0
+            or spread_bps < 0
+        ):
+            raise ValueError("invalid_execution_evidence")
+        price_coverage_ready = price_coverage_ready and price_coverage >= 95.0
+        turnover_coverage_ready = turnover_coverage_ready and turnover_coverage >= 95.0
+        participation = order_notional / median_turnover
+        within_capacity = participation <= 0.05
+        capacity_breaches += int(not within_capacity)
+        slippage_bps = spread_bps / 2 + 25.0 * math.sqrt(participation)
+        diagnostics.append(
+            {
+                "as_of_date": as_of_date,
+                "next_session_price_coverage_pct": round(price_coverage, 3),
+                "turnover_coverage_pct": round(turnover_coverage, 3),
+                "order_participation_pct": round(participation * 100, 4),
+                "within_capacity": within_capacity,
+                "modelled_slippage_bps": round(slippage_bps, 4),
+                "investable_net_return_pct": round(base_net_return - slippage_bps / 100, 4),
+                "stress_net_return_pct": round(base_net_return - 2 * slippage_bps / 100, 4),
+            }
+        )
+    evidence_complete = len(diagnostics) == len(monthly_results) and bool(monthly_results)
+    capacity_ready = evidence_complete and capacity_breaches == 0
+    gates = [
+        {
+            "key": "composite_run",
+            "title": "Composite holdout completed",
+            "state": "ready",
+            "detail": f"{len(monthly_results)} costed composite months are available.",
+        },
+        {
+            "key": "execution_evidence",
+            "title": "Next-session execution evidence",
+            "state": "ready" if evidence_complete else "blocked",
+            "detail": f"{len(diagnostics)} of {len(monthly_results)} months have matched execution evidence.",
+        },
+        {
+            "key": "price_coverage",
+            "title": "Execution-price coverage",
+            "state": "ready" if evidence_complete and price_coverage_ready else "blocked",
+            "detail": "Every admitted month must have at least 95% next-session official-open coverage.",
+        },
+        {
+            "key": "liquidity_coverage",
+            "title": "Turnover coverage",
+            "state": "ready" if evidence_complete and turnover_coverage_ready else "blocked",
+            "detail": "Every admitted month must have at least 95% observed turnover coverage.",
+        },
+        {
+            "key": "capacity",
+            "title": "Five-percent participation cap",
+            "state": "ready" if capacity_ready else "blocked",
+            "detail": f"{capacity_breaches} monthly rebalances breach the 5% median-turnover cap.",
+        },
+    ]
+    ready_count = sum(gate["state"] == "ready" for gate in gates)
+    if diagnostics:
+        mean_slippage = sum(float(row["modelled_slippage_bps"]) for row in diagnostics) / len(diagnostics)
+        mean_net = sum(float(row["investable_net_return_pct"]) for row in diagnostics) / len(diagnostics)
+        mean_stress = sum(float(row["stress_net_return_pct"]) for row in diagnostics) / len(diagnostics)
+        result_summary: dict[str, object] | None = {
+            "mean_modelled_slippage_bps": round(mean_slippage, 4),
+            "mean_investable_net_return_pct": round(mean_net, 4),
+            "mean_stress_net_return_pct": round(mean_stress, 4),
+            "months_within_capacity": len(diagnostics) - capacity_breaches,
+        }
+    else:
+        result_summary = None
+    return {
+        **base,
+        "status": "completed_research_only" if ready_count == len(gates) else "blocked_by_execution_evidence",
+        "summary": {
+            "gates": len(gates),
+            "gates_ready": ready_count,
+            "months_required": len(monthly_results),
+            "months_admitted": len(diagnostics),
+            "capacity_breaches": capacity_breaches,
+            "candidate_ranks": 0,
+        },
+        "gates": gates,
+        "outputs": {
+            "summary": result_summary,
+            "monthly_results": diagnostics,
+            "ranked_candidates": [],
+        },
+    }
+
+
+def build_catalyst_evidence(
+    investable_validation: dict[str, object],
+    earnings_events: list[dict[str, object]] | None = None,
+    reviewed_news: list[dict[str, object]] | None = None,
+    post_event_drift: list[dict[str, object]] | None = None,
+    *,
+    macro_event_count: int = 0,
+) -> dict[str, object]:
+    """Audit release-known catalyst evidence without making a directional forecast."""
+    earnings = earnings_events if isinstance(earnings_events, list) else []
+    news = reviewed_news if isinstance(reviewed_news, list) else []
+    drift = post_event_drift if isinstance(post_event_drift, list) else []
+    if any(not isinstance(row, dict) for row in (*earnings, *news, *drift)):
+        raise ValueError("invalid_catalyst_evidence")
+    if not isinstance(macro_event_count, int) or isinstance(macro_event_count, bool) or macro_event_count < 0:
+        raise ValueError("invalid_catalyst_evidence")
+
+    minimum_events = 20
+    minimum_coverage_pct = 80.0
+    upstream_ready = investable_validation.get("status") == "completed_research_only"
+    release_known: list[dict[str, object]] = []
+    expectation_ready: list[dict[str, object]] = []
+    guidance_ready = 0
+    seen_events: set[str] = set()
+    permitted_guidance = {"raised", "maintained", "lowered", "withdrawn", "not_provided"}
+    for row in earnings:
+        symbol = str(row.get("symbol") or "").strip().upper()
+        reported_text = str(row.get("reported_at") or "").strip()
+        if not symbol or not reported_text:
+            continue
+        try:
+            reported_at = datetime.fromisoformat(reported_text.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise ValueError("invalid_catalyst_evidence") from error
+        identity_suffix = "|".join(
+            str(row.get(key) or "").strip().lower()
+            for key in ("basis", "fiscal_year", "quarter")
+            if str(row.get(key) or "").strip()
+        )
+        event_key = f"{symbol}|{reported_at.isoformat()}"
+        if identity_suffix:
+            event_key = f"{event_key}|{identity_suffix}"
+        if event_key in seen_events:
+            raise ValueError("duplicate_catalyst_event")
+        seen_events.add(event_key)
+        release_known.append({"event_key": event_key, "symbol": symbol, "reported_at": reported_at.isoformat()})
+
+        captured_text = str(row.get("consensus_captured_at") or "").strip()
+        expected_raw = row.get("consensus_eps")
+        actual_raw = row.get("actual_eps", row.get("eps"))
+        if captured_text and expected_raw is not None and actual_raw is not None:
+            try:
+                captured_at = datetime.fromisoformat(captured_text.replace("Z", "+00:00"))
+                expected = float(expected_raw)
+                actual = float(actual_raw)
+            except (TypeError, ValueError) as error:
+                raise ValueError("invalid_catalyst_evidence") from error
+            if (
+                not math.isfinite(expected)
+                or not math.isfinite(actual)
+                or (captured_at.tzinfo is None) != (reported_at.tzinfo is None)
+                or captured_at >= reported_at
+            ):
+                raise ValueError("invalid_catalyst_evidence")
+            surprise_pct = None if expected == 0 else (actual - expected) / abs(expected) * 100
+            expectation_ready.append(
+                {
+                    "event_key": event_key,
+                    "symbol": symbol,
+                    "reported_at": reported_at.isoformat(),
+                    "consensus_captured_at": captured_at.isoformat(),
+                    "actual_eps": round(actual, 4),
+                    "consensus_eps": round(expected, 4),
+                    "eps_surprise_pct": None if surprise_pct is None else round(surprise_pct, 3),
+                }
+            )
+        guidance_state = str(row.get("guidance_state") or "").strip().lower()
+        if guidance_state:
+            if guidance_state not in permitted_guidance or not str(row.get("guidance_source_url") or "").startswith("https://"):
+                raise ValueError("invalid_catalyst_evidence")
+            guidance_ready += 1
+
+    reviewed_news_count = 0
+    seen_news: set[str] = set()
+    for row in news:
+        source_key = str(row.get("source_key") or "").strip()
+        published_text = str(row.get("published_at") or "").strip()
+        headline = str(row.get("headline") or "").strip()
+        identity = str(row.get("event_hash") or f"{source_key}|{published_text}|{headline}")
+        if not source_key or not published_text or not headline:
+            continue
+        try:
+            datetime.fromisoformat(published_text.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise ValueError("invalid_catalyst_evidence") from error
+        if identity in seen_news:
+            raise ValueError("duplicate_catalyst_news")
+        seen_news.add(identity)
+        reviewed_news_count += 1
+
+    drift_by_event: dict[str, dict[str, object]] = {}
+    for row in drift:
+        event_key = str(row.get("event_key") or "").strip()
+        if not event_key or event_key in drift_by_event:
+            raise ValueError("invalid_catalyst_evidence")
+        try:
+            coverage = float(row["price_coverage_pct"])
+            security_returns = [float(row[f"return_{window}d_pct"]) for window in (1, 5, 20)]
+            benchmark_returns = [float(row[f"benchmark_return_{window}d_pct"]) for window in (1, 5, 20)]
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError("invalid_catalyst_evidence") from error
+        if (
+            event_key not in seen_events
+            or not 0 <= coverage <= 100
+            or not all(math.isfinite(value) for value in (*security_returns, *benchmark_returns))
+        ):
+            raise ValueError("invalid_catalyst_evidence")
+        drift_by_event[event_key] = {
+            "event_key": event_key,
+            "price_coverage_pct": round(coverage, 3),
+            **{
+                f"excess_{window}d_pct": round(security - benchmark, 3)
+                for window, security, benchmark in zip((1, 5, 20), security_returns, benchmark_returns)
+            },
+        }
+
+    release_count = len(release_known)
+    expectation_coverage = len(expectation_ready) / release_count * 100 if release_count else 0.0
+    guidance_coverage = guidance_ready / release_count * 100 if release_count else 0.0
+    fully_observed_drift = sum(float(row["price_coverage_pct"]) >= 100.0 for row in drift_by_event.values())
+    drift_coverage = fully_observed_drift / release_count * 100 if release_count else 0.0
+    gates = [
+        {"key": "investable_validation", "title": "Investable validation completed", "state": "ready" if upstream_ready else "blocked", "detail": "The catalyst layer opens only after the frozen execution and capacity audit passes."},
+        {"key": "release_timing", "title": "Release-known earnings history", "state": "ready" if release_count >= minimum_events else "blocked", "detail": f"{release_count} of {minimum_events} minimum timestamped earnings events are available."},
+        {"key": "expectations_surprise", "title": "Pre-release expectations and surprise", "state": "ready" if release_count >= minimum_events and expectation_coverage >= minimum_coverage_pct else "blocked", "detail": f"{expectation_coverage:.1f}% coverage; consensus must be captured before the release timestamp."},
+        {"key": "guidance", "title": "Explicit guidance review", "state": "ready" if release_count >= minimum_events and guidance_coverage >= minimum_coverage_pct else "blocked", "detail": f"{guidance_coverage:.1f}% coverage, including explicit not-provided outcomes with source identity."},
+        {"key": "reviewed_news", "title": "Reviewed news provenance", "state": "ready" if reviewed_news_count > 0 else "blocked", "detail": f"{reviewed_news_count} timestamped reviewed news records are stored; headlines are not sentiment-scored."},
+        {"key": "post_event_drift", "title": "Benchmark-adjusted post-event drift", "state": "ready" if release_count >= minimum_events and drift_coverage >= minimum_coverage_pct else "blocked", "detail": f"{drift_coverage:.1f}% of earnings events have complete 1, 5 and 20-session benchmark-adjusted observations."},
+    ]
+    ready_count = sum(gate["state"] == "ready" for gate in gates)
+    return {
+        "ok": True,
+        "contract_version": CATALYST_EVIDENCE_VERSION,
+        "status": "completed_research_only" if ready_count == len(gates) else "blocked_by_catalyst_evidence",
+        "methodology": {
+            "minimum_earnings_events": minimum_events,
+            "minimum_field_coverage_pct": minimum_coverage_pct,
+            "expectation_cutoff": "consensus snapshot must predate the issuer/exchange release timestamp",
+            "guidance_states": sorted(permitted_guidance),
+            "drift_windows_sessions": [1, 5, 20],
+            "drift_measure": "security total return minus Nifty 50 return over the identical completed-session window",
+            "news_role": "reviewed provenance and timing context only; no automatic headline sentiment",
+            "macro_role": "calendar proximity context only; no directional label",
+        },
+        "summary": {
+            "gates": len(gates), "gates_ready": ready_count,
+            "release_known_events": release_count, "expectation_ready_events": len(expectation_ready),
+            "guidance_reviewed_events": guidance_ready, "reviewed_news_records": reviewed_news_count,
+            "macro_events": macro_event_count, "drift_ready_events": fully_observed_drift,
+            "candidate_ranks": 0,
+        },
+        "gates": gates,
+        "outputs": {"earnings_surprises": expectation_ready, "post_event_drift": list(drift_by_event.values()), "ranked_candidates": []},
+        "limitations": [
+            "An earnings surprise, guidance change, news item or scheduled event is not a directional forecast.",
+            "Missing expectations, guidance or drift is unavailable rather than neutral.",
+            "Post-event drift is descriptive and overlapping windows are not independent observations.",
+            "This layer cannot rescue a failed factor, regime, execution or liquidity gate.",
+            "No candidate rank, recommendation, position size or order is produced.",
+        ],
+    }
+
+
+def build_portfolio_impact(
+    catalyst_evidence: dict[str, object],
+    portfolio_snapshot: dict[str, object] | None = None,
+    candidates: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    """Calculate candidate risk deltas against a dated portfolio without ranking it."""
+    snapshot = portfolio_snapshot if isinstance(portfolio_snapshot, dict) else {}
+    candidate_rows = candidates if isinstance(candidates, list) else []
+    if any(not isinstance(row, dict) for row in candidate_rows):
+        raise ValueError("invalid_portfolio_impact_evidence")
+
+    minimum_sessions = 252
+    factor_keys = ("momentum", "quality", "value")
+    limits = {
+        "maximum_candidate_weight_pct": 5.0,
+        "maximum_hhi_increase": 0.005,
+        "maximum_beta_increase": 0.10,
+        "maximum_drawdown_deterioration_pct": 2.0,
+        "maximum_absolute_factor_exposure": 2.0,
+    }
+    upstream_ready = catalyst_evidence.get("status") == "completed_research_only"
+    positions = snapshot.get("positions") if isinstance(snapshot.get("positions"), list) else []
+    transactions = snapshot.get("transactions") if isinstance(snapshot.get("transactions"), list) else []
+    portfolio_returns = snapshot.get("daily_returns") if isinstance(snapshot.get("daily_returns"), list) else []
+    transaction_history_complete = snapshot.get("transaction_history_complete") is True and bool(transactions)
+    snapshot_as_of = None
+    if snapshot.get("as_of_date"):
+        try:
+            snapshot_as_of = date.fromisoformat(str(snapshot["as_of_date"]))
+        except ValueError as error:
+            raise ValueError("invalid_portfolio_impact_evidence") from error
+
+    def finite_number(value: object) -> float:
+        try:
+            number = float(value)
+        except (TypeError, ValueError) as error:
+            raise ValueError("invalid_portfolio_impact_evidence") from error
+        if not math.isfinite(number):
+            raise ValueError("invalid_portfolio_impact_evidence")
+        return number
+
+    normalized_positions: list[dict[str, object]] = []
+    position_symbols: set[str] = set()
+    position_evidence_complete = bool(positions)
+    for row in positions:
+        if not isinstance(row, dict):
+            raise ValueError("invalid_portfolio_impact_evidence")
+        symbol = str(row.get("symbol") or "").strip().upper()
+        sector = str(row.get("sector") or "").strip()
+        factors = row.get("factor_exposures") if isinstance(row.get("factor_exposures"), dict) else {}
+        if not symbol or symbol in position_symbols:
+            raise ValueError("invalid_portfolio_impact_evidence")
+        try:
+            weight_pct = finite_number(row.get("weight_pct"))
+            beta = finite_number(row.get("beta"))
+            factor_values = {key: finite_number(factors.get(key)) for key in factor_keys}
+        except ValueError:
+            position_evidence_complete = False
+            continue
+        if weight_pct < 0 or not sector:
+            position_evidence_complete = False
+            continue
+        position_symbols.add(symbol)
+        normalized_positions.append(
+            {"symbol": symbol, "sector": sector, "weight": weight_pct / 100, "beta": beta, "factors": factor_values}
+        )
+    total_weight = sum(float(row["weight"]) for row in normalized_positions)
+    if normalized_positions and not math.isclose(total_weight, 1.0, abs_tol=0.001):
+        position_evidence_complete = False
+
+    transaction_symbols: set[str] = set()
+    for row in transactions:
+        if not isinstance(row, dict):
+            raise ValueError("invalid_portfolio_impact_evidence")
+        symbol = str(row.get("symbol") or "").strip().upper()
+        traded_at = str(row.get("traded_at") or "").strip()
+        if not symbol or not traded_at:
+            transaction_history_complete = False
+            continue
+        try:
+            date.fromisoformat(traded_at[:10])
+        except ValueError as error:
+            raise ValueError("invalid_portfolio_impact_evidence") from error
+        transaction_symbols.add(symbol)
+    if position_symbols and not position_symbols.issubset(transaction_symbols):
+        transaction_history_complete = False
+
+    def normalize_returns(rows: list[object]) -> dict[str, float]:
+        values: dict[str, float] = {}
+        for row in rows:
+            if not isinstance(row, dict):
+                raise ValueError("invalid_portfolio_impact_evidence")
+            observed_date = str(row.get("date") or "").strip()
+            if not observed_date or observed_date in values:
+                raise ValueError("invalid_portfolio_impact_evidence")
+            try:
+                date.fromisoformat(observed_date)
+            except ValueError as error:
+                raise ValueError("invalid_portfolio_impact_evidence") from error
+            return_pct = finite_number(row.get("return_pct"))
+            if return_pct <= -100:
+                raise ValueError("invalid_portfolio_impact_evidence")
+            values[observed_date] = return_pct / 100
+        return values
+
+    portfolio_return_map = normalize_returns(portfolio_returns)
+    history_ready = len(portfolio_return_map) >= minimum_sessions
+
+    current_beta = None
+    current_hhi = None
+    current_sector_hhi = None
+    current_factors: dict[str, float] = {}
+    sector_weights: dict[str, float] = {}
+    if position_evidence_complete:
+        current_beta = sum(float(row["weight"]) * float(row["beta"]) for row in normalized_positions)
+        current_hhi = sum(float(row["weight"]) ** 2 for row in normalized_positions)
+        for row in normalized_positions:
+            sector = str(row["sector"])
+            sector_weights[sector] = sector_weights.get(sector, 0.0) + float(row["weight"])
+        current_sector_hhi = sum(weight**2 for weight in sector_weights.values())
+        current_factors = {
+            key: sum(float(row["weight"]) * float(row["factors"][key]) for row in normalized_positions)
+            for key in factor_keys
+        }
+
+    def maximum_drawdown_pct(returns: list[float]) -> float:
+        wealth = 1.0
+        peak = 1.0
+        drawdown = 0.0
+        for value in returns:
+            wealth *= 1 + value
+            peak = max(peak, wealth)
+            drawdown = min(drawdown, wealth / peak - 1)
+        return drawdown * 100
+
+    impacts: list[dict[str, object]] = []
+    candidate_evidence_complete = bool(candidate_rows)
+    guardrail_breaches = 0
+    for row in candidate_rows:
+        symbol = str(row.get("symbol") or "").strip().upper()
+        sector = str(row.get("sector") or "").strip()
+        factors = row.get("factor_exposures") if isinstance(row.get("factor_exposures"), dict) else {}
+        return_rows = row.get("daily_returns") if isinstance(row.get("daily_returns"), list) else []
+        if not symbol or not sector:
+            candidate_evidence_complete = False
+            continue
+        try:
+            proposed_weight_pct = finite_number(row.get("proposed_weight_pct"))
+            candidate_beta = finite_number(row.get("beta"))
+            candidate_factors = {key: finite_number(factors.get(key)) for key in factor_keys}
+            candidate_return_map = normalize_returns(return_rows)
+        except ValueError:
+            candidate_evidence_complete = False
+            continue
+        if not 0 < proposed_weight_pct <= 100:
+            candidate_evidence_complete = False
+            continue
+        if not position_evidence_complete or not portfolio_return_map:
+            candidate_evidence_complete = False
+            continue
+        aligned_dates = sorted(set(portfolio_return_map).intersection(candidate_return_map))
+        if len(aligned_dates) < minimum_sessions:
+            candidate_evidence_complete = False
+            continue
+        weight = proposed_weight_pct / 100
+        prospective_weights = {
+            str(position["symbol"]): float(position["weight"]) * (1 - weight)
+            for position in normalized_positions
+        }
+        prospective_weights[symbol] = prospective_weights.get(symbol, 0.0) + weight
+        prospective_hhi = sum(value**2 for value in prospective_weights.values())
+        prospective_sector_weights = {key: value * (1 - weight) for key, value in sector_weights.items()}
+        prospective_sector_weights[sector] = prospective_sector_weights.get(sector, 0.0) + weight
+        prospective_sector_hhi = sum(value**2 for value in prospective_sector_weights.values())
+        prospective_beta = float(current_beta) * (1 - weight) + candidate_beta * weight
+        prospective_factors = {
+            key: current_factors[key] * (1 - weight) + candidate_factors[key] * weight
+            for key in factor_keys
+        }
+        current_series = [portfolio_return_map[key] for key in aligned_dates]
+        prospective_series = [
+            portfolio_return_map[key] * (1 - weight) + candidate_return_map[key] * weight
+            for key in aligned_dates
+        ]
+        current_drawdown = maximum_drawdown_pct(current_series)
+        prospective_drawdown = maximum_drawdown_pct(prospective_series)
+        checks = {
+            "candidate_weight": proposed_weight_pct <= limits["maximum_candidate_weight_pct"],
+            "security_concentration": prospective_hhi - float(current_hhi) <= limits["maximum_hhi_increase"],
+            "sector_concentration": prospective_sector_hhi - float(current_sector_hhi) <= limits["maximum_hhi_increase"],
+            "beta": prospective_beta - float(current_beta) <= limits["maximum_beta_increase"],
+            "drawdown": current_drawdown - prospective_drawdown <= limits["maximum_drawdown_deterioration_pct"],
+            "factor_exposure": all(abs(value) <= limits["maximum_absolute_factor_exposure"] for value in prospective_factors.values()),
+        }
+        breaches = [key for key, passed in checks.items() if not passed]
+        guardrail_breaches += len(breaches)
+        impacts.append(
+            {
+                "symbol": symbol,
+                "sector": sector,
+                "proposed_weight_pct": round(proposed_weight_pct, 3),
+                "aligned_sessions": len(aligned_dates),
+                "security_hhi": {"current": round(float(current_hhi), 6), "prospective": round(prospective_hhi, 6), "delta": round(prospective_hhi - float(current_hhi), 6)},
+                "sector_hhi": {"current": round(float(current_sector_hhi), 6), "prospective": round(prospective_sector_hhi, 6), "delta": round(prospective_sector_hhi - float(current_sector_hhi), 6)},
+                "beta": {"current": round(float(current_beta), 4), "prospective": round(prospective_beta, 4), "delta": round(prospective_beta - float(current_beta), 4)},
+                "maximum_drawdown_pct": {"current": round(current_drawdown, 3), "prospective": round(prospective_drawdown, 3), "delta": round(prospective_drawdown - current_drawdown, 3)},
+                "factor_exposures": {
+                    key: {"current": round(current_factors[key], 4), "prospective": round(prospective_factors[key], 4), "delta": round(prospective_factors[key] - current_factors[key], 4)}
+                    for key in factor_keys
+                },
+                "guardrail_state": "within_frozen_limits" if not breaches else "risk_budget_breached",
+                "guardrail_breaches": breaches,
+            }
+        )
+
+    snapshot_ready = snapshot_as_of is not None and position_evidence_complete
+    aligned_history_ready = history_ready and candidate_evidence_complete and len(impacts) == len(candidate_rows)
+    gates = [
+        {"key": "catalyst_evidence", "title": "Catalyst evidence completed", "state": "ready" if upstream_ready else "blocked", "detail": "The portfolio-impact layer opens only after the release-known catalyst audit passes."},
+        {"key": "portfolio_snapshot", "title": "Dated portfolio snapshot", "state": "ready" if snapshot_ready else "blocked", "detail": f"{len(normalized_positions)} positions have weights, sector, beta and factor identity; as-of {snapshot_as_of.isoformat() if snapshot_as_of else 'unavailable'}."},
+        {"key": "transaction_history", "title": "Complete transaction history", "state": "ready" if transaction_history_complete else "blocked", "detail": f"{len(transactions)} dated transactions cover {len(transaction_symbols)} symbols; purchases, sales, dividends and cash flows may not be inferred."},
+        {"key": "aligned_risk_history", "title": "Aligned daily risk history", "state": "ready" if aligned_history_ready else "blocked", "detail": f"At least {minimum_sessions} common completed sessions are required for every candidate."},
+        {"key": "candidate_evidence", "title": "Candidate risk evidence", "state": "ready" if candidate_evidence_complete and bool(candidate_rows) else "blocked", "detail": f"{len(impacts)} of {len(candidate_rows)} candidates have beta, sector, factor and daily-return evidence."},
+        {"key": "marginal_impact", "title": "Marginal impact calculated", "state": "ready" if bool(impacts) and len(impacts) == len(candidate_rows) else "blocked", "detail": f"{len(impacts)} candidate impact records were calculated without ranking."},
+    ]
+    ready_count = sum(gate["state"] == "ready" for gate in gates)
+    return {
+        "ok": True,
+        "contract_version": PORTFOLIO_IMPACT_VERSION,
+        "status": "completed_research_only" if ready_count == len(gates) else "blocked_by_portfolio_evidence",
+        "methodology": {
+            "minimum_aligned_sessions": minimum_sessions,
+            "funding_rule": "fund each candidate by reducing every current position pro rata; cash and leverage are not inferred",
+            "concentration_measure": "security and sector Herfindahl-Hirschman indices on decimal portfolio weights",
+            "drawdown_measure": "maximum peak-to-trough drawdown from aligned daily total returns",
+            "factor_keys": list(factor_keys),
+            "guardrails": limits,
+        },
+        "summary": {
+            "gates": len(gates), "gates_ready": ready_count,
+            "positions": len(normalized_positions), "transactions": len(transactions),
+            "candidates_supplied": len(candidate_rows), "impacts_calculated": len(impacts),
+            "guardrail_breaches": guardrail_breaches, "candidate_ranks": 0,
+        },
+        "gates": gates,
+        "outputs": {"candidate_impacts": impacts, "ranked_candidates": []},
+        "limitations": [
+            "A marginal impact is a scenario diagnostic, not a forecast, recommendation or position-size instruction.",
+            "The calculation assumes pro-rata funding from the current portfolio and does not infer cash, taxes or leverage.",
+            "Missing transactions, sectors, factors, beta or aligned returns block the candidate rather than becoming zero.",
+            "Historical beta, factor exposure and drawdown can change after the as-of date.",
+            "No candidate rank, recommendation or order is produced.",
+        ],
+    }
+
+
+def build_candidate_ranking(
+    investable_validation: dict[str, object],
+    catalyst_evidence: dict[str, object],
+    portfolio_impact: dict[str, object],
+    candidates: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    """Rank only fully admitted research candidates using the frozen factor score."""
+    candidate_rows = candidates if isinstance(candidates, list) else []
+    if any(not isinstance(row, dict) for row in candidate_rows):
+        raise ValueError("invalid_candidate_ranking_evidence")
+
+    required_versions = {
+        "factor": COMPOSITE_FACTOR_RUN_VERSION,
+        "investable": INVESTABLE_VALIDATION_VERSION,
+        "catalyst": CATALYST_EVIDENCE_VERSION,
+        "portfolio": PORTFOLIO_IMPACT_VERSION,
+    }
+    impact_outputs = portfolio_impact.get("outputs") if isinstance(portfolio_impact.get("outputs"), dict) else {}
+    impact_rows = impact_outputs.get("candidate_impacts") if isinstance(impact_outputs.get("candidate_impacts"), list) else []
+    impact_by_symbol = {
+        str(row.get("symbol") or "").strip().upper(): row
+        for row in impact_rows
+        if isinstance(row, dict) and str(row.get("symbol") or "").strip()
+    }
+    upstream_states = {
+        "investable_validation": investable_validation.get("status") == "completed_research_only",
+        "catalyst_evidence": catalyst_evidence.get("status") == "completed_research_only",
+        "portfolio_impact": portfolio_impact.get("status") == "completed_research_only",
+    }
+
+    seen_symbols: set[str] = set()
+    evaluated: list[dict[str, object]] = []
+    evidence_complete = bool(candidate_rows)
+    for row in candidate_rows:
+        symbol = str(row.get("symbol") or "").strip().upper()
+        if not symbol or symbol in seen_symbols:
+            raise ValueError("invalid_candidate_ranking_evidence")
+        seen_symbols.add(symbol)
+        as_of_text = str(row.get("as_of_date") or "").strip()
+        versions = row.get("source_versions") if isinstance(row.get("source_versions"), dict) else {}
+        try:
+            date.fromisoformat(as_of_text)
+            composite_score = float(row.get("composite_score"))
+        except (TypeError, ValueError) as error:
+            raise ValueError("invalid_candidate_ranking_evidence") from error
+        if not math.isfinite(composite_score) or not 0 <= composite_score <= 100:
+            raise ValueError("invalid_candidate_ranking_evidence")
+        provenance_ready = all(str(versions.get(key) or "") == value for key, value in required_versions.items())
+        candidate_checks = {
+            "factor": row.get("factor_gate_passed") is True,
+            "regime": row.get("regime_gate_passed") is True,
+            "validation": row.get("validation_gate_passed") is True,
+            "liquidity": row.get("liquidity_gate_passed") is True,
+            "catalyst": row.get("catalyst_reviewed") is True,
+            "portfolio_impact": bool(
+                symbol in impact_by_symbol
+                and impact_by_symbol[symbol].get("guardrail_state") == "within_frozen_limits"
+            ),
+            "provenance": provenance_ready,
+        }
+        if not provenance_ready or any(key not in row for key in (
+            "factor_gate_passed", "regime_gate_passed", "validation_gate_passed",
+            "liquidity_gate_passed", "catalyst_reviewed",
+        )):
+            evidence_complete = False
+        failed_gates = [key for key, passed in candidate_checks.items() if not passed]
+        impact = impact_by_symbol.get(symbol, {})
+        drawdown = impact.get("maximum_drawdown_pct") if isinstance(impact.get("maximum_drawdown_pct"), dict) else {}
+        security_hhi = impact.get("security_hhi") if isinstance(impact.get("security_hhi"), dict) else {}
+        evaluated.append(
+            {
+                "symbol": symbol,
+                "as_of_date": as_of_text,
+                "composite_score": round(composite_score, 4),
+                "gate_status": "admitted" if not failed_gates else "rejected",
+                "failed_gates": failed_gates,
+                "gate_checks": candidate_checks,
+                "portfolio_tiebreakers": {
+                    "drawdown_delta_pct": drawdown.get("delta"),
+                    "security_hhi_delta": security_hhi.get("delta"),
+                },
+                "source_versions": {key: str(versions.get(key) or "") for key in required_versions},
+            }
+        )
+
+    eligible = [row for row in evaluated if row["gate_status"] == "admitted"]
+
+    def ranking_key(row: dict[str, object]) -> tuple[object, ...]:
+        tie = row["portfolio_tiebreakers"]
+        drawdown_delta = tie.get("drawdown_delta_pct")
+        hhi_delta = tie.get("security_hhi_delta")
+        return (
+            -float(row["composite_score"]),
+            float(drawdown_delta) if drawdown_delta is not None else float("inf"),
+            float(hhi_delta) if hhi_delta is not None else float("inf"),
+            str(row["symbol"]),
+        )
+
+    ranked = []
+    for rank, row in enumerate(sorted(eligible, key=ranking_key), start=1):
+        ranked.append({**row, "research_rank": rank})
+
+    gates = [
+        {"key": "investable_validation", "title": "Investable validation completed", "state": "ready" if upstream_states["investable_validation"] else "blocked", "detail": "The v17 execution, slippage and capacity audit must complete first."},
+        {"key": "catalyst_evidence", "title": "Catalyst review completed", "state": "ready" if upstream_states["catalyst_evidence"] else "blocked", "detail": "The v18 release-known catalyst audit must complete without becoming a directional score."},
+        {"key": "portfolio_impact", "title": "Portfolio impact completed", "state": "ready" if upstream_states["portfolio_impact"] else "blocked", "detail": f"{len(impact_by_symbol)} candidate impact records are available from v19."},
+        {"key": "candidate_provenance", "title": "Candidate provenance complete", "state": "ready" if evidence_complete else "blocked", "detail": f"{len(candidate_rows)} supplied candidates require exact factor, execution, catalyst and portfolio contract identities."},
+        {"key": "whole_candidate_gates", "title": "Whole-candidate gates evaluated", "state": "ready" if evidence_complete and bool(evaluated) else "blocked", "detail": f"{len(eligible)} of {len(evaluated)} candidates pass factor, regime, validation, liquidity, catalyst and portfolio-impact gates."},
+        {"key": "research_ranking", "title": "Research ranking produced", "state": "ready" if bool(ranked) else "blocked", "detail": f"{len(ranked)} fully admitted candidates are ordered by the frozen composite factor score."},
+    ]
+    ready_count = sum(gate["state"] == "ready" for gate in gates)
+    upstream_ready = all(upstream_states.values())
+    completed = upstream_ready and evidence_complete and bool(ranked)
+    return {
+        "ok": True,
+        "contract_version": CANDIDATE_RANKING_VERSION,
+        "status": "completed_research_only" if completed else "blocked_by_candidate_gates",
+        "methodology": {
+            "primary_sort": "descending frozen 40/30/30 composite factor score",
+            "tie_breakers": ["lower drawdown deterioration", "lower security HHI increase", "symbol ascending"],
+            "required_candidate_gates": ["factor", "regime", "validation", "liquidity", "catalyst", "portfolio_impact", "provenance"],
+            "required_source_versions": required_versions,
+            "overlay_scoring": "catalyst and portfolio evidence are admission gates, not additive alpha scores",
+        },
+        "summary": {
+            "gates": len(gates), "gates_ready": ready_count,
+            "candidates_supplied": len(candidate_rows), "candidates_evaluated": len(evaluated),
+            "candidates_admitted": len(eligible), "candidates_rejected": len(evaluated) - len(eligible),
+            "research_ranks": len(ranked), "recommendations": 0, "orders": 0,
+        },
+        "gates": gates,
+        "outputs": {"ranked_candidates": ranked, "rejected_candidates": [row for row in evaluated if row["gate_status"] == "rejected"]},
+        "limitations": [
+            "A research rank orders fully admitted evidence; it is not a buy, sell or position-size instruction.",
+            "Catalyst evidence and portfolio impact only admit or reject a candidate and never add narrative score points.",
+            "A failed or missing gate rejects the whole candidate rather than reducing its score.",
+            "Ranks are comparable only within the same as-of universe and frozen source contracts.",
+            "No recommendation, target price, order or broker action is produced.",
+        ],
+    }
+
+
+def build_research_card_publication(
+    candidate_ranking: dict[str, object],
+    drafts: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    """Publish a complete eight-field research card or withhold the whole draft."""
+    draft_rows = drafts if isinstance(drafts, list) else []
+    if any(not isinstance(row, dict) for row in draft_rows):
+        raise ValueError("invalid_research_card_draft")
+    ranking_outputs = candidate_ranking.get("outputs") if isinstance(candidate_ranking.get("outputs"), dict) else {}
+    ranked_rows = ranking_outputs.get("ranked_candidates") if isinstance(ranking_outputs.get("ranked_candidates"), list) else []
+    ranked_by_symbol = {
+        str(row.get("symbol") or "").strip().upper(): row
+        for row in ranked_rows
+        if isinstance(row, dict) and str(row.get("symbol") or "").strip()
+    }
+    required_fields = [
+        {"key": "hypothesis", "title": "Hypothesis", "requirement": "One falsifiable sentence explaining why the observed edge may exist."},
+        {"key": "evidence", "title": "Evidence", "requirement": "Release-known claims with an as-of date, source identity and calculation contract."},
+        {"key": "uncertainty", "title": "Uncertainty", "requirement": "Missing coverage, contrary evidence and model limitations remain visible."},
+        {"key": "benchmark", "title": "Benchmark", "requirement": "Candidate and benchmark returns over the identical completed-session horizon."},
+        {"key": "horizon", "title": "Horizon", "requirement": "A finite review window stated in completed trading sessions."},
+        {"key": "risk_budget", "title": "Risk budget", "requirement": "Maximum research weight bounded by regime, liquidity and portfolio caps."},
+        {"key": "portfolio_impact", "title": "Portfolio impact", "requirement": "Candidate-specific concentration, beta and drawdown deltas from v19."},
+        {"key": "invalidation", "title": "Invalidation", "requirement": "Observable conditions that would close or materially revise the hypothesis."},
+    ]
+    required_keys = [field["key"] for field in required_fields]
+    published: list[dict[str, object]] = []
+    withheld: list[dict[str, object]] = []
+    seen_symbols: set[str] = set()
+
+    def finite_number(value: object) -> float | None:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return number if math.isfinite(number) else None
+
+    for draft in draft_rows:
+        symbol = str(draft.get("symbol") or "").strip().upper()
+        if not symbol or symbol in seen_symbols:
+            raise ValueError("invalid_research_card_draft")
+        seen_symbols.add(symbol)
+        ranked = ranked_by_symbol.get(symbol)
+        missing_fields: list[str] = []
+        reasons: list[str] = []
+        hypothesis = str(draft.get("hypothesis") or "").strip()
+        if not hypothesis:
+            missing_fields.append("hypothesis")
+        evidence = draft.get("evidence") if isinstance(draft.get("evidence"), list) else []
+        sourced_evidence = []
+        for claim in evidence:
+            if not isinstance(claim, dict):
+                continue
+            claim_text = str(claim.get("claim") or "").strip()
+            as_of_text = str(claim.get("as_of_date") or "").strip()
+            source_key = str(claim.get("source_key") or "").strip()
+            contract_version = str(claim.get("contract_version") or "").strip()
+            try:
+                date.fromisoformat(as_of_text)
+            except ValueError:
+                continue
+            if claim_text and source_key and contract_version:
+                sourced_evidence.append({
+                    "claim": claim_text, "as_of_date": as_of_text,
+                    "source_key": source_key, "contract_version": contract_version,
+                })
+        if not evidence:
+            missing_fields.append("evidence")
+        elif len(sourced_evidence) != len(evidence):
+            reasons.append("unsourced_evidence_claim")
+        uncertainty = [str(item).strip() for item in draft.get("uncertainty", []) if str(item).strip()] if isinstance(draft.get("uncertainty"), list) else []
+        if not uncertainty:
+            missing_fields.append("uncertainty")
+        benchmark = draft.get("benchmark") if isinstance(draft.get("benchmark"), dict) else {}
+        benchmark_ready = bool(
+            str(benchmark.get("name") or "").strip()
+            and isinstance(benchmark.get("horizon_sessions"), int)
+            and not isinstance(benchmark.get("horizon_sessions"), bool)
+            and int(benchmark["horizon_sessions"]) > 0
+            and finite_number(benchmark.get("candidate_return_pct")) is not None
+            and finite_number(benchmark.get("benchmark_return_pct")) is not None
+            and str(benchmark.get("source_key") or "").strip()
+            and str(benchmark.get("contract_version") or "").strip()
+        )
+        try:
+            date.fromisoformat(str(benchmark.get("as_of_date") or ""))
+        except ValueError:
+            benchmark_ready = False
+        if not benchmark_ready:
+            missing_fields.append("benchmark")
+        horizon = draft.get("horizon") if isinstance(draft.get("horizon"), dict) else {}
+        horizon_sessions = horizon.get("sessions")
+        horizon_ready = bool(
+            isinstance(horizon_sessions, int) and not isinstance(horizon_sessions, bool)
+            and 1 <= horizon_sessions <= 252
+            and str(horizon.get("review_rule") or "").strip()
+        )
+        if not horizon_ready:
+            missing_fields.append("horizon")
+        elif benchmark_ready and int(benchmark["horizon_sessions"]) != horizon_sessions:
+            reasons.append("benchmark_horizon_mismatch")
+        risk_budget = draft.get("risk_budget") if isinstance(draft.get("risk_budget"), dict) else {}
+        budget_values = {
+            key: finite_number(risk_budget.get(key))
+            for key in ("maximum_weight_pct", "regime_cap_pct", "liquidity_cap_pct", "portfolio_cap_pct")
+        }
+        risk_ready = all(value is not None and value > 0 for value in budget_values.values())
+        if risk_ready:
+            maximum = float(budget_values["maximum_weight_pct"])
+            cap = min(float(budget_values[key]) for key in ("regime_cap_pct", "liquidity_cap_pct", "portfolio_cap_pct"))
+            risk_ready = maximum <= min(cap, 5.0)
+        if not risk_ready:
+            missing_fields.append("risk_budget")
+        portfolio = draft.get("portfolio_impact") if isinstance(draft.get("portfolio_impact"), dict) else {}
+        portfolio_ready = bool(
+            finite_number(portfolio.get("security_hhi_delta")) is not None
+            and finite_number(portfolio.get("beta_delta")) is not None
+            and finite_number(portfolio.get("drawdown_delta_pct")) is not None
+            and str(portfolio.get("source_contract") or "") == PORTFOLIO_IMPACT_VERSION
+        )
+        if not portfolio_ready:
+            missing_fields.append("portfolio_impact")
+        invalidation = [str(item).strip() for item in draft.get("invalidation", []) if str(item).strip()] if isinstance(draft.get("invalidation"), list) else []
+        if not invalidation:
+            missing_fields.append("invalidation")
+        as_of_text = str(draft.get("as_of_date") or "").strip()
+        try:
+            date.fromisoformat(as_of_text)
+        except ValueError:
+            reasons.append("invalid_as_of_date")
+        if ranked is None:
+            reasons.append("candidate_not_ranked")
+        elif draft.get("research_rank") != ranked.get("research_rank"):
+            reasons.append("rank_identity_mismatch")
+        if candidate_ranking.get("status") != "completed_research_only":
+            reasons.append("ranking_contract_incomplete")
+
+        missing_fields = sorted(set(missing_fields), key=required_keys.index)
+        reasons = sorted(set(reasons))
+        if missing_fields or reasons:
+            withheld.append({"symbol": symbol, "missing_fields": missing_fields, "reasons": reasons})
+            continue
+        card_body = {
+            "symbol": symbol,
+            "research_rank": int(ranked["research_rank"]),
+            "as_of_date": as_of_text,
+            "hypothesis": hypothesis,
+            "evidence": sourced_evidence,
+            "uncertainty": uncertainty,
+            "benchmark": {
+                **benchmark,
+                "candidate_return_pct": finite_number(benchmark["candidate_return_pct"]),
+                "benchmark_return_pct": finite_number(benchmark["benchmark_return_pct"]),
+            },
+            "horizon": horizon,
+            "risk_budget": {key: float(value) for key, value in budget_values.items()},
+            "portfolio_impact": {
+                "security_hhi_delta": finite_number(portfolio["security_hhi_delta"]),
+                "beta_delta": finite_number(portfolio["beta_delta"]),
+                "drawdown_delta_pct": finite_number(portfolio["drawdown_delta_pct"]),
+                "source_contract": PORTFOLIO_IMPACT_VERSION,
+            },
+            "invalidation": invalidation,
+            "ranking_contract": CANDIDATE_RANKING_VERSION,
+        }
+        canonical = json.dumps(card_body, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        published.append({
+            **card_body,
+            "publication_id": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+            "publication_contract": RESEARCH_CARD_PUBLICATION_VERSION,
+        })
+
+    ranking_ready = candidate_ranking.get("status") == "completed_research_only" and bool(ranked_rows)
+    identity_ready = bool(draft_rows) and all(str(row.get("symbol") or "").strip().upper() in ranked_by_symbol for row in draft_rows)
+    fields_ready = bool(draft_rows) and all(not row["missing_fields"] for row in withheld)
+    claims_ready = bool(draft_rows) and all(not row["reasons"] for row in withheld)
+    whole_cards_ready = bool(published) and len(published) == len(draft_rows)
+    gates = [
+        {"key": "candidate_ranking", "title": "V20 research ranking complete", "state": "ready" if ranking_ready else "blocked", "detail": f"{len(ranked_rows)} admitted research ranks are available."},
+        {"key": "rank_identity", "title": "Draft-to-rank identity", "state": "ready" if identity_ready else "blocked", "detail": f"{len(draft_rows)} drafts must map exactly to an admitted symbol and research rank."},
+        {"key": "eight_fields", "title": "Eight required fields complete", "state": "ready" if fields_ready else "blocked", "detail": "Hypothesis, evidence, uncertainty, benchmark, horizon, risk budget, portfolio impact and invalidation are mandatory."},
+        {"key": "sourced_claims", "title": "Numeric and evidence claims sourced", "state": "ready" if claims_ready else "blocked", "detail": "Every evidence claim and benchmark carries an as-of date, source identity and calculation contract."},
+        {"key": "risk_consistency", "title": "Risk budget internally consistent", "state": "ready" if whole_cards_ready else "blocked", "detail": "Maximum research weight cannot exceed regime, liquidity, portfolio or five-percent caps."},
+        {"key": "whole_card_publication", "title": "Whole cards published", "state": "ready" if whole_cards_ready else "blocked", "detail": f"{len(published)} complete cards published; {len(withheld)} drafts withheld in full."},
+    ]
+    ready_count = sum(gate["state"] == "ready" for gate in gates)
+    return {
+        "ok": True,
+        "contract_version": RESEARCH_CARD_PUBLICATION_VERSION,
+        "status": "completed_research_only" if ready_count == len(gates) else "publication_blocked",
+        "summary": {
+            "required_fields": len(required_fields), "publication_gates": len(gates),
+            "gates_ready": ready_count, "drafts_supplied": len(draft_rows),
+            "cards_published": len(published), "cards_withheld": len(withheld),
+            "recommendations": 0, "orders": 0,
+        },
+        "required_fields": required_fields,
+        "publication_gates": gates,
+        "cards": published,
+        "withheld_cards": withheld,
+        "publication_rules": [
+            "A card is a research artefact, not a recommendation or order.",
+            "Every evidence or numeric claim carries an as-of date, source identity and calculation contract.",
+            "A failed field or gate withholds the entire draft; partial cards are never published.",
+            "The publication hash identifies the exact immutable card body returned by this contract.",
+            "No recommendation, target price, position size, order or broker action is produced.",
         ],
     }
 
@@ -10947,6 +12427,134 @@ def build_research_card_contract(
             "Every numeric claim carries an as-of date, source identity and calculation contract.",
             "Unavailable evidence remains visible and cannot be replaced by narrative confidence.",
             "Any failed publication gate withholds the entire card rather than only the missing field.",
+        ],
+    }
+
+
+def build_point_in_time_universe_foundation(
+    current_snapshot: dict[str, object] | None,
+    stored_snapshots: list[dict[str, object]],
+    *,
+    as_of: date,
+    target_index: str = "Nifty 500",
+) -> dict[str, object]:
+    """Audit effective-dated membership without projecting current members backwards."""
+    current = current_snapshot if isinstance(current_snapshot, dict) else {}
+    current_rows = current.get("constituents")
+    current_rows = current_rows if isinstance(current_rows, list) else []
+    history = sorted(
+        [
+            snapshot
+            for snapshot in stored_snapshots
+            if isinstance(snapshot, dict)
+            and snapshot.get("index_name") == target_index
+            and isinstance(snapshot.get("effective_from"), date)
+        ],
+        key=lambda snapshot: snapshot["effective_from"],
+    )
+    all_history_rows = [
+        row
+        for snapshot in history
+        for row in (
+            snapshot.get("constituents")
+            if isinstance(snapshot.get("constituents"), list)
+            else []
+        )
+        if isinstance(row, dict)
+    ]
+    sector_ready_rows = sum(
+        bool(str(row.get("sector") or "").strip())
+        and str(row.get("sector") or "").strip().lower() not in {"unclassified", "unknown"}
+        for row in all_history_rows
+    )
+    effective_dates = [snapshot["effective_from"] for snapshot in history]
+    gaps = [
+        (current_date - previous_date).days
+        for previous_date, current_date in zip(effective_dates, effective_dates[1:])
+    ]
+    max_gap_days = max(gaps) if gaps else None
+    five_year_floor = date(as_of.year - 5, as_of.month, min(as_of.day, 28))
+    latest_age_days = (as_of - effective_dates[-1]).days if effective_dates else None
+    continuity_ready = bool(
+        len(history) >= 2
+        and max_gap_days is not None
+        and max_gap_days <= 200
+        and latest_age_days is not None
+        and 0 <= latest_age_days <= 200
+    )
+    five_year_ready = bool(
+        continuity_ready and effective_dates[0] <= five_year_floor
+    )
+    gates = [
+        {
+            "key": "immutable_store",
+            "title": "Immutable snapshot store",
+            "state": "ready",
+            "detail": "Index, effective date and symbol identities are append-only; conflicting replacements are rejected.",
+        },
+        {
+            "key": "current_reference",
+            "title": "Current official reference",
+            "state": "ready" if current_rows else "blocked",
+            "detail": f"{len(current_rows)} current {target_index} constituent rows are available for comparison.",
+        },
+        {
+            "key": "effective_history",
+            "title": "Effective-dated membership history",
+            "state": "ready" if history else "blocked",
+            "detail": f"{len(history)} official historical snapshots are stored; current membership is never backfilled.",
+        },
+        {
+            "key": "sector_identity",
+            "title": "Effective-dated sector identity",
+            "state": "ready" if all_history_rows and sector_ready_rows == len(all_history_rows) else "blocked",
+            "detail": f"{sector_ready_rows} of {len(all_history_rows)} stored member rows have an explicit sector.",
+        },
+        {
+            "key": "continuous_five_year_window",
+            "title": "Five-year monthly-rebalance coverage",
+            "state": "ready" if five_year_ready else "blocked",
+            "detail": (
+                f"Earliest snapshot {effective_dates[0].isoformat()}; latest {effective_dates[-1].isoformat()}; maximum gap {max_gap_days} days."
+                if effective_dates
+                else "No effective-dated historical snapshot has been imported."
+            ),
+        },
+    ]
+    ready_count = sum(gate["state"] == "ready" for gate in gates)
+    return {
+        "ok": True,
+        "contract_version": POINT_IN_TIME_UNIVERSE_VERSION,
+        "status": "validation_ready" if ready_count == len(gates) else "history_incomplete",
+        "target_index": target_index,
+        "as_of_date": as_of.isoformat(),
+        "summary": {
+            "current_constituents": len(current_rows),
+            "stored_snapshots": len(history),
+            "unique_historical_members": len({str(row.get("symbol") or "") for row in all_history_rows}),
+            "sector_rows_ready": sector_ready_rows,
+            "gates_ready": ready_count,
+            "gates": len(gates),
+        },
+        "coverage": {
+            "earliest_effective_from": effective_dates[0].isoformat() if effective_dates else None,
+            "latest_effective_from": effective_dates[-1].isoformat() if effective_dates else None,
+            "latest_snapshot_age_days": latest_age_days,
+            "maximum_gap_days": max_gap_days,
+            "required_maximum_gap_days": 200,
+            "required_history_years": 5,
+        },
+        "gates": gates,
+        "import_contract": {
+            "format": "manually supplied official JSON",
+            "required_snapshot_fields": ["index_name", "effective_from", "source_title", "source_url", "source_file_name", "constituents"],
+            "required_constituent_fields": ["symbol", "company_name", "sector"],
+            "automated_scraping": False,
+        },
+        "limitations": [
+            "Current constituents are never substituted for missing historical membership.",
+            "A snapshot is admitted only with an official source identity and explicit effective date.",
+            "The contract does not create factor ranks, candidates, recommendations or orders.",
         ],
     }
 
@@ -11321,6 +12929,7 @@ def build_alpha_research_foundation(
     earnings_record_count: int = 0,
     macro_event_count: int = 0,
     reviewed_news_count: int = 0,
+    point_in_time_universe: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Expose the joined alpha-research architecture without manufacturing signals."""
     coverage = (
@@ -11380,22 +12989,22 @@ def build_alpha_research_foundation(
             "key": "portfolio_impact",
             "title": "Portfolio impact gate",
             "state": "foundation",
-            "summary": "Local holdings, fund look-through, overlap, allocation and risk ratios are implemented in browser memory.",
-            "next_gate": "Add transaction history and marginal concentration, beta and drawdown impact per candidate.",
+            "summary": "The v19 engine calculates pro-rata-funded security and sector concentration, beta, drawdown and factor-exposure deltas.",
+            "next_gate": "Supply complete browser-local transactions, 252 aligned sessions and validated candidate evidence.",
         },
         {
             "key": "validation",
             "title": "Chronological validation",
             "state": "partial",
-            "summary": "Backtests v4 enforces release-aware evidence admission, holdouts and visible negative results.",
-            "next_gate": "Add investable simulations with turnover, costs, slippage and capacity.",
+            "summary": "Backtests v4 and the v16/v17 runners enforce release-aware holdouts, costs, slippage, capacity and visible negative results.",
+            "next_gate": "Populate the frozen point-in-time inputs required to execute the blocked chronological run.",
         },
         {
             "key": "decision",
             "title": "Ranked research cards",
             "state": "blocked",
-            "summary": "No alpha candidates are promoted and no trading recommendation or execution is generated.",
-            "next_gate": "Require validated factors, regime compatibility and portfolio-impact evidence before ranking.",
+            "summary": "The v20 ranking and v21 whole-card publication contracts are implemented, but no candidate passes the live upstream evidence chain.",
+            "next_gate": "Populate admitted ranks and complete eight-field drafts; partial cards remain withheld.",
         },
     ]
     candidate_overlays = build_candidate_overlay_contract(
@@ -11426,25 +13035,61 @@ def build_alpha_research_foundation(
             "boundary": "Release-native MPC decisions only; pre-2016 reconstruction is not an immediate dependency.",
         },
         "current_focus": {
-            "key": "alpha_research_progressive_disclosure",
-            "title": "Alpha Research progressive disclosure v12",
+            "key": "full_site_story_and_ux",
+            "title": "Full-site story and UX v22",
             "sequence": [
-                "keep the plain-language evidence story and headline metrics visible",
-                "place dense factor, filing, validation, overlay and publication contracts behind one explicit review control",
-                "summarize operational, developing and blocked counts on the closed control",
-                "retain every technical field and audit result when expanded",
-                "preserve keyboard access and the no-forecast, no-recommendation and no-order boundary",
+                "lead every workspace with a concise statement of the current situation",
+                "surface the strongest inference, evidence state and next useful action before dense output",
+                "reuse each workspace's existing calculated values instead of creating parallel presentation calculations",
+                "place detailed tables and contracts behind clearly labelled expandable evidence audits",
+                "preserve missing-data, provenance and research-only boundaries throughout the interface",
             ],
         },
+        "site_story_ux": build_full_site_story_ux_contract(),
         "candidate_overlays": candidate_overlays,
         "research_cards": research_cards,
         "research_story": research_story,
+        "point_in_time_universe": point_in_time_universe,
         "limitations": [
             "The page reports build readiness, not investment opportunities.",
             "Descriptive relative strength is not validated alpha.",
             "A current regime label cannot activate a playbook until its validation gate passes.",
             "Portfolio holdings remain local and browser-memory-only.",
         ],
+    }
+
+
+def build_full_site_story_ux_contract() -> dict[str, object]:
+    """Freeze the overview-first reading order without changing analytics."""
+    story_workspaces = [
+        "market_sentiment",
+        "futures_and_options",
+        "screener",
+        "seasonality",
+        "events_calendar",
+        "earnings",
+        "stock_ytd",
+        "historical_regimes",
+        "backtests",
+    ]
+    existing_story_workspaces = ["dashboard", "portfolio_analysis", "alpha_research"]
+    return {
+        "contract_version": FULL_SITE_STORY_UX_VERSION,
+        "status": "implemented",
+        "reading_order": [
+            "current_situation",
+            "key_inference",
+            "headline_evidence",
+            "next_action",
+            "expandable_audit",
+        ],
+        "story_workspaces": story_workspaces,
+        "existing_story_workspaces": existing_story_workspaces,
+        "workspace_count": len(story_workspaces) + len(existing_story_workspaces),
+        "evidence_policy": "dense_tables_collapsed_by_default_and_labelled_as_evidence",
+        "calculation_policy": "presentation_reuses_existing_workspace_outputs",
+        "missing_data_policy": "missing_or_blocked_evidence_remains_explicit",
+        "safety_policy": "research_context_only_no_recommendations_or_execution",
     }
 
 
@@ -17730,6 +19375,9 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         if path == "/api/alpha-research":
             self._send_alpha_research()
             return
+        if path == "/api/point-in-time-universe":
+            self._send_point_in_time_universe()
+            return
         if path == "/api/factor-research":
             self._send_factor_research()
             return
@@ -17908,6 +19556,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         macro_event_count = int(
             (macro_calendar.get("coverage") or {}).get("upcoming_events") or 0
         )
+        point_in_time_universe = self._calculate_point_in_time_universe_payload()
         self._send_json(
             HTTPStatus.OK,
             build_alpha_research_foundation(
@@ -17915,8 +19564,61 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 earnings_record_count=earnings_record_count,
                 macro_event_count=macro_event_count,
                 reviewed_news_count=reviewed_news_count,
+                point_in_time_universe=point_in_time_universe,
             ),
         )
+
+    @staticmethod
+    def _calculate_point_in_time_universe_payload() -> dict[str, object]:
+        store = _get_eod_store()
+        stored_current = store.load_latest_workspace_snapshot(
+            "nifty500-constituent-snapshot"
+        )
+        current_payload = (
+            stored_current.get("payload")
+            if isinstance(stored_current, dict)
+            and isinstance(stored_current.get("payload"), dict)
+            else None
+        )
+        return build_point_in_time_universe_foundation(
+            current_payload,
+            store.load_index_membership_snapshots(index_name="Nifty 500"),
+            as_of=completed_history_date(datetime.now(INDIA_TIMEZONE)),
+        )
+
+    def _send_point_in_time_universe(self) -> None:
+        self._send_json(
+            HTTPStatus.OK,
+            self._calculate_point_in_time_universe_payload(),
+        )
+
+    def _send_point_in_time_universe_import(self, payload: dict[str, object]) -> None:
+        try:
+            effective_from = date.fromisoformat(str(payload.get("effective_from") or ""))
+            effective_to = (
+                date.fromisoformat(str(payload.get("effective_to")))
+                if payload.get("effective_to")
+                else None
+            )
+            result = _get_eod_store().append_index_membership_snapshot(
+                index_name=str(payload.get("index_name") or ""),
+                effective_from=effective_from,
+                effective_to=effective_to,
+                constituents=payload.get("constituents") if isinstance(payload.get("constituents"), list) else [],
+                source_title=str(payload.get("source_title") or ""),
+                source_url=str(payload.get("source_url") or ""),
+                source_file_name=str(payload.get("source_file_name") or ""),
+            )
+            response = self._calculate_point_in_time_universe_payload()
+            response["import_result"] = result
+            self._send_json(HTTPStatus.OK, response)
+        except IndexMembershipConflictError as error:
+            self._send_json(HTTPStatus.CONFLICT, {"ok": False, "reason": str(error)})
+        except (TypeError, ValueError):
+            self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "reason": "invalid_index_membership_snapshot"},
+            )
 
     def _send_factor_research(self) -> None:
         try:
@@ -18054,19 +19756,47 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             latest_prices,
             known_at=datetime.now(INDIA_TIMEZONE),
         )
+        financial_sector_model = build_financial_sector_factor_model(foundation)
         coverage_audit = build_fundamental_coverage_audit(
             foundation,
             store.load_fundamental_normalization_audits(
                 normalizer_contract=FUNDAMENTAL_NORMALIZER_CONTRACT_VERSION
             ),
         )
+        coverage_audit["execution"] = build_fundamental_evidence_execution(
+            coverage_audit
+        )
+        composite_validation = build_composite_factor_validation_contract(
+            factor_payload,
+            coverage_audit,
+        )
+        composite_run = build_composite_factor_run(composite_validation, [])
+        investable_validation = build_investable_validation(composite_run, [])
+        store = _get_eod_store()
+        catalyst_evidence = build_catalyst_evidence(
+            investable_validation,
+            store.load_earnings_records(),
+            store.load_news_event_records(),
+            [],
+        )
+        portfolio_impact = build_portfolio_impact(catalyst_evidence)
+        candidate_ranking = build_candidate_ranking(
+            investable_validation,
+            catalyst_evidence,
+            portfolio_impact,
+        )
+        research_card_publication = build_research_card_publication(candidate_ranking)
         return {
             **foundation,
+            "financial_sector_model": financial_sector_model,
             "coverage_audit": coverage_audit,
-            "composite_validation": build_composite_factor_validation_contract(
-                factor_payload,
-                coverage_audit,
-            ),
+            "composite_validation": composite_validation,
+            "composite_run": composite_run,
+            "investable_validation": investable_validation,
+            "catalyst_evidence": catalyst_evidence,
+            "portfolio_impact": portfolio_impact,
+            "candidate_ranking": candidate_ranking,
+            "research_card_publication": research_card_publication,
         }
 
     def _send_fundamentals_foundation(self) -> None:
@@ -20652,6 +22382,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             payload = self._read_json_payload(MAX_FUNDAMENTAL_IMPORT_BYTES)
             if payload is not None:
                 self._send_fundamentals_import(payload)
+            return
+
+        if self.path == "/api/point-in-time-universe/import":
+            payload = self._read_json_payload(MAX_FUNDAMENTAL_IMPORT_BYTES)
+            if payload is not None:
+                self._send_point_in_time_universe_import(payload)
             return
 
         if self.path == "/api/fundamentals/normalize-import":

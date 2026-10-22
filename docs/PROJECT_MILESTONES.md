@@ -162,6 +162,107 @@ this section, this section wins.
     blocked layer counts. Expanding it restores every technical field; no audit
     evidence is removed merely to make the page cleaner.
 
+### Remaining path to decision-support readiness
+
+The next session resumes at item 14 below. These milestones complete the
+research pipeline before the final full-site presentation and operating pass.
+
+14. `point-in-time-universe-v13` — **immutable storage and readiness contract
+    complete; official history population pending**. Effective-dated index,
+    symbol, company and sector rows are stored append-only; an existing index/date
+    identity cannot be silently replaced. A manual official-JSON import endpoint
+    requires source identity and rejects malformed or conflicting snapshots. The
+    Alpha Research audit exposes current reference coverage, historical snapshot
+    count, sector completeness, maximum gaps and the frozen five-year continuity
+    gate. Current constituents are never projected backwards. Historical files
+    still need to be sourced and imported before validation can pass.
+15. `fundamental-evidence-execution-v14` — **controlled execution contract and
+    live progress audit complete; official filing population pending**. The v7
+    queue is now converted into deterministic review batches of at most five
+    companies. Each batch reports quarters already stored, official quarterly
+    exports still required and taxonomy-review dependencies. Four gates expose
+    whether any official files have been admitted, whether 80% overall and 60%
+    every-sector five-quarter coverage pass, and whether taxonomy review is
+    complete. The existing defensive normalizer remains the only import path;
+    exact replays are idempotent and conflicts stop the file. With no official
+    exports supplied, live progress correctly remains at zero and validation is
+    blocked.
+16. `financial-sector-factor-model-v15` — **model definitions and readiness
+    audit complete; official evidence and point-in-time classification pending**.
+    Banks, NBFCs and insurers now have separate frozen quality, risk and value
+    evidence definitions. The contract refuses to infer a subsector from a
+    company name, refuses to reuse industrial margins or leverage, and publishes
+    no score or rank until explicit effective-dated identity, five release-known
+    quarters and a dedicated financial-fact taxonomy audit are available.
+17. `composite-factor-run-v16` — **chronological runner complete; live execution
+    blocked by upstream evidence**. The executable contract admits only fully
+    point-in-time monthly snapshots, combines frozen 40% momentum, 30% quality
+    and 30% value scores, selects an equal-weight top quintile, charges disclosed
+    one-way turnover costs and preserves 60% discovery, 20% validation and 20%
+    untouched holdout splits. The live run correctly processes zero snapshots
+    while membership and fundamental gates are blocked, and it never emits
+    candidate ranks.
+18. `investable-validation-v17` — **execution and capacity engine complete;
+    live validation blocked by the composite run**. Signals are delayed to the
+    next completed-session official open, every month requires at least 95%
+    execution-price and turnover coverage, slippage combines half the observed
+    spread with an order-participation impact sensitivity, and orders above 5%
+    of median daily turnover fail the capacity gate. A double-slippage stress is
+    reported separately. Missing evidence is never interpolated and no candidate
+    rank is emitted.
+19. `catalyst-evidence-v18` — **release-aware audit engine complete; live evidence
+    population pending**. The contract requires at least 20 timestamped earnings
+    events, 80% pre-release expectation and explicit guidance-review coverage,
+    reviewed-news provenance, and 80% complete benchmark-adjusted 1/5/20-session
+    post-event drift. Consensus captured at or after the result timestamp is
+    rejected. Scheduled events, earnings surprises, guidance changes, news and
+    drift remain descriptive context and never become directional forecasts or
+    rescue failed upstream gates. Candidate ranking remains disabled.
+20. `portfolio-impact-v19` — **marginal-risk engine complete; live portfolio and
+    candidate evidence pending**. The contract requires a dated weighted
+    portfolio, complete symbol-level transaction coverage, at least 252 aligned
+    completed-session returns, and explicit sector, beta and momentum/quality/value
+    exposure for every position and candidate. It funds each research candidate
+    by reducing current positions pro rata, then reports security and sector HHI,
+    beta, maximum-drawdown and factor-exposure deltas against frozen guardrails.
+    Missing local holdings or histories block the calculation; no cash, leverage,
+    rank, recommendation, position size or order is inferred.
+21. `candidate-ranking-v20` — **whole-candidate admission and ranking engine
+    complete; live candidates pending**. Each candidate must carry exact v16–v19
+    source-contract identities and pass factor, regime, chronological validation,
+    liquidity, candidate-specific catalyst review and portfolio-risk guardrails.
+    Any failed or missing gate rejects the whole candidate. Admitted candidates
+    are ordered only by the frozen 40/30/30 composite factor score, with lower
+    drawdown deterioration, lower security-HHI increase and symbol identity used
+    as deterministic tie breakers. Catalyst and portfolio evidence remain gates,
+    not additive narrative scores. The output is a research rank only: it emits
+    no recommendation, target price, position size, order or broker action.
+22. `research-card-publication-v21` — **whole-card publication engine complete;
+    live cards pending**. Every draft must map exactly to an admitted v20 symbol
+    and rank, and must contain hypothesis, sourced evidence, uncertainty,
+    same-horizon benchmark comparison, finite review horizon, internally
+    consistent risk budget, v19 portfolio-impact deltas and observable
+    invalidation conditions. Every evidence and benchmark claim carries an as-of
+    date, source identity and calculation contract. Any missing field or failed
+    gate withholds the entire draft. Complete card bodies receive a deterministic
+    SHA-256 publication identity; no recommendation, target price, position size,
+    order or broker action is produced.
+23. `full-site-story-and-ux-v22` — **overview-first workspace presentation
+    complete**. Market Sentiment, F&O, Screener, Seasonality, Events, Earnings,
+    Stock YTD, Historical Regimes and Backtests now lead with a shared current
+    situation, key inference, evidence state, headline metrics and next-action
+    card. Dashboard, Portfolio Analysis and Alpha Research retain their existing
+    story-first summaries. Dense workspace tables are labelled as evidence
+    audits and collapsed by default, while all existing calculations, element
+    identities, missing-data states and research-only guardrails remain intact.
+24. `production-readiness-v23` — finish EOD orchestration, progress/retry and
+    stale-data handling, backup/recovery checks, end-to-end tests and operating
+    documentation.
+
+Official historical filings are the main external dependency. Missing evidence
+must continue to produce zero validated candidates. Automated recommendations,
+autonomous trading and broker execution remain outside the product scope.
+
 ### RBI policy scope decision
 
 - The release-native MPC sequence from February 2016 through October 2026 is

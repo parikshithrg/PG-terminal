@@ -1,8 +1,85 @@
 # Session handoff
 
-Updated: 2026-10-17
+Updated: 2026-10-22
 
 ## Alpha research build checkpoint — 2026-10-17
+
+### Next-session queue — saved 2026-10-19
+
+- `point-in-time-universe-v13` was the saved resume point; its storage and
+  readiness foundation is now complete. Resume by importing reviewed official
+  historical membership files, or proceed to `fundamental-evidence-execution-v14`
+  while those external files are assembled.
+- `full-site-story-and-ux-v22` is complete. Resume with
+  `production-readiness-v23`.
+- Official historical NSE/BSE filing exports are the main external dependency.
+  No missing evidence may be replaced with synthetic, scraped or aggregator
+  values, and no candidate may be published before every frozen gate passes.
+- Automated recommendations, autonomous trading and broker execution remain out
+  of scope.
+- `point-in-time-universe-v13` storage and readiness contracts are now complete.
+  The append-only store accepts manually supplied official snapshots keyed by
+  index and effective date, preserves symbol/company/sector identity, treats an
+  exact replay as a duplicate and rejects a changed replay as a conflict. Alpha
+  Research exposes five visible gates, including sector completeness and a
+  five-year window with no gap above 200 days. Live historical membership remains
+  empty until official files are imported, so validation remains blocked.
+- `fundamental-evidence-execution-v14` now turns the deterministic v7 queue into
+  review batches of at most five companies and exposes live targets, remaining
+  official files and four admission gates in Alpha Research. The batch never
+  infers release metadata or fetches exchange files automatically; every file
+  still passes through the defensive v5 normalizer and immutable filing/audit
+  stores. Live coverage remains empty because no official exports were supplied.
+- `financial-sector-factor-model-v15` now freezes distinct bank, NBFC and insurer
+  evidence definitions and exposes four readiness gates in Alpha Research. It
+  does not infer subsectors from company names and does not reuse industrial
+  margins or leverage. Live financial-company scores remain empty until explicit
+  point-in-time subsector identity, five official quarters and the dedicated
+  financial-fact taxonomy are populated.
+- `composite-factor-run-v16` now provides the executable, costed chronological
+  runner for the frozen 40/30/30 factor mix. It forms an equal-weight top
+  quintile, charges monthly one-way turnover costs, and preserves 60/20/20
+  discovery, validation and untouched holdout order. The live run remains empty
+  because upstream evidence gates are blocked; candidate ranks remain disabled.
+- `investable-validation-v17` now adds a one-session execution lag, official-open
+  coverage, observed-turnover coverage, spread/participation slippage, a 5%
+  median-turnover capacity cap and double-slippage stress. Synthetic tests cover
+  both a blocked upstream run and a fully admitted execution audit. Live results
+  remain empty because the composite run has no admitted snapshots.
+- `catalyst-evidence-v18` now freezes the release-aware event audit. It requires
+  20 timestamped earnings events, 80% expectation and guidance-review coverage,
+  reviewed-news provenance, and 80% complete Nifty-relative 1/5/20-session
+  drift. Look-ahead consensus timestamps are rejected and missing event fields
+  remain unavailable rather than neutral. Live evidence is incomplete and no
+  candidate rank, recommendation or order is produced.
+- `portfolio-impact-v19` now freezes the marginal portfolio-risk audit. It
+  requires complete transaction coverage, a dated weighted portfolio, explicit
+  sector/beta/factor evidence and 252 aligned daily returns before calculating
+  pro-rata-funded changes in security and sector HHI, beta, maximum drawdown and
+  momentum/quality/value exposure. The live server remains blocked because
+  holdings stay in browser memory and no validated candidate set exists. Missing
+  evidence is never converted to zero, and no rank, recommendation or order is
+  produced.
+- `candidate-ranking-v20` now freezes whole-candidate admission and deterministic
+  research ordering. Exact v16-v19 provenance plus factor, regime, validation,
+  liquidity, catalyst and portfolio-impact gates are mandatory; one failure
+  rejects the whole candidate. Eligible rows are sorted by the frozen composite
+  factor score with risk-only tie breakers. Live ranks remain empty because the
+  upstream evidence chain has no admitted candidates. No recommendation, target,
+  position size, order or broker action is produced.
+- `research-card-publication-v21` now freezes whole-card publication. A draft
+  must map to an admitted v20 symbol/rank and complete all eight required fields,
+  sourced claims, matched benchmark horizon and consistent risk caps. Any failed
+  field withholds the entire draft. Published card bodies receive a deterministic
+  SHA-256 identity. Live cards remain empty because no candidate is admitted; no
+  recommendation, target, size, order or broker action is produced.
+- `full-site-story-and-ux-v22` now gives every workspace an overview-first
+  reading order. Nine previously table-led pages receive a shared situation,
+  inference, evidence-state, headline-metrics and next-action card; Dashboard,
+  Portfolio Analysis and Alpha Research keep their existing story summaries.
+  Dense tables are collapsed under labelled evidence audits without changing
+  their DOM identities or calculations. The server exposes the frozen v22 UX
+  contract and keeps missing-data and research-only boundaries explicit.
 
 - The authoritative sequence is now validated data → regime/risk budget →
   factor core → catalyst overlay → portfolio-impact gate → chronological

@@ -34,10 +34,20 @@ from server import (
     build_factor_research_foundation,
     build_point_in_time_fundamentals_foundation,
     build_fundamental_coverage_audit,
+    build_fundamental_evidence_execution,
+    build_financial_sector_factor_model,
     build_composite_factor_validation_contract,
+    build_composite_factor_run,
+    build_investable_validation,
+    build_catalyst_evidence,
+    build_portfolio_impact,
+    build_candidate_ranking,
+    build_research_card_publication,
+    build_full_site_story_ux_contract,
     build_candidate_overlay_contract,
     build_research_card_contract,
     build_alpha_research_story,
+    build_point_in_time_universe_foundation,
     normalize_official_fundamental_export,
     build_dashboard_seasonality_summary,
     build_dashboard_seasonality_universe_summary,
@@ -146,7 +156,11 @@ class AlphaResearchFoundationTest(unittest.TestCase):
         self.assertEqual(payload["contract_version"], "alpha-research-foundation-v1")
         self.assertEqual(payload["summary"]["ranked_ideas"], 0)
         self.assertEqual(payload["policy_history"]["state"], "complete_for_current_scope")
-        self.assertEqual(payload["current_focus"]["key"], "alpha_research_progressive_disclosure")
+        self.assertEqual(payload["current_focus"]["key"], "full_site_story_and_ux")
+        self.assertEqual(
+            payload["site_story_ux"]["contract_version"],
+            "full-site-story-and-ux-v22",
+        )
         self.assertEqual(payload["research_story"]["contract_version"], "alpha-research-story-v11")
         factor = next(layer for layer in payload["layers"] if layer["key"] == "factor_core")
         decision = next(layer for layer in payload["layers"] if layer["key"] == "decision")
@@ -161,6 +175,18 @@ class AlphaResearchFoundationTest(unittest.TestCase):
         catalyst = next(layer for layer in payload["layers"] if layer["key"] == "catalyst")
         self.assertEqual(factor["state"], "blocked")
         self.assertEqual(catalyst["state"], "blocked")
+
+    def test_full_site_story_contract_covers_every_workspace(self):
+        result = build_full_site_story_ux_contract()
+
+        self.assertEqual(result["contract_version"], "full-site-story-and-ux-v22")
+        self.assertEqual(result["status"], "implemented")
+        self.assertEqual(result["workspace_count"], 12)
+        self.assertEqual(result["reading_order"][0], "current_situation")
+        self.assertEqual(result["reading_order"][-1], "expandable_audit")
+        self.assertIn("historical_regimes", result["story_workspaces"])
+        self.assertIn("alpha_research", result["existing_story_workspaces"])
+        self.assertIn("collapsed_by_default", result["evidence_policy"])
 
     def test_candidate_overlay_contract_keeps_missing_evidence_explicit(self):
         overlay = build_candidate_overlay_contract(
@@ -220,6 +246,42 @@ class AlphaResearchFoundationTest(unittest.TestCase):
         self.assertEqual(story["summary"]["operational"], 1)
         self.assertEqual(story["story_cards"][1]["title"], "Ranked research cards")
         self.assertEqual(story["summary"]["cards_published"], 0)
+
+    def test_point_in_time_universe_requires_continuous_effective_dated_history(self):
+        current = {
+            "constituents": [
+                {"symbol": "AAA", "company_name": "Alpha", "sector": "Industrials"}
+            ]
+        }
+        incomplete = build_point_in_time_universe_foundation(
+            current,
+            [],
+            as_of=date(2026, 10, 16),
+        )
+        self.assertEqual(incomplete["contract_version"], "point-in-time-universe-v13")
+        self.assertEqual(incomplete["status"], "history_incomplete")
+        self.assertEqual(incomplete["summary"]["gates_ready"], 2)
+
+        snapshots = []
+        for offset in range(11):
+            snapshots.append(
+                {
+                    "index_name": "Nifty 500",
+                    "effective_from": date(2021, 10, 1) + timedelta(days=180 * offset),
+                    "constituents": [
+                        {"symbol": "AAA", "company_name": "Alpha", "sector": "Industrials"},
+                        {"symbol": "BBB", "company_name": "Beta", "sector": "Energy"},
+                    ],
+                }
+            )
+        ready = build_point_in_time_universe_foundation(
+            current,
+            snapshots,
+            as_of=date(2026, 10, 16),
+        )
+        self.assertEqual(ready["status"], "validation_ready")
+        self.assertEqual(ready["summary"]["gates_ready"], 5)
+        self.assertEqual(ready["coverage"]["maximum_gap_days"], 180)
 
 
 class FactorResearchFoundationTest(unittest.TestCase):
@@ -623,6 +685,55 @@ class FactorResearchFoundationTest(unittest.TestCase):
             [("Healthcare", "CCC", 4), ("Industrials", "BBB", 2)],
         )
 
+        execution = build_fundamental_evidence_execution(result)
+        self.assertEqual(execution["contract_version"], "fundamental-evidence-execution-v14")
+        self.assertEqual(execution["status"], "official_files_required")
+        self.assertEqual(execution["summary"]["next_batch_companies"], 2)
+        self.assertEqual(
+            [(row["sequence"], row["symbol"], row["quarters_requested"]) for row in execution["next_batch"]],
+            [(1, "CCC", 4), (2, "BBB", 2)],
+        )
+        self.assertEqual(execution["summary"]["gates_ready"], 0)
+
+    def test_financial_sector_model_separates_subsectors_and_withholds_scores(self):
+        result = build_financial_sector_factor_model(
+            {
+                "rows": [
+                    {
+                        "symbol": "BANK",
+                        "sector": "Financial Services",
+                        "financial_subsector": "bank",
+                        "quarters_known": 5,
+                    },
+                    {
+                        "symbol": "NBFC",
+                        "sector": "Financial Services",
+                        "financial_subsector": "nbfc",
+                        "quarters_known": 2,
+                    },
+                    {
+                        "symbol": "INSURE",
+                        "sector": "Financial Services",
+                        "quarters_known": 5,
+                    },
+                    {
+                        "symbol": "INDUSTRIAL",
+                        "sector": "Capital Goods",
+                        "quarters_known": 5,
+                    },
+                ]
+            }
+        )
+
+        self.assertEqual(result["contract_version"], "financial-sector-factor-model-v15")
+        self.assertEqual(result["summary"]["financial_companies"], 3)
+        self.assertEqual(result["summary"]["subsector_classified"], 2)
+        self.assertEqual(result["summary"]["five_quarter_ready"], 1)
+        self.assertEqual([model["key"] for model in result["models"]], ["bank", "nbfc", "insurer"])
+        self.assertEqual(result["summary"]["gates_ready"], 1)
+        self.assertEqual(result["outputs"]["quality_scores"], [])
+        self.assertEqual(result["outputs"]["ranked_candidates"], [])
+
     def test_composite_validation_contract_stays_empty_until_every_gate_passes(self):
         factor = {
             "gates": [
@@ -671,6 +782,359 @@ class FactorResearchFoundationTest(unittest.TestCase):
         self.assertEqual(result["summary"]["gates_ready"], 5)
         self.assertEqual(result["summary"]["candidate_ranks"], 0)
         self.assertIsNone(result["results"]["holdout"])
+
+    def test_composite_factor_run_stays_empty_while_validation_is_blocked(self):
+        result = build_composite_factor_run(
+            {
+                "status": "blocked_by_evidence_gates",
+                "methodology": {
+                    "minimum_monthly_snapshots": 60,
+                    "one_way_cost_bps": 20.0,
+                },
+            },
+            [],
+        )
+        self.assertEqual(result["contract_version"], "composite-factor-run-v16")
+        self.assertEqual(result["status"], "blocked_by_evidence_gates")
+        self.assertEqual(result["summary"]["snapshots_processed"], 0)
+        self.assertEqual(result["outputs"]["ranked_candidates"], [])
+
+    def test_composite_factor_run_preserves_chronological_splits_and_costs(self):
+        snapshots = []
+        start = date(2020, 1, 31)
+        for month in range(60):
+            signal_date = start + timedelta(days=31 * month)
+            rows = []
+            for index in range(10):
+                rotated = (index + month) % 10
+                rows.append(
+                    {
+                        "symbol": f"S{index:02d}",
+                        "sector": "Industrials" if index < 5 else "Healthcare",
+                        "momentum_z": float(10 - rotated),
+                        "quality_z": float(9 - rotated),
+                        "value_z": float(8 - rotated),
+                        "forward_return_pct": float(5 - rotated / 2),
+                    }
+                )
+            snapshots.append(
+                {
+                    "as_of_date": signal_date.isoformat(),
+                    "forward_date": (signal_date + timedelta(days=21)).isoformat(),
+                    "benchmark_return_pct": 1.0,
+                    "universe_return_pct": 0.8,
+                    "rows": rows,
+                }
+            )
+        result = build_composite_factor_run(
+            {
+                "status": "ready_to_run",
+                "methodology": {
+                    "minimum_monthly_snapshots": 60,
+                    "one_way_cost_bps": 20.0,
+                },
+            },
+            snapshots,
+        )
+        self.assertEqual(result["status"], "completed_research_only")
+        self.assertEqual(result["outputs"]["discovery"]["months"], 36)
+        self.assertEqual(result["outputs"]["validation"]["months"], 12)
+        self.assertEqual(result["outputs"]["holdout"]["months"], 12)
+        self.assertEqual(result["summary"]["snapshots_processed"], 60)
+        self.assertGreater(result["outputs"]["monthly_results"][0]["cost_drag_bps"], 0)
+        self.assertEqual(result["outputs"]["ranked_candidates"], [])
+
+    def test_investable_validation_stays_empty_until_composite_run_completes(self):
+        result = build_investable_validation(
+            {
+                "status": "blocked_by_evidence_gates",
+                "outputs": {"monthly_results": [], "ranked_candidates": []},
+            },
+            [],
+        )
+        self.assertEqual(result["contract_version"], "investable-validation-v17")
+        self.assertEqual(result["status"], "blocked_by_composite_run")
+        self.assertEqual(result["summary"]["gates_ready"], 0)
+        self.assertEqual(result["outputs"]["ranked_candidates"], [])
+
+    def test_investable_validation_applies_lag_slippage_and_capacity(self):
+        monthly = [
+            {
+                "as_of_date": "2026-01-31",
+                "forward_date": "2026-02-28",
+                "net_return_pct": 2.0,
+            },
+            {
+                "as_of_date": "2026-02-28",
+                "forward_date": "2026-03-31",
+                "net_return_pct": -1.0,
+            },
+        ]
+        evidence = [
+            {
+                "as_of_date": row["as_of_date"],
+                "next_session_price_coverage_pct": 100.0,
+                "turnover_coverage_pct": 99.0,
+                "median_daily_turnover_inr": 100_000_000.0,
+                "rebalance_notional_inr": 2_000_000.0,
+                "observed_spread_bps": 8.0,
+            }
+            for row in monthly
+        ]
+        result = build_investable_validation(
+            {
+                "status": "completed_research_only",
+                "outputs": {"monthly_results": monthly, "ranked_candidates": []},
+            },
+            evidence,
+        )
+        self.assertEqual(result["status"], "completed_research_only")
+        self.assertEqual(result["summary"]["gates_ready"], 5)
+        self.assertEqual(result["summary"]["months_admitted"], 2)
+        self.assertEqual(result["summary"]["capacity_breaches"], 0)
+        self.assertGreater(result["outputs"]["summary"]["mean_modelled_slippage_bps"], 0)
+        self.assertLess(
+            result["outputs"]["monthly_results"][0]["investable_net_return_pct"],
+            monthly[0]["net_return_pct"],
+        )
+        self.assertEqual(result["outputs"]["ranked_candidates"], [])
+
+    def test_catalyst_evidence_keeps_missing_fields_explicit(self):
+        result = build_catalyst_evidence(
+            {"status": "blocked_by_composite_run"},
+            [{"symbol": "TEST", "reported_at": "2026-01-20", "eps": 3.0}],
+            [],
+            [],
+        )
+        self.assertEqual(result["contract_version"], "catalyst-evidence-v18")
+        self.assertEqual(result["status"], "blocked_by_catalyst_evidence")
+        self.assertEqual(result["summary"]["release_known_events"], 1)
+        self.assertEqual(result["summary"]["expectation_ready_events"], 0)
+        self.assertEqual(result["summary"]["candidate_ranks"], 0)
+
+    def test_catalyst_evidence_audits_surprise_guidance_news_and_drift(self):
+        earnings = []
+        drift = []
+        for index in range(20):
+            reported = datetime(2026, 1, 20, 16, 0) + timedelta(days=index)
+            event_key = f"S{index:02d}|{reported.isoformat()}"
+            earnings.append(
+                {
+                    "symbol": f"S{index:02d}",
+                    "reported_at": reported.isoformat(),
+                    "consensus_captured_at": (reported - timedelta(days=1)).isoformat(),
+                    "actual_eps": 11.0,
+                    "consensus_eps": 10.0,
+                    "guidance_state": "maintained",
+                    "guidance_source_url": "https://example.com/filing",
+                }
+            )
+            drift.append(
+                {
+                    "event_key": event_key,
+                    "price_coverage_pct": 100.0,
+                    "return_1d_pct": 1.0,
+                    "benchmark_return_1d_pct": 0.5,
+                    "return_5d_pct": 2.0,
+                    "benchmark_return_5d_pct": 1.0,
+                    "return_20d_pct": 3.0,
+                    "benchmark_return_20d_pct": 1.5,
+                }
+            )
+        result = build_catalyst_evidence(
+            {"status": "completed_research_only"},
+            earnings,
+            [{"event_hash": "news-1", "source_key": "NSE", "published_at": "2026-01-20T10:00:00", "headline": "Reviewed filing"}],
+            drift,
+            macro_event_count=2,
+        )
+        self.assertEqual(result["status"], "completed_research_only")
+        self.assertEqual(result["summary"]["gates_ready"], 6)
+        self.assertEqual(result["summary"]["drift_ready_events"], 20)
+        self.assertEqual(result["outputs"]["earnings_surprises"][0]["eps_surprise_pct"], 10.0)
+        self.assertEqual(result["outputs"]["post_event_drift"][0]["excess_20d_pct"], 1.5)
+        self.assertEqual(result["outputs"]["ranked_candidates"], [])
+
+    def test_portfolio_impact_keeps_missing_local_evidence_explicit(self):
+        result = build_portfolio_impact({"status": "completed_research_only"})
+        self.assertEqual(result["contract_version"], "portfolio-impact-v19")
+        self.assertEqual(result["status"], "blocked_by_portfolio_evidence")
+        self.assertEqual(result["summary"]["gates_ready"], 1)
+        self.assertEqual(result["summary"]["impacts_calculated"], 0)
+        self.assertEqual(result["outputs"]["ranked_candidates"], [])
+
+    def test_portfolio_impact_calculates_marginal_risk_without_ranking(self):
+        daily_dates = [date(2025, 1, 1) + timedelta(days=index) for index in range(252)]
+        portfolio_returns = [
+            {"date": observed.isoformat(), "return_pct": -0.4 if index % 40 == 0 else 0.12}
+            for index, observed in enumerate(daily_dates)
+        ]
+        candidate_returns = [
+            {"date": observed.isoformat(), "return_pct": -0.2 if index % 40 == 0 else 0.10}
+            for index, observed in enumerate(daily_dates)
+        ]
+        snapshot = {
+            "as_of_date": "2025-12-31",
+            "transaction_history_complete": True,
+            "transactions": [
+                {"symbol": "AAA", "traded_at": "2024-01-10", "type": "buy"},
+                {"symbol": "BBB", "traded_at": "2024-02-10", "type": "buy"},
+            ],
+            "positions": [
+                {"symbol": "AAA", "sector": "Technology", "weight_pct": 60, "beta": 1.2, "factor_exposures": {"momentum": 0.4, "quality": 0.8, "value": -0.2}},
+                {"symbol": "BBB", "sector": "Financials", "weight_pct": 40, "beta": 0.7, "factor_exposures": {"momentum": -0.1, "quality": 0.3, "value": 0.5}},
+            ],
+            "daily_returns": portfolio_returns,
+        }
+        result = build_portfolio_impact(
+            {"status": "completed_research_only"},
+            snapshot,
+            [{
+                "symbol": "CCC", "sector": "Healthcare", "proposed_weight_pct": 5,
+                "beta": 0.8,
+                "factor_exposures": {"momentum": 0.2, "quality": 0.6, "value": 0.1},
+                "daily_returns": candidate_returns,
+            }],
+        )
+        self.assertEqual(result["status"], "completed_research_only")
+        self.assertEqual(result["summary"]["gates_ready"], 6)
+        self.assertEqual(result["summary"]["impacts_calculated"], 1)
+        impact = result["outputs"]["candidate_impacts"][0]
+        self.assertEqual(impact["aligned_sessions"], 252)
+        self.assertEqual(impact["security_hhi"]["delta"], -0.0482)
+        self.assertEqual(impact["beta"]["delta"], -0.01)
+        self.assertEqual(impact["guardrail_state"], "within_frozen_limits")
+        self.assertEqual(result["outputs"]["ranked_candidates"], [])
+
+    def test_candidate_ranking_stays_blocked_without_whole_candidate_evidence(self):
+        result = build_candidate_ranking(
+            {"status": "completed_research_only"},
+            {"status": "blocked_by_catalyst_evidence"},
+            {"status": "blocked_by_portfolio_evidence", "outputs": {"candidate_impacts": []}},
+        )
+        self.assertEqual(result["contract_version"], "candidate-ranking-v20")
+        self.assertEqual(result["status"], "blocked_by_candidate_gates")
+        self.assertEqual(result["summary"]["research_ranks"], 0)
+        self.assertEqual(result["summary"]["recommendations"], 0)
+        self.assertEqual(result["outputs"]["ranked_candidates"], [])
+
+    def test_candidate_ranking_rejects_failed_gate_and_orders_admitted_scores(self):
+        source_versions = {
+            "factor": "composite-factor-run-v16",
+            "investable": "investable-validation-v17",
+            "catalyst": "catalyst-evidence-v18",
+            "portfolio": "portfolio-impact-v19",
+        }
+        impacts = [
+            {
+                "symbol": symbol,
+                "guardrail_state": "within_frozen_limits",
+                "maximum_drawdown_pct": {"delta": drawdown_delta},
+                "security_hhi": {"delta": hhi_delta},
+            }
+            for symbol, drawdown_delta, hhi_delta in (
+                ("AAA", -0.1, -0.01),
+                ("BBB", -0.2, -0.02),
+                ("CCC", 0.1, -0.03),
+            )
+        ]
+        candidates = []
+        for symbol, score, liquidity in (("AAA", 80.0, True), ("BBB", 99.0, False), ("CCC", 90.0, True)):
+            candidates.append(
+                {
+                    "symbol": symbol,
+                    "as_of_date": "2026-09-30",
+                    "composite_score": score,
+                    "factor_gate_passed": True,
+                    "regime_gate_passed": True,
+                    "validation_gate_passed": True,
+                    "liquidity_gate_passed": liquidity,
+                    "catalyst_reviewed": True,
+                    "source_versions": source_versions,
+                }
+            )
+        result = build_candidate_ranking(
+            {"status": "completed_research_only"},
+            {"status": "completed_research_only"},
+            {"status": "completed_research_only", "outputs": {"candidate_impacts": impacts}},
+            candidates,
+        )
+        self.assertEqual(result["status"], "completed_research_only")
+        self.assertEqual(result["summary"]["gates_ready"], 6)
+        self.assertEqual(result["summary"]["candidates_admitted"], 2)
+        self.assertEqual(result["summary"]["candidates_rejected"], 1)
+        self.assertEqual(
+            [row["symbol"] for row in result["outputs"]["ranked_candidates"]],
+            ["CCC", "AAA"],
+        )
+        self.assertEqual(result["outputs"]["rejected_candidates"][0]["failed_gates"], ["liquidity"])
+        self.assertEqual(result["summary"]["recommendations"], 0)
+
+    def test_research_card_publication_withholds_partial_draft(self):
+        ranking = {
+            "status": "completed_research_only",
+            "outputs": {"ranked_candidates": [{"symbol": "AAA", "research_rank": 1}]},
+        }
+        result = build_research_card_publication(
+            ranking,
+            [{"symbol": "AAA", "research_rank": 1, "as_of_date": "2026-09-30", "hypothesis": "Incomplete draft."}],
+        )
+        self.assertEqual(result["contract_version"], "research-card-publication-v21")
+        self.assertEqual(result["status"], "publication_blocked")
+        self.assertEqual(result["summary"]["cards_published"], 0)
+        self.assertIn("evidence", result["withheld_cards"][0]["missing_fields"])
+        self.assertEqual(result["cards"], [])
+
+    def test_research_card_publication_hashes_complete_eight_field_card(self):
+        ranking = {
+            "status": "completed_research_only",
+            "outputs": {"ranked_candidates": [{"symbol": "AAA", "research_rank": 1}]},
+        }
+        draft = {
+            "symbol": "AAA",
+            "research_rank": 1,
+            "as_of_date": "2026-09-30",
+            "hypothesis": "Validated relative strength may persist over the stated review window.",
+            "evidence": [
+                {
+                    "claim": "The frozen composite score is in the admitted set.",
+                    "as_of_date": "2026-09-30",
+                    "source_key": "local-factor-audit",
+                    "contract_version": "candidate-ranking-v20",
+                }
+            ],
+            "uncertainty": ["Factor relationships can weaken after the as-of date."],
+            "benchmark": {
+                "name": "Nifty 50",
+                "horizon_sessions": 20,
+                "candidate_return_pct": 3.2,
+                "benchmark_return_pct": 1.1,
+                "as_of_date": "2026-09-30",
+                "source_key": "local-eod-store",
+                "contract_version": "composite-factor-run-v16",
+            },
+            "horizon": {"sessions": 20, "review_rule": "Review after 20 completed sessions or an invalidation event."},
+            "risk_budget": {
+                "maximum_weight_pct": 3.0,
+                "regime_cap_pct": 4.0,
+                "liquidity_cap_pct": 5.0,
+                "portfolio_cap_pct": 3.5,
+            },
+            "portfolio_impact": {
+                "security_hhi_delta": -0.01,
+                "beta_delta": 0.02,
+                "drawdown_delta_pct": -0.3,
+                "source_contract": "portfolio-impact-v19",
+            },
+            "invalidation": ["Relative strength falls below the frozen exit threshold."],
+        }
+        result = build_research_card_publication(ranking, [draft])
+        self.assertEqual(result["status"], "completed_research_only")
+        self.assertEqual(result["summary"]["gates_ready"], 6)
+        self.assertEqual(result["summary"]["cards_published"], 1)
+        self.assertEqual(result["summary"]["recommendations"], 0)
+        self.assertEqual(len(result["cards"][0]["publication_id"]), 64)
+        self.assertEqual(result["withheld_cards"], [])
 
 
 class KiteHandshakeHelpersTest(unittest.TestCase):

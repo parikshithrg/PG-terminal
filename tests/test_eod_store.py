@@ -12,6 +12,7 @@ from eod_store import (
     FundamentalFilingConflictError,
     GlobalRiskConflictError,
     HistoricalSeriesConflictError,
+    IndexMembershipConflictError,
     InstitutionalFlowConflictError,
     MacroSnapshotConflictError,
 )
@@ -441,6 +442,38 @@ class EODStoreTest(unittest.TestCase):
         )
         self.assertEqual(len(loaded), 2)
         self.assertNotEqual(loaded[0]["evidence_hash"], loaded[1]["evidence_hash"])
+
+    def test_index_membership_snapshots_are_effective_dated_and_immutable(self):
+        rows = [
+            {"symbol": "AAA", "company_name": "Alpha Limited", "sector": "Industrials"},
+            {"symbol": "BBB", "company_name": "Beta Limited", "sector": "Financial Services"},
+        ]
+        arguments = {
+            "index_name": "Nifty 500",
+            "effective_from": date(2021, 10, 1),
+            "constituents": rows,
+            "source_title": "Official historical constituent list",
+            "source_url": "https://example.test/official-index-history",
+            "source_file_name": "nifty500-2021-10.csv",
+            "retrieved_at": "2026-10-19T10:00:00+00:00",
+        }
+        self.assertEqual(
+            self.store.append_index_membership_snapshot(**arguments),
+            {"inserted": 1, "duplicates": 0},
+        )
+        self.assertEqual(
+            self.store.append_index_membership_snapshot(**arguments),
+            {"inserted": 0, "duplicates": 1},
+        )
+        loaded = self.store.load_index_membership_snapshots(index_name="Nifty 500")
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(loaded[0]["effective_from"], date(2021, 10, 1))
+        self.assertEqual(loaded[0]["constituents"][0]["symbol"], "AAA")
+
+        changed = dict(arguments)
+        changed["constituents"] = [dict(rows[0], sector="Energy"), rows[1]]
+        with self.assertRaises(IndexMembershipConflictError):
+            self.store.append_index_membership_snapshot(**changed)
 
     def test_manual_news_import_is_append_only_and_idempotent(self):
         rows = [

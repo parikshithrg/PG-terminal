@@ -61,6 +61,10 @@ class FundamentalAuditConflictError(ValueError):
     """Raised when one versioned normalizer audit changes after storage."""
 
 
+class IndexMembershipConflictError(ValueError):
+    """Raised when one effective-dated membership snapshot changes."""
+
+
 class EODStore:
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -257,6 +261,32 @@ class EODStore:
 
                     CREATE INDEX IF NOT EXISTS sentiment_factor_snapshot_date_idx
                     ON sentiment_factor_snapshots(as_of_date, created_at);
+
+                    CREATE TABLE IF NOT EXISTS index_membership_snapshots (
+                        index_name TEXT NOT NULL,
+                        effective_from TEXT NOT NULL,
+                        effective_to TEXT,
+                        source_title TEXT NOT NULL,
+                        source_url TEXT NOT NULL,
+                        source_file_name TEXT NOT NULL,
+                        retrieved_at TEXT NOT NULL,
+                        schema_version INTEGER NOT NULL,
+                        PRIMARY KEY (index_name, effective_from)
+                    );
+
+                    CREATE TABLE IF NOT EXISTS index_membership_constituents (
+                        index_name TEXT NOT NULL,
+                        effective_from TEXT NOT NULL,
+                        symbol TEXT NOT NULL,
+                        company_name TEXT NOT NULL,
+                        sector TEXT NOT NULL,
+                        PRIMARY KEY (index_name, effective_from, symbol),
+                        FOREIGN KEY (index_name, effective_from)
+                            REFERENCES index_membership_snapshots(index_name, effective_from)
+                    );
+
+                    CREATE INDEX IF NOT EXISTS index_membership_effective_idx
+                    ON index_membership_snapshots(index_name, effective_from);
 
                     CREATE TABLE IF NOT EXISTS news_event_records (
                         event_hash TEXT PRIMARY KEY,
@@ -1359,6 +1389,154 @@ class EODStore:
                     ),
                 )
         return {"inserted": 1, "duplicates": 0, "evidence_hash": evidence_hash}
+
+    def append_index_membership_snapshot(
+        self,
+        *,
+        index_name: str,
+        effective_from: date,
+        constituents: list[dict[str, object]],
+        source_title: str,
+        source_url: str,
+        source_file_name: str,
+        effective_to: date | None = None,
+        retrieved_at: str | None = None,
+    ) -> dict[str, int]:
+        if (
+            not isinstance(index_name, str)
+            or not index_name.strip()
+            or len(index_name.strip()) > 100
+            or not isinstance(effective_from, date)
+            or (effective_to is not None and (not isinstance(effective_to, date) or effective_to < effective_from))
+            or not isinstance(source_title, str)
+            or not source_title.strip()
+            or not isinstance(source_url, str)
+            or not source_url.startswith("https://")
+            or not isinstance(source_file_name, str)
+            or not re.fullmatch(r"[A-Za-z0-9._ -]{1,160}\.(csv|json|xlsx)", source_file_name, re.IGNORECASE)
+            or not isinstance(constituents, list)
+            or not constituents
+        ):
+            raise ValueError("invalid_index_membership_snapshot")
+        prepared: list[tuple[str, str, str]] = []
+        seen: set[str] = set()
+        for row in constituents:
+            symbol = str(row.get("symbol") or "").strip().upper() if isinstance(row, dict) else ""
+            company_name = str(row.get("company_name") or "").strip() if isinstance(row, dict) else ""
+            sector = str(row.get("sector") or "").strip() if isinstance(row, dict) else ""
+            if (
+                not re.fullmatch(r"[A-Z0-9&.-]{1,32}", symbol)
+                or not company_name
+                or len(company_name) > 200
+                or not sector
+                or len(sector) > 120
+                or symbol in seen
+            ):
+                raise ValueError("invalid_index_membership_snapshot")
+            seen.add(symbol)
+            prepared.append((symbol, company_name, sector))
+        prepared.sort()
+        timestamp = retrieved_at or datetime.now(timezone.utc).isoformat()
+        identity = (index_name.strip(), effective_from.isoformat())
+        metadata = (
+            effective_to.isoformat() if effective_to else None,
+            source_title.strip(),
+            source_url.strip(),
+            source_file_name.strip(),
+        )
+        with closing(self._connect()) as connection:
+            with connection:
+                existing = connection.execute(
+                    """
+                    SELECT effective_to, source_title, source_url, source_file_name
+                    FROM index_membership_snapshots
+                    WHERE index_name = ? AND effective_from = ?
+                    """,
+                    identity,
+                ).fetchone()
+                if existing is not None:
+                    stored_metadata = tuple(existing[key] for key in ("effective_to", "source_title", "source_url", "source_file_name"))
+                    stored_rows = [
+                        (row["symbol"], row["company_name"], row["sector"])
+                        for row in connection.execute(
+                            """
+                            SELECT symbol, company_name, sector
+                            FROM index_membership_constituents
+                            WHERE index_name = ? AND effective_from = ?
+                            ORDER BY symbol
+                            """,
+                            identity,
+                        ).fetchall()
+                    ]
+                    if stored_metadata != metadata or stored_rows != prepared:
+                        raise IndexMembershipConflictError(
+                            f"stored_index_membership_conflict:{identity[0]}:{identity[1]}"
+                        )
+                    return {"inserted": 0, "duplicates": 1}
+                connection.execute(
+                    """
+                    INSERT INTO index_membership_snapshots (
+                        index_name, effective_from, effective_to, source_title,
+                        source_url, source_file_name, retrieved_at, schema_version
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (*identity, *metadata, timestamp, SCHEMA_VERSION),
+                )
+                connection.executemany(
+                    """
+                    INSERT INTO index_membership_constituents (
+                        index_name, effective_from, symbol, company_name, sector
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    [(identity[0], identity[1], *row) for row in prepared],
+                )
+        return {"inserted": 1, "duplicates": 0}
+
+    def load_index_membership_snapshots(
+        self, *, index_name: str | None = None
+    ) -> list[dict[str, object]]:
+        parameters: tuple[object, ...] = ()
+        where = ""
+        if index_name is not None:
+            if not isinstance(index_name, str) or not index_name.strip():
+                raise ValueError("invalid_index_membership_snapshot")
+            where = "WHERE index_name = ?"
+            parameters = (index_name.strip(),)
+        with closing(self._connect()) as connection:
+            snapshots = connection.execute(
+                f"""
+                SELECT index_name, effective_from, effective_to, source_title,
+                       source_url, source_file_name, retrieved_at
+                FROM index_membership_snapshots
+                {where}
+                ORDER BY index_name, effective_from
+                """,
+                parameters,
+            ).fetchall()
+            result: list[dict[str, object]] = []
+            for snapshot in snapshots:
+                rows = connection.execute(
+                    """
+                    SELECT symbol, company_name, sector
+                    FROM index_membership_constituents
+                    WHERE index_name = ? AND effective_from = ?
+                    ORDER BY symbol
+                    """,
+                    (snapshot["index_name"], snapshot["effective_from"]),
+                ).fetchall()
+                result.append(
+                    {
+                        "index_name": snapshot["index_name"],
+                        "effective_from": date.fromisoformat(snapshot["effective_from"]),
+                        "effective_to": date.fromisoformat(snapshot["effective_to"]) if snapshot["effective_to"] else None,
+                        "source_title": snapshot["source_title"],
+                        "source_url": snapshot["source_url"],
+                        "source_file_name": snapshot["source_file_name"],
+                        "retrieved_at": snapshot["retrieved_at"],
+                        "constituents": [dict(row) for row in rows],
+                    }
+                )
+        return result
 
     def load_sentiment_factor_snapshots(
         self, *, model_version: str | None = None
