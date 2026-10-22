@@ -265,7 +265,8 @@ research pipeline before the final full-site presentation and operating pass.
     verification tool, recovery drill, release checklist and automated ready/
     degraded/backup-restore tests are included. The live local store passes
     `PRAGMA quick_check(1)` and the health endpoint reports ready.
-25. `terminal-interface-revamp-v24` — **in progress; Dashboard pass complete**.
+25. `terminal-interface-revamp-v24` — **in progress; shared all-pages foundation
+    complete, Dashboard and Market Sentiment composition complete**.
     Implement the approved PG-terminal visual system across the final site
     after production behaviour is stable. Rebuild
     the information hierarchy around compact command/status bars, dense
@@ -286,11 +287,26 @@ research pipeline before the final full-site presentation and operating pass.
     The completed Dashboard template, including its persistent light/dark
     switcher and matched semantic status treatments in both palettes, is now the
     approved implementation baseline to carry across every remaining page.
-    Resume that page-by-page rollout with Market Sentiment when development
-    restarts.
+    The Market Sentiment pass now carries the same command shell and complete
+    light/dark palette into a compact conclusion-first regime board, data-
+    freshness audit and graphical domestic-evidence grid. Empty charts retain
+    their missing-data language without expanding the page into large blank
+    areas, while validation and cross-index evidence remain available below as
+    collapsed/secondary audits. Existing IDs, calculation paths, loaders and
+    research-safety boundaries are unchanged. The terminal shell is now also
+    established across F&O, Screener, Seasonality Analysis, Earnings Analysis,
+    Portfolio Analysis, Events Calendar, Stock Data YTD, Historical Regimes,
+    Backtests and Alpha Research: persistent command/status chrome, both colour
+    palettes, compact rectangular panels, terminal controls and tables, visible
+    keyboard focus and the grid-backed workspace canvas. Functional page tabs,
+    loaders, calculations, element identities and missing-data states remain in
+    place. This completes the broad page-creation pass; resume with page-specific
+    information hierarchy and visual cleanup, beginning with Seasonality
+    Analysis.
     The command field is intentionally non-interactive during the page migration;
     at the end of v24 it must either become a real cross-workspace search/command
-    palette or be removed. Market Sentiment is the next page.
+    palette or be removed. Seasonality Analysis is the first page-specific
+    cleanup pass.
 
 ### Final UI revamp direction — approved concept set
 

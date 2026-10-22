@@ -11,8 +11,10 @@ Updated: 2026-10-22
   historical membership files, or proceed to `fundamental-evidence-execution-v14`
   while those external files are assembled.
 - `full-site-story-and-ux-v22` and `production-readiness-v23` are complete.
-  `terminal-interface-revamp-v24` is now active: the Dashboard pass is complete
-  and the next page is Market Sentiment. Keep the operations guide frozen until
+  `terminal-interface-revamp-v24` is now active: the shared terminal foundation
+  is complete across every page, Dashboard and Market Sentiment have completed
+  composition passes, and Seasonality Analysis is the first page-specific
+  cleanup pass. Keep the operations guide frozen until
   every page is migrated, then rewrite it against the final navigation and
   visual states.
 - Official historical NSE/BSE filing exports are the main external dependency.
@@ -107,12 +109,25 @@ Updated: 2026-10-22
   The owner approved this live Dashboard template as the baseline for every
   remaining page. Its top-bar light/dark switcher is functional, persists the
   browser preference and now covers the full Dashboard, including portfolio and
-  workspace-summary status badges. Continue the same two-palette design system
-  page by page; Market Sentiment remains next.
+  workspace-summary status badges. Market Sentiment now uses the same shell and
+  two-palette design system for its conclusion-first regime board, freshness
+  audit, compact evidence-factor grid and secondary validation audits. Empty
+  evidence charts stay compact and explicit rather than presenting large blank
+  panels. The verified live reference is
+  `docs/design-concepts/market-sentiment-terminal-v24-live.png`. Continue the
+  same design system page by page. The common shell is now applied to F&O,
+  Screener, Seasonality Analysis, Earnings Analysis, Portfolio Analysis, Events
+  Calendar, Stock Data YTD, Historical Regimes, Backtests and Alpha Research as
+  well. It provides the command/status header, dual palettes, terminal controls,
+  compact cards/tables and grid canvas without removing functional tabs or
+  changing data behaviour. The verified shared-foundation reference is
+  `docs/design-concepts/all-pages-terminal-foundation-v24.png`. The broad
+  page-creation pass is complete; Seasonality Analysis is the first individual
+  cleanup/composition pass.
   The top command field is a deferred decision: make it a functional
   cross-workspace search/command palette at the end of v24 or remove it; do not
-  ship it as decorative UI. Continue page-by-page with Market Sentiment,
-  Seasonality Analysis and Historical Regimes before applying the system to the
+  ship it as decorative UI. Continue page-by-page with Seasonality Analysis and
+  Historical Regimes before applying the system to the
   remaining pages.
 
 - The authoritative sequence is now validated data → regime/risk budget →
