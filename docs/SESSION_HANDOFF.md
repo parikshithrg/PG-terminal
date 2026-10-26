@@ -2,6 +2,27 @@
 
 Updated: 2026-10-26
 
+## Expense Tracker checkpoint — 2026-10-26
+
+- `expense-tracker-foundation-v27` is complete. The sidebar now includes an
+  independent Expense Tracker backed only by browser local storage. Entries can
+  be added, edited, removed, filtered by month and exported to CSV.
+- Historical expense import accepts CSV, XLSX and ODS. It recognizes ordinary
+  Date/Amount transaction rows and annual category matrices with year sheets,
+  month columns and expense categories. ODS ZIP/XML parsing is bounded, ignores
+  normal LibreOffice blank padding and never evaluates spreadsheet formulas.
+- The owner's `Expenses.ods` acceptance file contains 2024, 2025 and 2026 sheets.
+  The importer selects the expense side of split/merged month columns, excludes
+  income, net, totals and the free-form detail area, and creates 392 editable
+  category-month entries. All imported monthly values reconcile to the workbook's
+  `Total Expenses`/`Total Exp` rows with zero rejected records.
+- Resume with `expense-analyser-dashboard-v28`. Add an overview-first dashboard,
+  graphs and visual flow for monthly trends, category mix, year/month comparison,
+  recurring versus discretionary spending, material changes and ledger drill-
+  down. Preserve browser-local storage, truthful missing-data states and exact
+  reconciliation to the editable records. Category and inference rules require
+  fine-tuning with the owner before this milestone is complete.
+
 ## Alpha research build checkpoint — 2026-10-17
 
 ### Next-session queue — saved 2026-10-19
@@ -892,7 +913,13 @@ orders or position sizing.
 
 ## Next work
 
-1. Validate completed `mutual-fund-true-diversification-v3` against additional
+1. Build `expense-analyser-dashboard-v28`: turn the browser-local ledger into an
+   expense analysis workspace with reconciled graphs, compact dashboard metrics,
+   monthly and annual comparisons, category allocation, recurring/discretionary
+   views, material-change callouts and an intuitive summary-to-ledger visual flow.
+   Fine-tune the classification and display rules against the owner's real data;
+   do not move expense records out of browser-local storage.
+2. Validate completed `mutual-fund-true-diversification-v3` against additional
    representative user files as they become available. The ISIN-normalized overlap
    engine, plan-independent holdings identity, investor-weighted look-through,
    repeated holdings, sector exposure, effective security count, fund
@@ -937,7 +964,7 @@ orders or position sizing.
    overview rather than a table-heavy audit page: allocation, top similarity
    pairs, a coverage-labelled structural/regime-fit score, and concise review
    prompts are the only primary outputs.
-2. Populate `fundamental-evidence-population-v7`. The release-aware store,
+3. Populate `fundamental-evidence-population-v7`. The release-aware store,
    official manual-import boundary, non-financial quality/value definitions,
    defensive XBRL/Excel normalizer and company/sector coverage audit are frozen.
    Import representative manually downloaded official filings, review unmapped
@@ -945,9 +972,9 @@ orders or position sizing.
    release-known quarters per admitted company. Do not scrape exchange websites,
    use aggregator or synthetic fundamentals, fill missing facts or calculate a
    composite rank. Pre-2016 RBI policy reconstruction remains deferred.
-3. Live-check the first full NIFTY 500 five-year retrieval after reconnecting
+4. Live-check the first full NIFTY 500 five-year retrieval after reconnecting
    Kite, including year switching, coverage counts, and reverse ranking order.
-4. Begin the queued Portfolio performance and Alpha Opportunities roadmap:
+5. Begin the queued Portfolio performance and Alpha Opportunities roadmap:
    transaction-based performance; approved RBI 91-day T-bill history; complete
    permitted ETF/equity histories; and position-level return, volatility, and
    drawdown attribution. Keep the NCD excluded until a genuine mark-to-market or
@@ -958,12 +985,12 @@ orders or position sizing.
    Keep holdings local/read-only and keep the whole-market Dashboard headline
    deferred until its inputs, methodology, confidence rules, and wording are
    explicitly designed and reviewed.
-5. Continue daily collection for institutional flows, macro context, global risk,
+6. Continue daily collection for institutional flows, macro context, global risk,
    and futures/OI; freeze their directional thresholds only after adequate
    coverage, then test them out of sample.
-6. Source and audit authoritative dated index membership before populating the
+7. Source and audit authoritative dated index membership before populating the
    new point-in-time schema; never infer historical membership from today's list.
-7. Display any decision layer only after its evidence and limitations are
+8. Display any decision layer only after its evidence and limitations are
    reviewable in the interface.
 
 ## Approved longer-range product milestones

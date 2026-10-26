@@ -1790,6 +1790,12 @@ class EODStore:
             if not isinstance(row, dict) or any(key not in row for key in keys):
                 raise ValueError("invalid_earnings_import")
             canonical_record = {key: row[key] for key in keys}
+            for optional_key in (
+                "actual_eps", "consensus_eps", "consensus_captured_at",
+                "guidance_state", "guidance_source_url",
+            ):
+                if optional_key in row:
+                    canonical_record[optional_key] = row[optional_key]
             try:
                 canonical = json.dumps(
                     canonical_record, sort_keys=True, separators=(",", ":"), allow_nan=False
@@ -1843,14 +1849,31 @@ class EODStore:
                 """
                 SELECT record_hash, symbol, company_name, sector, basis, fiscal_year,
                        quarter, period_end, reported_at, currency, unit, revenue,
-                       net_profit, eps, source_url, source_file_name, imported_at
+                       net_profit, eps, source_url, source_file_name, raw_json, imported_at
                 FROM earnings_records
                 ORDER BY period_end DESC, reported_at DESC, symbol, basis, imported_at DESC
                 LIMIT ?
                 """,
                 (limit,),
             ).fetchall()
-        return [dict(row) for row in rows]
+        records: list[dict[str, object]] = []
+        for row in rows:
+            record = dict(row)
+            raw_json = record.pop("raw_json", "{}")
+            try:
+                raw = json.loads(str(raw_json))
+            except json.JSONDecodeError:
+                raw = {}
+            catalyst = raw.get("__catalyst__") if isinstance(raw, dict) else None
+            if isinstance(catalyst, dict):
+                for key in (
+                    "actual_eps", "consensus_eps", "consensus_captured_at",
+                    "guidance_state", "guidance_source_url",
+                ):
+                    if key in catalyst:
+                        record[key] = catalyst[key]
+            records.append(record)
+        return records
 
     def append_fundamental_filings(
         self,

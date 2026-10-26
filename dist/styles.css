@@ -1660,6 +1660,70 @@ body[data-active-page="alpha-research"] .alpha-output-strip article:nth-child(2)
 body[data-active-page="alpha-research"] .alpha-output-strip article:nth-child(3) strong,
 body[data-active-page="alpha-research"] .alpha-output-strip article:nth-child(4) strong { color: var(--terminal-red); }
 
+body[data-active-page="alpha-research"] .alpha-blocker-workflow {
+  display: grid;
+  grid-template-columns: minmax(210px, .9fr) minmax(360px, 1.5fr);
+  gap: 10px 14px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--terminal-line);
+  border-left: 3px solid var(--terminal-red);
+  background: var(--terminal-panel-2);
+}
+
+body[data-active-page="alpha-research"] .alpha-blocker-copy h3 {
+  margin: 4px 0;
+  color: var(--terminal-text-strong);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+body[data-active-page="alpha-research"] .alpha-blocker-copy p,
+body[data-active-page="alpha-research"] .alpha-blocker-note {
+  margin: 0;
+  color: var(--terminal-text-muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+body[data-active-page="alpha-research"] .alpha-blocker-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--terminal-line-soft);
+  border-left: 1px solid var(--terminal-line-soft);
+}
+
+body[data-active-page="alpha-research"] .alpha-blocker-metrics article {
+  min-width: 0;
+  padding: 8px;
+  border-right: 1px solid var(--terminal-line-soft);
+  border-bottom: 1px solid var(--terminal-line-soft);
+}
+
+body[data-active-page="alpha-research"] .alpha-blocker-metrics span,
+body[data-active-page="alpha-research"] .alpha-blocker-metrics small {
+  display: block;
+  color: var(--terminal-text-muted);
+  font-size: 8px;
+}
+
+body[data-active-page="alpha-research"] .alpha-blocker-metrics strong {
+  display: block;
+  margin: 3px 0;
+  color: var(--terminal-red);
+  font-size: 14px;
+}
+
+body[data-active-page="alpha-research"] .alpha-blocker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+body[data-active-page="alpha-research"] .alpha-file-action { cursor: pointer; }
+body[data-active-page="alpha-research"] .alpha-blocker-note { align-self: center; }
+
 body[data-active-page="alpha-research"] .alpha-audit-details {
   padding: 0;
   border-radius: 0;
@@ -1718,6 +1782,7 @@ body[data-active-page="alpha-research"] :is(.alpha-policy-section, .alpha-bounda
   body[data-active-page="alpha-research"] .alpha-story-section .historical-architecture-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   body[data-active-page="alpha-research"] .alpha-policy-section,
   body[data-active-page="alpha-research"] .alpha-boundary-section { grid-column: 1 / -1 !important; }
+  body[data-active-page="alpha-research"] .alpha-blocker-workflow { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 480px) {
@@ -1726,6 +1791,77 @@ body[data-active-page="alpha-research"] :is(.alpha-policy-section, .alpha-bounda
   body[data-active-page="alpha-research"] .alpha-pipeline-grid,
   body[data-active-page="alpha-research"] .alpha-story-section .historical-architecture-grid { grid-template-columns: 1fr; }
   body[data-active-page="alpha-research"] .alpha-pipeline-heading { flex-direction: column; }
+  body[data-active-page="alpha-research"] .alpha-blocker-metrics { grid-template-columns: 1fr; }
+}
+
+/* Expense Tracker: independent browser-local monthly ledger. */
+body[data-active-page="expense-tracker"] #expenseTrackerView {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 8px;
+  align-items: start;
+}
+
+body[data-active-page="expense-tracker"] #expenseTrackerView[hidden] { display: none; }
+body[data-active-page="expense-tracker"] #expenseTrackerView > :is(.page-tabs, .analysis-intro, .expense-summary-grid, .expense-entry-section, .expense-ledger-section, .expense-category-section) { grid-column: 1 / -1; margin: 0; }
+body[data-active-page="expense-tracker"] .expense-local-status { color: var(--terminal-green); border-color: var(--terminal-green); }
+body[data-active-page="expense-tracker"] .expense-summary-grid { gap: 0; border: 1px solid var(--terminal-line); background: var(--terminal-panel); }
+body[data-active-page="expense-tracker"] .expense-summary-grid .summary-card { border: 0; border-right: 1px solid var(--terminal-line-soft); border-radius: 0; background: transparent; }
+body[data-active-page="expense-tracker"] .expense-summary-grid .summary-card:last-child { border-right: 0; }
+body[data-active-page="expense-tracker"] .expense-entry-section,
+body[data-active-page="expense-tracker"] .expense-ledger-section,
+body[data-active-page="expense-tracker"] .expense-category-section { padding: 12px; border-radius: 0; background: var(--terminal-panel); }
+
+.expense-month-control { display: flex; align-items: center; gap: 8px; color: var(--terminal-text-muted); font-size: 8px; font-weight: 700; }
+.expense-month-control input { min-height: 30px; border: 1px solid var(--terminal-line); background: var(--terminal-panel-2); color: var(--terminal-text-strong); font: inherit; }
+.expense-import-strip { display: grid; grid-template-columns: minmax(260px, 1fr) auto auto; gap: 8px; align-items: center; margin-top: 10px; padding: 9px; border: 1px solid var(--terminal-line-soft); border-left: 3px solid #6d5bd0; background: var(--terminal-panel-2); }
+.expense-import-strip > div strong,
+.expense-import-strip > div small { display: block; }
+.expense-import-strip > div strong { margin-top: 3px; color: var(--terminal-text-strong); font-size: 10px; }
+.expense-import-strip > div small,
+.expense-import-strip > span { color: var(--terminal-text-muted); font-size: 8px; }
+.expense-import-strip > span { grid-column: 1 / -1; }
+.expense-import-strip label { cursor: pointer; }
+.expense-entry-grid { display: grid; grid-template-columns: 130px 150px minmax(220px, 1fr) 140px 140px auto; gap: 8px; align-items: end; margin-top: 10px; }
+.expense-entry-grid label { min-width: 0; }
+.expense-entry-grid label > span { display: block; margin-bottom: 4px; color: var(--terminal-text-muted); font-size: 8px; font-weight: 700; text-transform: uppercase; }
+.expense-entry-grid input,
+.expense-entry-grid select,
+.expense-table input,
+.expense-table select { width: 100%; min-height: 30px; border: 1px solid var(--terminal-line-soft); background: var(--terminal-panel-2); color: var(--terminal-text-strong); font: 10px Calibri, "Segoe UI", sans-serif; }
+.expense-ledger-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.panel-button.danger { color: var(--terminal-red); border-color: var(--terminal-red); }
+.expense-table td { vertical-align: middle; }
+.expense-table .expense-amount-input { min-width: 100px; text-align: right; }
+.expense-table .expense-description-input { min-width: 220px; }
+.expense-remove-button { padding: 4px 7px; border: 1px solid var(--terminal-red); background: transparent; color: var(--terminal-red); cursor: pointer; font: 700 8px Calibri, "Segoe UI", sans-serif; text-transform: uppercase; }
+.expense-category-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+.expense-category-card { padding: 9px; border: 1px solid var(--terminal-line-soft); background: var(--terminal-panel-2); }
+.expense-category-card header { display: flex; justify-content: space-between; gap: 8px; color: var(--terminal-text-strong); font-size: 9px; font-weight: 700; }
+.expense-category-card small { display: block; margin-top: 5px; color: var(--terminal-text-muted); font-size: 8px; }
+.expense-category-bar { height: 4px; margin-top: 8px; background: var(--terminal-line-soft); }
+.expense-category-bar i { display: block; height: 100%; background: #6d5bd0; }
+.expense-empty { grid-column: 1 / -1; padding: 18px; border: 1px dashed var(--terminal-line); color: var(--terminal-text-muted); text-align: center; }
+
+@media (max-width: 1100px) {
+  .expense-entry-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .expense-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  .expense-entry-grid { grid-template-columns: 1fr 1fr; }
+  .expense-description-field { grid-column: 1 / -1; }
+  .expense-category-grid { grid-template-columns: 1fr; }
+  body[data-active-page="expense-tracker"] .expense-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .expense-import-strip { grid-template-columns: 1fr 1fr; }
+  .expense-import-strip > div { grid-column: 1 / -1; }
+}
+
+@media (max-width: 480px) {
+  .expense-entry-grid,
+  body[data-active-page="expense-tracker"] .expense-summary-grid { grid-template-columns: 1fr; }
+  .expense-description-field { grid-column: auto; }
+  .expense-import-strip { grid-template-columns: 1fr; }
 }
 
 /* Stock Data YTD composition: participation breadth and extremes before the ranking audit. */

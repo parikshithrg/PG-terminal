@@ -380,6 +380,26 @@ research pipeline before the final full-site presentation and operating pass.
     handoff, portfolio persistence and Dashboard mapping were exercised in the live
     browser. The audit corrected stale health metadata from the completed v24
     milestone to `release-ready`. No commit is created until explicitly requested.
+28. `expense-tracker-foundation-v27` — **complete**. Added an independent
+    Expense Tracker workspace with an editable browser-local monthly ledger,
+    add/remove controls, month filtering, category summaries and CSV export.
+    Historical imports accept CSV, XLSX and ODS without persisting the uploaded
+    file on the server. The importer recognizes both transaction-row files and
+    annual category matrices with year sheets, month columns and expense rows.
+    The owner-supplied 2024–2026 ODS ledger imports as 392 category-month entries,
+    reconciles every month to its recorded total-expense row and reports zero
+    rejected rows. Income, net, total and free-form detail areas are not imported
+    twice. Imported rows remain editable and removable in the browser.
+29. `expense-analyser-dashboard-v28` — **queued; next Expense Tracker milestone**.
+    Evolve the ledger into a concise expense analyser using the approved terminal
+    design system. Build an overview-first visual flow with monthly spending and
+    savings trends, category allocation and contribution, largest changes,
+    recurring-versus-discretionary views, year/month comparisons and useful
+    drill-downs into the editable ledger. Charts and conclusions must reconcile
+    to the visible records, distinguish zero from missing months, preserve local-
+    only storage and avoid duplicating the source data. Fine-tune categories,
+    aggregation rules, labels and chart selection against the owner's real ledger
+    before treating the page as complete.
 
 ### Final UI revamp direction — approved concept set
 

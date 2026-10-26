@@ -1724,7 +1724,7 @@
       .mutual-fund-position-row { grid-template-columns: minmax(110px, 1fr) 1fr auto; }
     }
   </style>
-  <link rel="stylesheet" href="styles.css?v=terminal-interface-v24-alpha-research-17">
+  <link rel="stylesheet" href="styles.css?v=terminal-interface-v24-expense-import-19">
 </head>
 <body data-active-page="dashboard">
   <a class="skip-link" href="#mainContent">Skip to main content</a>
@@ -1802,6 +1802,7 @@
           <li><button class="nav-button" data-page="Historical Regimes" style="--item-color:#8b6f47"><span class="nav-icon"></span><span>Historical regimes</span></button></li>
           <li><button class="nav-button" data-page="Backtests" style="--item-color:#405b78"><span class="nav-icon"></span><span>Backtests</span></button></li>
           <li><button class="nav-button" data-page="Alpha Research" style="--item-color:#0f766e"><span class="nav-icon"></span><span>Alpha Research</span></button></li>
+          <li><button class="nav-button" data-page="Expense Tracker" style="--item-color:#6d5bd0"><span class="nav-icon"></span><span>Expense Tracker</span></button></li>
         </ul>
       </nav>
       <details class="sidebar-footer">
@@ -2205,7 +2206,7 @@
               <summary>Workspace status</summary>
               <div class="panel-list">
                 <div class="panel-row"><span>Interface</span><span>Frame ready</span></div>
-                <div class="panel-row"><span>Navigation</span><span>12 sections</span></div>
+                <div class="panel-row"><span>Navigation</span><span>13 sections</span></div>
                 <div class="panel-row"><span>External actions</span><span>Disabled</span></div>
               </div>
             </details>
@@ -4186,6 +4187,27 @@
               <article><span>Blocked layers</span><strong id="alphaPipelineBlocked">—</strong></article>
               <article><span>Published cards</span><strong id="alphaPipelineCards">0</strong></article>
             </div>
+            <section class="alpha-blocker-workflow" id="alphaBlockerWorkflow" aria-labelledby="alphaBlockerTitle">
+              <div class="alpha-blocker-copy">
+                <span class="alpha-pipeline-kicker">FIRST ACTIONABLE PUBLICATION GATE</span>
+                <h3 id="alphaBlockerTitle">Build release-known catalyst evidence</h3>
+                <p id="alphaBlockerCopy">Publication is withheld because the catalyst audit has no reviewed earnings or announcement history. Ranked cards are downstream and cannot open independently.</p>
+              </div>
+              <div class="alpha-blocker-metrics" aria-label="Catalyst evidence requirements">
+                <article><span>RELEASE-KNOWN EARNINGS</span><strong id="alphaBlockerEarnings">0 / 20</strong><small>minimum timestamped events</small></article>
+                <article><span>REVIEWED ANNOUNCEMENTS</span><strong id="alphaBlockerNews">0</strong><small>source-linked records</small></article>
+                <article><span>CATALYST GATES</span><strong id="alphaBlockerGates">0 / 6</strong><small id="alphaBlockerGateNote">expectations, guidance and drift included</small></article>
+              </div>
+              <div class="alpha-blocker-actions">
+                <button class="panel-button primary" id="openAlphaEarningsButton" type="button">Open earnings import</button>
+                <button class="panel-button" id="openAlphaAuditButton" type="button">Inspect all gates</button>
+                <label class="panel-button alpha-file-action" for="alphaNewsCsvInput">Choose NSE announcements CSV</label>
+                <input id="alphaNewsCsvInput" type="file" accept=".csv,text/csv" hidden>
+                <button class="panel-button" id="importAlphaNewsButton" type="button">Import reviewed announcements</button>
+                <a class="panel-button" href="nse-announcements-template.csv" download>Download announcement template</a>
+              </div>
+              <p class="alpha-blocker-note" id="alphaBlockerNote">Use files downloaded manually from official sources. Missing evidence stays unavailable; it is never filled with a neutral score.</p>
+            </section>
           </section>
 
           <details class="analysis-section alpha-audit-details" id="alphaTechnicalAudit">
@@ -4453,14 +4475,78 @@
             </div>
           </details>
 
-          <section class="analysis-section">
+          <section class="analysis-section alpha-policy-section">
             <h2>Policy evidence boundary</h2>
             <div class="analysis-note" id="alphaPolicyNote">MPC release-native history has not been checked.</div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section alpha-boundary-section">
             <h2>Decision boundary</h2>
             <div class="analysis-note" id="alphaResearchContractNote">No candidate ranking, recommendation or order workflow is active. This workspace exposes build readiness and missing evidence only.</div>
+          </section>
+        </section>
+
+        <section id="expenseTrackerView" hidden aria-labelledby="expenseTrackerTitle">
+          <div class="page-tabs" aria-label="Expense Tracker views">
+            <div class="page-tab active">Monthly ledger</div>
+          </div>
+
+          <div class="analysis-intro">
+            <div>
+              <h1 id="expenseTrackerTitle">Expense Tracker</h1>
+              <p class="analysis-caption">A separate personal monthly ledger · stored only in this browser</p>
+            </div>
+            <span class="analysis-status expense-local-status">LOCAL ONLY</span>
+          </div>
+
+          <section class="summary-grid expense-summary-grid" aria-label="Selected month expense summary">
+            <article class="summary-card"><div class="summary-value" id="expenseTotalValue">₹0</div><div class="summary-meta">Month spending</div></article>
+            <article class="summary-card"><div class="summary-value" id="expenseEntryCount">0</div><div class="summary-meta">Entries</div></article>
+            <article class="summary-card"><div class="summary-value" id="expenseTopCategory">—</div><div class="summary-meta">Largest category</div></article>
+            <article class="summary-card"><div class="summary-value" id="expenseAverageValue">₹0</div><div class="summary-meta">Average expense</div></article>
+          </section>
+
+          <section class="analysis-section expense-entry-section">
+            <div class="terminal-section-head">
+              <div><span class="terminal-kicker">MONTHLY INPUT</span><h2>Add an expense</h2></div>
+              <label class="expense-month-control" for="expenseMonthSelect"><span>VIEW MONTH</span><input id="expenseMonthSelect" type="month"></label>
+            </div>
+            <div class="expense-import-strip">
+              <div><span class="terminal-kicker">HISTORICAL IMPORT</span><strong>Populate multiple months from CSV, XLSX or ODS</strong><small>Date and Amount are required. Category, Description and Payment are detected when present.</small></div>
+              <label class="panel-button" for="expenseHistoryFile">Choose expense file</label>
+              <input id="expenseHistoryFile" type="file" accept=".csv,.xlsx,.ods,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet" hidden>
+              <a class="panel-button" href="expense-import-template.csv" download>Download template</a>
+              <span id="expenseImportStatus">No historical file selected.</span>
+            </div>
+            <form class="expense-entry-grid" id="expenseEntryForm">
+              <label><span>Date</span><input id="expenseDateInput" type="date" required></label>
+              <label><span>Category</span><select id="expenseCategoryInput" required>
+                <option>Housing</option><option>Food</option><option>Transport</option><option>Utilities</option><option>Healthcare</option><option>Insurance</option><option>Education</option><option>Shopping</option><option>Entertainment</option><option>Travel</option><option>Debt</option><option>Taxes</option><option>Other</option>
+              </select></label>
+              <label class="expense-description-field"><span>Description</span><input id="expenseDescriptionInput" type="text" maxlength="120" placeholder="What was this for?" required></label>
+              <label><span>Payment</span><select id="expensePaymentInput"><option>UPI</option><option>Credit card</option><option>Debit card</option><option>Bank transfer</option><option>Cash</option><option>Other</option></select></label>
+              <label><span>Amount (₹)</span><input id="expenseAmountInput" type="number" min="0.01" step="0.01" inputmode="decimal" required></label>
+              <button class="panel-button primary" type="submit">Add expense</button>
+            </form>
+            <p class="analysis-note">This ledger is independent from portfolio and market data. Entries remain in this browser's local storage and are not sent to the server.</p>
+          </section>
+
+          <section class="analysis-section expense-ledger-section">
+            <div class="terminal-section-head">
+              <div><span class="terminal-kicker">EDITABLE MONTHLY LEDGER</span><h2 id="expenseLedgerTitle">Expenses</h2></div>
+              <div class="expense-ledger-actions"><button class="panel-button" id="exportExpensesButton" type="button">Export month CSV</button><button class="panel-button danger" id="clearExpenseMonthButton" type="button">Clear month</button></div>
+            </div>
+            <div class="table-wrap">
+              <table class="expense-table">
+                <thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Payment</th><th>Amount</th><th></th></tr></thead>
+                <tbody id="expenseLedgerBody"><tr><td colspan="6">No expenses recorded for this month.</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="analysis-section expense-category-section">
+            <div class="terminal-section-head"><div><span class="terminal-kicker">CATEGORY MIX</span><h2>Where the month went</h2></div><span class="terminal-context" id="expenseCategoryStatus">No entries</span></div>
+            <div class="expense-category-grid" id="expenseCategoryGrid"><div class="expense-empty">Add an expense to build the category view.</div></div>
           </section>
         </section>
 
@@ -4607,6 +4693,23 @@
     const alphaResearchView = document.getElementById('alphaResearchView');
     const alphaResearchStatus = document.getElementById('alphaResearchStatus');
     const refreshAlphaResearchButton = document.getElementById('refreshAlphaResearchButton');
+    const openAlphaEarningsButton = document.getElementById('openAlphaEarningsButton');
+    const openAlphaAuditButton = document.getElementById('openAlphaAuditButton');
+    const alphaNewsCsvInput = document.getElementById('alphaNewsCsvInput');
+    const importAlphaNewsButton = document.getElementById('importAlphaNewsButton');
+    const expenseTrackerView = document.getElementById('expenseTrackerView');
+    const expenseMonthSelect = document.getElementById('expenseMonthSelect');
+    const expenseEntryForm = document.getElementById('expenseEntryForm');
+    const expenseDateInput = document.getElementById('expenseDateInput');
+    const expenseCategoryInput = document.getElementById('expenseCategoryInput');
+    const expenseDescriptionInput = document.getElementById('expenseDescriptionInput');
+    const expensePaymentInput = document.getElementById('expensePaymentInput');
+    const expenseAmountInput = document.getElementById('expenseAmountInput');
+    const expenseHistoryFile = document.getElementById('expenseHistoryFile');
+    const expenseImportStatus = document.getElementById('expenseImportStatus');
+    const expenseLedgerBody = document.getElementById('expenseLedgerBody');
+    const exportExpensesButton = document.getElementById('exportExpensesButton');
+    const clearExpenseMonthButton = document.getElementById('clearExpenseMonthButton');
     const fundamentalsFile = document.getElementById('fundamentalsFile');
     const importFundamentalsButton = document.getElementById('importFundamentalsButton');
     const fundamentalsSymbol = document.getElementById('fundamentalsSymbol');
@@ -4731,6 +4834,8 @@
     let homeLoanTracker = null;
     let terminalCommandMatches = [];
     let terminalCommandActiveIndex = -1;
+    let expenseRows = [];
+    const expenseStorageKey = 'pg_terminal_expenses_v1';
     const displayMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     function currentTheme() {
@@ -4750,6 +4855,7 @@
       { label: 'Historical Regimes', detail: 'Market episodes and policy cycles', page: 'Historical Regimes', terms: 'history regimes bull bear correction recession rbi' },
       { label: 'Backtests', detail: 'Chronological validation evidence', page: 'Backtests', terms: 'test validation holdout strategy' },
       { label: 'Alpha Research', detail: 'Evidence gates and candidate research', page: 'Alpha Research', terms: 'alpha factors candidates ranking research' },
+      { label: 'Expense Tracker', detail: 'Private browser-local monthly expense ledger', page: 'Expense Tracker', terms: 'expenses spending budget monthly ledger personal' },
       { label: 'Run EOD update', detail: 'Refresh supported completed-session data', action: 'eod', terms: 'refresh update data sync' },
       { label: 'Kite connection', detail: 'Open broker connection controls', action: 'kite', terms: 'login connect zerodha broker' },
       { label: 'Portfolio ledger', detail: 'Open editable holdings table', action: 'ledger', terms: 'edit add remove rows holdings' },
@@ -4767,6 +4873,201 @@
     function terminalNavigate(page) {
       const button = document.querySelector(`.nav-button[data-page="${page}"]`);
       if (button) button.click();
+    }
+
+    function expenseToday() {
+      const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+      const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+      return `${value.year}-${value.month}-${value.day}`;
+    }
+
+    function loadExpenseRows() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(expenseStorageKey) || '[]');
+        expenseRows = Array.isArray(parsed) ? parsed.filter((row) => row && typeof row === 'object') : [];
+      } catch (_error) {
+        expenseRows = [];
+      }
+    }
+
+    function saveExpenseRows() {
+      try {
+        localStorage.setItem(expenseStorageKey, JSON.stringify(expenseRows));
+        return true;
+      } catch (_error) {
+        showNotice('Expense storage is unavailable in this browser.');
+        return false;
+      }
+    }
+
+    function formatExpenseCurrency(value) {
+      return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(Number(value) || 0);
+    }
+
+    function selectedExpenseRows() {
+      return expenseRows.filter((row) => String(row.date || '').slice(0, 7) === expenseMonthSelect.value);
+    }
+
+    function expenseCategoryOptions(selected) {
+      const values = Array.from(expenseCategoryInput.options).map((option) => option.value);
+      const imported = selected && !values.includes(selected) ? `<option selected>${escapeHtml(selected)}</option>` : '';
+      return imported + values.map((value) => `<option${value === selected ? ' selected' : ''}>${escapeHtml(value)}</option>`).join('');
+    }
+
+    function expensePaymentOptions(selected) {
+      const values = Array.from(expensePaymentInput.options).map((option) => option.value);
+      const imported = selected && !values.includes(selected) ? `<option selected>${escapeHtml(selected)}</option>` : '';
+      return imported + values.map((value) => `<option${value === selected ? ' selected' : ''}>${escapeHtml(value)}</option>`).join('');
+    }
+
+    function expenseIdentity(row) {
+      return [
+        String(row.date || ''), String(row.category || '').trim().toLowerCase(),
+        String(row.description || '').trim().toLowerCase(), String(row.payment || '').trim().toLowerCase(),
+        (Number(row.amount) || 0).toFixed(2),
+      ].join('|');
+    }
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('file_read_failed'));
+        reader.onload = () => {
+          try {
+            const bytes = new Uint8Array(reader.result);
+            let binary = '';
+            for (let offset = 0; offset < bytes.length; offset += 32768) {
+              binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+            }
+            resolve(btoa(binary));
+          } catch (error) {
+            reject(error);
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    async function importHistoricalExpenses() {
+      const file = expenseHistoryFile.files && expenseHistoryFile.files[0];
+      if (!file) return false;
+      if (file.size > 8 * 1024 * 1024) {
+        expenseImportStatus.textContent = 'File rejected · maximum size is 8 MB.';
+        showNotice('The historical expense file exceeds the 8 MB limit.');
+        return false;
+      }
+      expenseImportStatus.textContent = `Reading ${file.name}…`;
+      try {
+        const response = await fetch('/api/expenses/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_name: file.name, content_base64: await fileToBase64(file) }),
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          const reason = String(result.reason || 'invalid file').replaceAll('_', ' ');
+          expenseImportStatus.textContent = `Import rejected · ${reason}.`;
+          showNotice(`Expense import rejected: ${reason}.`);
+          return false;
+        }
+        const incoming = Array.isArray(result.rows) ? result.rows : [];
+        const known = new Set(expenseRows.map(expenseIdentity));
+        let duplicates = 0;
+        let inserted = 0;
+        incoming.forEach((row) => {
+          const identity = expenseIdentity(row);
+          if (known.has(identity)) {
+            duplicates += 1;
+            return;
+          }
+          known.add(identity);
+          expenseRows.push({
+            id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            date: String(row.date || ''),
+            category: String(row.category || 'Other'),
+            description: String(row.description || 'Imported expense'),
+            payment: String(row.payment || 'Other'),
+            amount: Number(row.amount) || 0,
+          });
+          inserted += 1;
+        });
+        if (incoming.length) expenseMonthSelect.value = String(incoming[incoming.length - 1].date || '').slice(0, 7);
+        saveExpenseRows();
+        renderExpenseTracker();
+        const rejected = Number(result.rejected_count || 0);
+        const layouts = Array.isArray(result.detected_layouts) ? result.detected_layouts : [];
+        const layoutNote = layouts.includes('annual_category_matrix') ? ' · annual category totals detected' : '';
+        expenseImportStatus.textContent = `${file.name} · ${inserted} added · ${duplicates} duplicates skipped · ${rejected} invalid rows skipped${layoutNote}.`;
+        showNotice(`Historical expenses imported: ${inserted} added across ${new Set(incoming.map((row) => String(row.date).slice(0, 7))).size} month(s).`);
+        return true;
+      } catch (_error) {
+        expenseImportStatus.textContent = 'The local expense file parser is unavailable.';
+        showNotice('Historical expense import could not be completed.');
+        return false;
+      } finally {
+        expenseHistoryFile.value = '';
+      }
+    }
+
+    function renderExpenseTracker() {
+      const rows = selectedExpenseRows().sort((left, right) => String(right.date || '').localeCompare(String(left.date || '')));
+      const total = rows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+      const categoryTotals = rows.reduce((totals, row) => {
+        const category = String(row.category || 'Other');
+        totals[category] = (totals[category] || 0) + (Number(row.amount) || 0);
+        return totals;
+      }, {});
+      const categories = Object.entries(categoryTotals).sort((left, right) => right[1] - left[1]);
+      document.getElementById('expenseTotalValue').textContent = formatExpenseCurrency(total);
+      document.getElementById('expenseEntryCount').textContent = rows.length.toLocaleString('en-IN');
+      document.getElementById('expenseTopCategory').textContent = categories.length ? categories[0][0] : '—';
+      document.getElementById('expenseAverageValue').textContent = formatExpenseCurrency(rows.length ? total / rows.length : 0);
+      document.getElementById('expenseLedgerTitle').textContent = expenseMonthSelect.value
+        ? `Expenses · ${new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${expenseMonthSelect.value}-01T00:00:00Z`))}`
+        : 'Expenses';
+      expenseLedgerBody.innerHTML = rows.length
+        ? rows.map((row) => `<tr data-expense-id="${escapeHtml(String(row.id))}">
+            <td><input data-expense-field="date" type="date" value="${escapeHtml(String(row.date || ''))}"></td>
+            <td><select data-expense-field="category">${expenseCategoryOptions(String(row.category || 'Other'))}</select></td>
+            <td><input class="expense-description-input" data-expense-field="description" type="text" maxlength="120" value="${escapeHtml(String(row.description || ''))}"></td>
+            <td><select data-expense-field="payment">${expensePaymentOptions(String(row.payment || 'Other'))}</select></td>
+            <td><input class="expense-amount-input" data-expense-field="amount" type="number" min="0.01" step="0.01" value="${Number(row.amount || 0).toFixed(2)}"></td>
+            <td><button class="expense-remove-button" data-remove-expense="${escapeHtml(String(row.id))}" type="button">Remove</button></td>
+          </tr>`).join('')
+        : '<tr><td colspan="6">No expenses recorded for this month.</td></tr>';
+      document.getElementById('expenseCategoryStatus').textContent = rows.length ? `${categories.length} categories · ${formatExpenseCurrency(total)}` : 'No entries';
+      document.getElementById('expenseCategoryGrid').innerHTML = categories.length
+        ? categories.map(([category, amount]) => {
+            const share = total ? amount / total * 100 : 0;
+            return `<article class="expense-category-card"><header><span>${escapeHtml(category)}</span><strong>${formatExpenseCurrency(amount)}</strong></header><div class="expense-category-bar"><i style="width:${Math.min(100, share).toFixed(2)}%"></i></div><small>${share.toFixed(1)}% of the selected month</small></article>`;
+          }).join('')
+        : '<div class="expense-empty">Add an expense to build the category view.</div>';
+      exportExpensesButton.disabled = !rows.length;
+      clearExpenseMonthButton.disabled = !rows.length;
+    }
+
+    function initializeExpenseTracker() {
+      loadExpenseRows();
+      const today = expenseToday();
+      expenseMonthSelect.value = today.slice(0, 7);
+      expenseDateInput.value = today;
+      renderExpenseTracker();
+    }
+
+    function exportExpenseMonth() {
+      const rows = selectedExpenseRows();
+      if (!rows.length) return;
+      const quote = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
+      const csv = [
+        ['Date', 'Category', 'Description', 'Payment', 'Amount'].join(','),
+        ...rows.map((row) => [row.date, row.category, row.description, row.payment, Number(row.amount || 0).toFixed(2)].map(quote).join(',')),
+      ].join('\n');
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `expenses-${expenseMonthSelect.value}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
     }
 
     function renderTerminalCommandResults() {
@@ -9800,7 +10101,7 @@
       const publicationGates = Number(result.research_cards && result.research_cards.summary && result.research_cards.summary.publication_gates || 0);
       const publicationGatesReady = Number(result.research_cards && result.research_cards.summary && result.research_cards.summary.gates_ready || 0);
       const pipelineBadge = document.getElementById('alphaPipelineBadge');
-      pipelineBadge.textContent = publishedCards ? `${publishedCards} card${publishedCards === 1 ? '' : 's'} published` : 'Publication blocked';
+      pipelineBadge.textContent = publishedCards ? `${publishedCards} card${publishedCards === 1 ? '' : 's'} published` : '0 cards · evidence blocked';
       pipelineBadge.className = `alpha-pipeline-badge ${publishedCards ? 'ready' : 'blocked'}`;
       document.getElementById('alphaPipelineNote').textContent = firstBlocked
         ? `The chain first stops at ${firstBlocked.title}: ${firstBlocked.summary} Downstream ranks and cards remain withheld.`
@@ -9820,6 +10121,15 @@
       document.getElementById('alphaPipelineDeveloping').textContent = developingLayers.toLocaleString('en-IN');
       document.getElementById('alphaPipelineBlocked').textContent = blockedLayers.toLocaleString('en-IN');
       document.getElementById('alphaPipelineCards').textContent = publishedCards.toLocaleString('en-IN');
+      const catalystWorkflow = result.catalyst_workflow || {};
+      const catalystCurrent = catalystWorkflow.current || {};
+      const catalystRequirements = catalystWorkflow.requirements || {};
+      document.getElementById('alphaBlockerEarnings').textContent = `${Number(catalystCurrent.release_known_earnings || 0).toLocaleString('en-IN')} / ${Number(catalystRequirements.minimum_earnings_events || 20).toLocaleString('en-IN')}`;
+      document.getElementById('alphaBlockerNews').textContent = Number(catalystCurrent.reviewed_announcements || 0).toLocaleString('en-IN');
+      document.getElementById('alphaBlockerCopy').textContent = catalystWorkflow.explanation
+        || 'Publication is withheld because the catalyst audit has no reviewed earnings or announcement history. Ranked cards are downstream and cannot open independently.';
+      document.getElementById('alphaBlockerNote').textContent = catalystWorkflow.next_step
+        || 'Use files downloaded manually from official sources. Missing evidence stays unavailable; it is never filled with a neutral score.';
       document.getElementById('alphaAuditSummaryMeta').textContent =
         `${Number(summary.layers || 0)} layers · ${Number(summary.ready || 0)} operational · ${Number(summary.partial_or_foundation || 0)} developing · ${Number(summary.blocked || 0)} blocked · ${publicationGatesReady}/${publicationGates} publication gates ready. Open for the full audit trail.`;
       document.getElementById('alphaArchitectureGrid').innerHTML = layers.length
@@ -10167,12 +10477,55 @@
       document.getElementById('catalystEvidenceEarnings').textContent = Number(summary.release_known_events || 0).toLocaleString('en-IN');
       document.getElementById('catalystEvidenceNews').textContent = Number(summary.reviewed_news_records || 0).toLocaleString('en-IN');
       document.getElementById('catalystEvidenceDrift').textContent = Number(summary.drift_ready_events || 0).toLocaleString('en-IN');
+      document.getElementById('alphaBlockerEarnings').textContent = `${Number(summary.release_known_events || 0).toLocaleString('en-IN')} / ${Number(methodology.minimum_earnings_events || 20).toLocaleString('en-IN')}`;
+      document.getElementById('alphaBlockerNews').textContent = Number(summary.reviewed_news_records || 0).toLocaleString('en-IN');
+      document.getElementById('alphaBlockerGates').textContent = `${Number(summary.gates_ready || 0)} / ${Number(summary.gates || 0)}`;
+      document.getElementById('alphaBlockerGateNote').textContent = result.status === 'completed_research_only'
+        ? 'catalyst evidence complete; downstream gates remain'
+        : 'expectations, guidance and drift included';
       document.getElementById('catalystEvidenceGateGrid').innerHTML = gates.length
         ? gates.map((gate, index) => `<article class="historical-fingerprint-card ${gate.state === 'ready' ? 'ready' : 'unavailable'}"><div class="historical-step">${String(index + 1).padStart(2, '0')} · ${escapeHtml(String(gate.state || 'blocked').toUpperCase())}</div><h3>${escapeHtml(gate.title || 'Catalyst gate')}</h3><p>${escapeHtml(gate.detail || '')}</p></article>`).join('')
         : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">NO GATES</div><h3>Catalyst audit unavailable</h3><p>No event inference is produced.</p></article>';
       const windows = Array.isArray(methodology.drift_windows_sessions) ? methodology.drift_windows_sessions.join('/') : '1/5/20';
       document.getElementById('catalystEvidenceNote').textContent =
         `${result.contract_version || 'catalyst-evidence'} · minimum ${Number(methodology.minimum_earnings_events || 0)} timestamped earnings events · ${Number(methodology.minimum_field_coverage_pct || 0).toFixed(0)}% field coverage · ${windows}-session benchmark-adjusted drift · ${limitations.join(' ')}`;
+    }
+
+    async function importAlphaNewsCsv() {
+      const file = alphaNewsCsvInput.files && alphaNewsCsvInput.files[0];
+      if (!file) {
+        showNotice('Choose a manually downloaded NSE announcements CSV before importing.');
+        return false;
+      }
+      if (file.size > 4 * 1024 * 1024) {
+        showNotice('The announcements CSV exceeds the 4 MB import limit.');
+        return false;
+      }
+      importAlphaNewsButton.disabled = true;
+      importAlphaNewsButton.textContent = 'Validating…';
+      try {
+        const response = await fetch('/api/news-events/nse-manual-import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_name: file.name, csv_text: await file.text() }),
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          showNotice(`Announcement import rejected: ${String(result.reason || 'invalid file').replaceAll('_', ' ')}.`);
+          return false;
+        }
+        alphaNewsCsvInput.value = '';
+        const write = result.write_result || {};
+        await Promise.all([loadAlphaResearch(false), loadFundamentalsFoundation(false)]);
+        showNotice(`Reviewed announcements imported: ${Number(write.inserted || 0)} added, ${Number(write.duplicates || 0)} duplicates ignored.`);
+        return true;
+      } catch (_error) {
+        showNotice('The local reviewed-announcement import service is unavailable.');
+        return false;
+      } finally {
+        importAlphaNewsButton.disabled = false;
+        importAlphaNewsButton.textContent = 'Import reviewed announcements';
+      }
     }
 
     function renderPortfolioImpact(result) {
@@ -10914,6 +11267,77 @@
       await Promise.all([loadAlphaResearch(false), loadFactorResearch(false), loadFundamentalsFoundation(false)]);
       showNotice('Architecture and factor-input readiness refreshed.');
     });
+    openAlphaEarningsButton.addEventListener('click', () => {
+      terminalNavigate('Earnings Analysis');
+      window.requestAnimationFrame(() => earningsCsvInput.focus());
+    });
+    openAlphaAuditButton.addEventListener('click', () => {
+      const audit = document.getElementById('alphaTechnicalAudit');
+      audit.open = true;
+      document.getElementById('catalystEvidenceStatus').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    alphaNewsCsvInput.addEventListener('change', () => {
+      const file = alphaNewsCsvInput.files && alphaNewsCsvInput.files[0];
+      document.querySelector('label[for="alphaNewsCsvInput"]').textContent = file ? file.name : 'Choose NSE announcements CSV';
+    });
+    importAlphaNewsButton.addEventListener('click', importAlphaNewsCsv);
+    expenseMonthSelect.addEventListener('change', () => {
+      if (!expenseDateInput.value.startsWith(expenseMonthSelect.value)) expenseDateInput.value = `${expenseMonthSelect.value}-01`;
+      renderExpenseTracker();
+    });
+    expenseHistoryFile.addEventListener('change', importHistoricalExpenses);
+    expenseEntryForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const amount = Number(expenseAmountInput.value);
+      if (!expenseDateInput.value || !expenseDescriptionInput.value.trim() || !Number.isFinite(amount) || amount <= 0) {
+        showNotice('Enter a valid date, description and positive amount.');
+        return;
+      }
+      expenseRows.push({
+        id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        date: expenseDateInput.value,
+        category: expenseCategoryInput.value,
+        description: expenseDescriptionInput.value.trim(),
+        payment: expensePaymentInput.value,
+        amount: Math.round(amount * 100) / 100,
+      });
+      expenseMonthSelect.value = expenseDateInput.value.slice(0, 7);
+      if (saveExpenseRows()) {
+        expenseDescriptionInput.value = '';
+        expenseAmountInput.value = '';
+        renderExpenseTracker();
+        expenseDescriptionInput.focus();
+        showNotice('Expense saved locally.');
+      }
+    });
+    expenseLedgerBody.addEventListener('change', (event) => {
+      const rowNode = event.target.closest('[data-expense-id]');
+      const field = event.target.dataset.expenseField;
+      if (!rowNode || !field) return;
+      const row = expenseRows.find((item) => String(item.id) === rowNode.dataset.expenseId);
+      if (!row) return;
+      const value = field === 'amount' ? Math.max(0.01, Number(event.target.value) || 0.01) : event.target.value;
+      row[field] = value;
+      saveExpenseRows();
+      renderExpenseTracker();
+    });
+    expenseLedgerBody.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-remove-expense]');
+      if (!button) return;
+      expenseRows = expenseRows.filter((row) => String(row.id) !== button.dataset.removeExpense);
+      saveExpenseRows();
+      renderExpenseTracker();
+      showNotice('Expense removed from this browser.');
+    });
+    exportExpensesButton.addEventListener('click', exportExpenseMonth);
+    clearExpenseMonthButton.addEventListener('click', () => {
+      const rows = selectedExpenseRows();
+      if (!rows.length || !window.confirm(`Remove all ${rows.length} expenses for ${expenseMonthSelect.value}? This cannot be undone.`)) return;
+      expenseRows = expenseRows.filter((row) => String(row.date || '').slice(0, 7) !== expenseMonthSelect.value);
+      saveExpenseRows();
+      renderExpenseTracker();
+      showNotice('Selected expense month cleared.');
+    });
     importFundamentalsButton.addEventListener('click', importFundamentals);
     regimeValidationIndexSelect.addEventListener('change', () => updateRegimeValidationSelection(true));
     regimeValidationBenchmarkSelect.addEventListener('change', () => {
@@ -11191,6 +11615,7 @@
         const isAlphaResearch = button.dataset.page === 'Alpha Research';
         const isEarnings = button.dataset.page === 'Earnings Analysis';
         const isPortfolio = button.dataset.page === 'Portfolio Analysis';
+        const isExpenseTracker = button.dataset.page === 'Expense Tracker';
         document.body.dataset.activePage = button.dataset.page.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
         dashboardView.hidden = !isDashboard;
         marketSentimentView.hidden = !isMarketSentiment;
@@ -11204,8 +11629,9 @@
         alphaResearchView.hidden = !isAlphaResearch;
         earningsView.hidden = !isEarnings;
         portfolioView.hidden = !isPortfolio;
-        emptyView.hidden = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isAlphaResearch || isEarnings || isPortfolio;
-        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isAlphaResearch || isEarnings || isPortfolio ? '' : button.dataset.page;
+        expenseTrackerView.hidden = !isExpenseTracker;
+        emptyView.hidden = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isAlphaResearch || isEarnings || isPortfolio || isExpenseTracker;
+        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isAlphaResearch || isEarnings || isPortfolio || isExpenseTracker ? '' : button.dataset.page;
         if (isDashboard) {
           renderDashboardPortfolioSummary(portfolioAnalysis);
           renderDashboardStoryPortfolio(portfolioAnalysis, dashboardMarketStory);
@@ -11239,6 +11665,8 @@
           loadFundamentalsFoundation(false);
         } else if (isEarnings && !earningsPayload) {
           loadEarnings(false);
+        } else if (isExpenseTracker) {
+          renderExpenseTracker();
         }
         if (window.innerWidth <= 700) setNavigation(false);
       });
@@ -11291,6 +11719,7 @@
     });
 
     updateThemeControl();
+    initializeExpenseTracker();
     restoreKiteStatus();
     renderDashboardPortfolioSummary(null);
     renderDashboardStoryPortfolio(null, null);

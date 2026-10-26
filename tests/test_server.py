@@ -113,6 +113,8 @@ from server import (
     parse_near_month_stock_futures,
     parse_nse_announcement_csv,
     parse_earnings_csv,
+    parse_expense_file,
+    is_supported_expense_import_file_name,
     parse_portfolio_file,
     parse_universal_portfolio_file,
     parse_mutual_fund_file,
@@ -3396,6 +3398,152 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
                 + "ABC,ABC Limited,Industrials,Consolidated,2027-28,Q1,2027-06-30,"
                 "2027-07-20,INR,crore,120,10,2,https://example.test/a.pdf\n"
             )
+
+    def test_earnings_csv_preserves_release_known_catalyst_fields(self):
+        payload = (
+            "Symbol,Company Name,Sector,Basis,Fiscal Year,Quarter,Period End,"
+            "Reported At,Currency,Unit,Revenue,Net Profit,EPS,Source URL,"
+            "Consensus EPS,Consensus Captured At,Guidance State,Guidance Source URL\n"
+            "ABC,ABC Limited,Industrials,Consolidated,2026-27,Q1,2026-06-30,"
+            "2026-07-20,INR,crore,120,10,2,https://example.test/result.pdf,"
+            "1.8,2026-07-19T12:00:00+05:30,maintained,https://example.test/guidance.pdf\n"
+        )
+        row = parse_earnings_csv(payload)[0]
+
+        self.assertEqual(row["actual_eps"], 2.0)
+        self.assertEqual(row["consensus_eps"], 1.8)
+        self.assertEqual(row["guidance_state"], "maintained")
+        self.assertIn("__catalyst__", row["raw"])
+
+    def test_expense_csv_normalizes_historical_months_and_skips_invalid_rows(self):
+        result = parse_expense_file(
+            "expenses.csv",
+            (
+                "Date,Category,Description,Payment,Amount\n"
+                "05/01/2026,Housing,Monthly rent,Bank transfer,25000\n"
+                "2026-02-08,Food,Groceries,UPI,3250.50\n"
+                "not-a-date,Other,Ignored,Cash,10\n"
+            ).encode("utf-8"),
+        )
+
+        self.assertEqual(result["row_count"], 2)
+        self.assertEqual(result["rejected_count"], 1)
+        self.assertEqual(result["rows"][0]["date"], "2026-01-05")
+        self.assertEqual(result["rows"][1]["amount"], 3250.5)
+
+    def test_expense_ods_normalizes_historical_rows(self):
+        content = b"""<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+ xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+ xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+ xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+ <office:body><office:spreadsheet><table:table table:name="Expenses">
+  <table:table-row>
+   <table:table-cell office:value-type="string"><text:p>Date</text:p></table:table-cell>
+   <table:table-cell office:value-type="string"><text:p>Category</text:p></table:table-cell>
+   <table:table-cell office:value-type="string"><text:p>Description</text:p></table:table-cell>
+   <table:table-cell office:value-type="string"><text:p>Payment</text:p></table:table-cell>
+   <table:table-cell office:value-type="string"><text:p>Amount</text:p></table:table-cell>
+  </table:table-row>
+  <table:table-row>
+   <table:table-cell office:value-type="date" office:date-value="2026-03-14"><text:p>14/03/2026</text:p></table:table-cell>
+   <table:table-cell office:value-type="string"><text:p>Travel</text:p></table:table-cell>
+   <table:table-cell office:value-type="string"><text:p>Train ticket</text:p></table:table-cell>
+   <table:table-cell office:value-type="string"><text:p>UPI</text:p></table:table-cell>
+   <table:table-cell office:value-type="currency" office:value="1450.75"><text:p>1,450.75</text:p></table:table-cell>
+  </table:table-row>
+ </table:table></office:spreadsheet></office:body>
+</office:document-content>"""
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr("mimetype", "application/vnd.oasis.opendocument.spreadsheet")
+            archive.writestr("content.xml", content)
+
+        result = parse_expense_file("history.ods", payload.getvalue())
+
+        self.assertEqual(result["row_count"], 1)
+        self.assertEqual(result["sheets_read"], ["Expenses"])
+        self.assertEqual(result["rows"][0]["date"], "2026-03-14")
+        self.assertEqual(result["rows"][0]["amount"], 1450.75)
+
+    def test_expense_ods_ignores_libreoffice_empty_padding(self):
+        content = b"""<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+ xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+ xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+ xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+ <office:body><office:spreadsheet><table:table table:name="Monthly ledger">
+  <table:table-header-rows><table:table-row>
+   <table:table-cell office:value-type="string"><text:p>Date</text:p></table:table-cell>
+   <table:table-cell office:value-type="string"><text:p>Amount</text:p></table:table-cell>
+   <table:table-cell table:number-columns-repeated="1022"/>
+  </table:table-row></table:table-header-rows>
+  <table:table-row>
+   <table:table-cell office:value-type="date" office:date-value="2026-04-02"><text:p>02/04/2026</text:p></table:table-cell>
+   <table:table-cell office:value-type="float" office:value="799"><text:p>799</text:p></table:table-cell>
+   <table:table-cell table:number-columns-repeated="1022"/>
+  </table:table-row>
+  <table:table-row table:number-rows-repeated="1048574"><table:table-cell table:number-columns-repeated="1024"/></table:table-row>
+ </table:table></office:spreadsheet></office:body>
+</office:document-content>"""
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr("mimetype", "application/vnd.oasis.opendocument.spreadsheet")
+            archive.writestr("content.xml", content)
+
+        result = parse_expense_file("libreoffice-history.ods", payload.getvalue())
+
+        self.assertEqual(result["row_count"], 1)
+        self.assertEqual(result["rows"][0]["date"], "2026-04-02")
+        self.assertEqual(result["rows"][0]["amount"], 799.0)
+
+    def test_expense_upload_boundary_accepts_all_supported_formats(self):
+        self.assertTrue(is_supported_expense_import_file_name("history.csv"))
+        self.assertTrue(is_supported_expense_import_file_name("history.xlsx"))
+        self.assertTrue(is_supported_expense_import_file_name("history.ods"))
+        self.assertTrue(is_supported_expense_import_file_name("HISTORY.ODS"))
+        self.assertFalse(is_supported_expense_import_file_name("history.pdf"))
+
+    def test_expense_ods_imports_annual_category_matrix_and_split_month_columns(self):
+        content = b"""<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+ xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+ xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+ xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+ <office:body><office:spreadsheet><table:table table:name="2024">
+  <table:table-row>
+   <table:table-cell/><table:table-cell><text:p>January</text:p></table:table-cell>
+   <table:table-cell><text:p>February</text:p></table:table-cell><table:table-cell><text:p>March</text:p></table:table-cell>
+   <table:table-cell><text:p>April</text:p></table:table-cell><table:table-cell><text:p>May</text:p></table:table-cell>
+   <table:table-cell/><table:table-cell><text:p>June</text:p></table:table-cell>
+  </table:table-row>
+  <table:table-row><table:table-cell><text:p>Income</text:p></table:table-cell></table:table-row>
+  <table:table-row><table:table-cell><text:p>Expenses</text:p></table:table-cell></table:table-row>
+  <table:table-row><table:table-cell><text:p>Food</text:p></table:table-cell>
+   <table:table-cell office:value-type="float" office:value="10"/><table:table-cell office:value-type="float" office:value="20"/>
+   <table:table-cell office:value-type="float" office:value="30"/><table:table-cell office:value-type="float" office:value="40"/>
+   <table:table-cell office:value-type="float" office:value="0"/><table:table-cell office:value-type="float" office:value="50"/>
+   <table:table-cell office:value-type="float" office:value="60"/>
+  </table:table-row>
+  <table:table-row><table:table-cell><text:p>Total Exp</text:p></table:table-cell>
+   <table:table-cell office:value-type="float" office:value="10"/><table:table-cell office:value-type="float" office:value="20"/>
+   <table:table-cell office:value-type="float" office:value="30"/><table:table-cell office:value-type="float" office:value="40"/>
+   <table:table-cell office:value-type="float" office:value="0"/><table:table-cell office:value-type="float" office:value="50"/>
+   <table:table-cell office:value-type="float" office:value="60"/>
+  </table:table-row>
+ </table:table></office:spreadsheet></office:body>
+</office:document-content>"""
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr("mimetype", "application/vnd.oasis.opendocument.spreadsheet")
+            archive.writestr("content.xml", content)
+
+        result = parse_expense_file("annual-expenses.ods", payload.getvalue())
+
+        self.assertEqual(result["row_count"], 6)
+        self.assertEqual(result["detected_layouts"], ["annual_category_matrix"])
+        self.assertEqual([row["amount"] for row in result["rows"]], [10, 20, 30, 40, 50, 60])
+        self.assertEqual(result["rejected_count"], 0)
 
     def test_macro_event_calendar_keeps_verified_events_and_pending_rbi_separate(self):
         result = build_macro_events_calendar(

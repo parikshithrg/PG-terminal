@@ -754,6 +754,25 @@ class EODStoreTest(unittest.TestCase):
         self.assertEqual(len(loaded), 2)
         self.assertNotEqual(loaded[0]["record_hash"], loaded[1]["record_hash"])
 
+    def test_earnings_import_restores_optional_catalyst_evidence(self):
+        row = {
+            "symbol": "ABC", "company_name": "ABC Limited", "sector": "Industrials",
+            "basis": "consolidated", "fiscal_year": "2026-27", "quarter": "Q1",
+            "period_end": "2026-06-30", "reported_at": "2026-07-20", "currency": "INR",
+            "unit": "crore", "revenue": 120.0, "net_profit": 10.0, "eps": 2.0,
+            "source_url": "https://example.test/abc.pdf", "actual_eps": 2.0,
+            "consensus_eps": 1.8, "consensus_captured_at": "2026-07-19T12:00:00+05:30",
+            "guidance_state": "maintained", "guidance_source_url": "https://example.test/guidance.pdf",
+        }
+        row["raw"] = {"__catalyst__": {key: row[key] for key in (
+            "actual_eps", "consensus_eps", "consensus_captured_at", "guidance_state", "guidance_source_url"
+        )}}
+        self.store.append_earnings_records([row], source_file_name="earnings-catalyst.csv")
+
+        loaded = self.store.load_earnings_records()[0]
+        self.assertEqual(loaded["consensus_eps"], 1.8)
+        self.assertEqual(loaded["guidance_state"], "maintained")
+
     def test_workspace_snapshot_persists_latest_market_context(self):
         first = {
             "ok": True,

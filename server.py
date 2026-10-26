@@ -13106,6 +13106,35 @@ def build_alpha_research_foundation(
     )
     research_cards = build_research_card_contract(candidate_overlays)
     research_story = build_alpha_research_story(layers, research_cards)
+    catalyst_workflow = {
+        "status": (
+            "minimum_history_present"
+            if earnings_record_count >= 20 and reviewed_news_count > 0
+            else "evidence_collection_required"
+        ),
+        "current": {
+            "release_known_earnings": earnings_record_count,
+            "reviewed_announcements": reviewed_news_count,
+            "scheduled_macro_events": macro_event_count,
+        },
+        "requirements": {
+            "minimum_earnings_events": 20,
+            "minimum_field_coverage_pct": 80,
+            "drift_windows_sessions": [1, 5, 20],
+        },
+        "explanation": (
+            f"{earnings_record_count} release-known earnings events and "
+            f"{reviewed_news_count} reviewed announcements are stored. "
+            "Ranked research cards are downstream: they remain withheld until "
+            "expectations, guidance, post-event drift and every earlier research gate pass."
+        ),
+        "next_step": (
+            "Import source-linked quarterly results with pre-release consensus and "
+            "explicit guidance review, then import a manually downloaded official NSE "
+            "announcements CSV. The audit will refresh without assigning neutral values "
+            "to missing evidence."
+        ),
+    }
     return {
         "ok": True,
         "contract_version": ALPHA_RESEARCH_CONTRACT_VERSION,
@@ -13142,6 +13171,7 @@ def build_alpha_research_foundation(
         "candidate_overlays": candidate_overlays,
         "research_cards": research_cards,
         "research_story": research_story,
+        "catalyst_workflow": catalyst_workflow,
         "point_in_time_universe": point_in_time_universe,
         "limitations": [
             "The page reports build readiness, not investment opportunities.",
@@ -13832,6 +13862,18 @@ def parse_earnings_csv(csv_payload: str) -> list[dict[str, object]]:
     if not required.issubset(aliases):
         raise ValueError("unsupported_earnings_csv_columns")
 
+    optional_aliases = {
+        "actual_eps": ("actualeps",),
+        "consensus_eps": ("consensuseps", "expectedseps", "estimateeps"),
+        "consensus_captured_at": ("consensuscapturedat", "estimatecapturedat"),
+        "guidance_state": ("guidancestate",),
+        "guidance_source_url": ("guidancesourceurl",),
+    }
+    optional_headers = {
+        key: next((aliases[name] for name in names if name in aliases), None)
+        for key, names in optional_aliases.items()
+    }
+
     def field(row: dict[str, str], key: str) -> str:
         return str(row.get(aliases[key]) or "").strip()
 
@@ -13888,6 +13930,38 @@ def parse_earnings_csv(csv_payload: str) -> list[dict[str, object]]:
         eps = number(field(raw, "eps"))
         if revenue < 0:
             raise ValueError("invalid_earnings_value")
+        catalyst_fields: dict[str, object] = {"actual_eps": eps}
+        consensus_header = optional_headers["consensus_eps"]
+        captured_header = optional_headers["consensus_captured_at"]
+        consensus_text = str(raw.get(consensus_header) or "").strip() if consensus_header else ""
+        captured_text = str(raw.get(captured_header) or "").strip() if captured_header else ""
+        if bool(consensus_text) != bool(captured_text):
+            raise ValueError("incomplete_earnings_consensus")
+        if consensus_text:
+            consensus_eps = number(consensus_text)
+            try:
+                captured_at = datetime.fromisoformat(captured_text.replace("Z", "+00:00"))
+            except ValueError as error:
+                raise ValueError("invalid_earnings_consensus_timestamp") from error
+            reported_boundary = datetime.combine(reported_at, datetime_time.min)
+            if captured_at.tzinfo is not None:
+                reported_boundary = reported_boundary.replace(tzinfo=captured_at.tzinfo)
+            if captured_at >= reported_boundary:
+                raise ValueError("earnings_consensus_not_pre_release")
+            catalyst_fields["consensus_eps"] = consensus_eps
+            catalyst_fields["consensus_captured_at"] = captured_at.isoformat()
+        guidance_header = optional_headers["guidance_state"]
+        guidance_source_header = optional_headers["guidance_source_url"]
+        guidance_state = str(raw.get(guidance_header) or "").strip().lower() if guidance_header else ""
+        guidance_source_url = str(raw.get(guidance_source_header) or "").strip() if guidance_source_header else ""
+        if guidance_state:
+            if guidance_state not in {"raised", "maintained", "lowered", "withdrawn", "not_provided"}:
+                raise ValueError("invalid_earnings_guidance_state")
+            parsed_guidance_url = urllib.parse.urlsplit(guidance_source_url)
+            if parsed_guidance_url.scheme != "https" or not parsed_guidance_url.netloc:
+                raise ValueError("invalid_earnings_guidance_source")
+            catalyst_fields["guidance_state"] = guidance_state
+            catalyst_fields["guidance_source_url"] = guidance_source_url
         rows.append(
             {
                 "symbol": symbol,
@@ -13904,7 +13978,8 @@ def parse_earnings_csv(csv_payload: str) -> list[dict[str, object]]:
                 "net_profit": net_profit,
                 "eps": eps,
                 "source_url": source_url,
-                "raw": dict(raw),
+                "raw": {**dict(raw), "__catalyst__": catalyst_fields},
+                **catalyst_fields,
             }
         )
         if len(rows) > 5000:
@@ -17126,6 +17201,385 @@ def _looks_like_mutual_fund_row(
     )
     padded = f" {normalized} "
     return symbol == "MF" or any(term in padded for term in fund_terms)
+
+
+def _ods_sheet_matrices(
+    payload: bytes,
+    *,
+    maximum_rows: int = MAX_PORTFOLIO_ROWS + 25,
+    maximum_columns: int = MAX_PORTFOLIO_COLUMNS,
+) -> list[tuple[str, list[list[object]]]]:
+    """Return bounded ODS worksheet matrices without evaluating formulas or macros."""
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(payload))
+    except (zipfile.BadZipFile, OSError) as error:
+        raise ValueError("invalid_expense_ods") from error
+    with archive:
+        members = archive.infolist()
+        if len(members) > 750 or sum(item.file_size for item in members) > 50 * 1024 * 1024:
+            raise ValueError("expense_ods_too_large")
+        try:
+            root = ET.fromstring(archive.read("content.xml"))
+        except (ET.ParseError, KeyError) as error:
+            raise ValueError("invalid_expense_ods") from error
+
+    table_namespace = "urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+    office_namespace = "urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+    tables = root.findall(".//{%s}table" % table_namespace)
+    result: list[tuple[str, list[list[object]]]] = []
+    for table_index, table in enumerate(tables, start=1):
+        matrix: list[list[object]] = []
+        for row_node in table.iter("{%s}table-row" % table_namespace):
+            try:
+                row_repeat = int(row_node.attrib.get("{%s}number-rows-repeated" % table_namespace, "1"))
+            except ValueError as error:
+                raise ValueError("invalid_expense_ods") from error
+            if row_repeat < 1:
+                raise ValueError("invalid_expense_ods")
+            row: list[object] = []
+            for cell in list(row_node):
+                if cell.tag not in {
+                    "{%s}table-cell" % table_namespace,
+                    "{%s}covered-table-cell" % table_namespace,
+                }:
+                    continue
+                try:
+                    column_repeat = int(cell.attrib.get("{%s}number-columns-repeated" % table_namespace, "1"))
+                except ValueError as error:
+                    raise ValueError("invalid_expense_ods") from error
+                if column_repeat < 1:
+                    raise ValueError("invalid_expense_ods")
+                value_type = cell.attrib.get("{%s}value-type" % office_namespace, "")
+                if value_type == "date":
+                    value: object = cell.attrib.get("{%s}date-value" % office_namespace, "")
+                elif value_type in {"float", "currency", "percentage"}:
+                    raw_value = cell.attrib.get("{%s}value" % office_namespace, "")
+                    try:
+                        number = float(raw_value)
+                        value = int(number) if number.is_integer() else number
+                    except ValueError:
+                        value = raw_value
+                elif value_type == "boolean":
+                    value = cell.attrib.get("{%s}boolean-value" % office_namespace, "")
+                else:
+                    paragraphs = cell.findall(".//{*}p")
+                    value = "\n".join("".join(node.itertext()) for node in paragraphs).strip()
+                # LibreOffice and other spreadsheet tools commonly serialize the
+                # unused tail of a sheet as thousands of repeated empty cells.
+                # Ignore that structural padding, while retaining hard bounds for
+                # repetitions containing actual user data.
+                if value == "":
+                    remaining = max(0, maximum_columns - len(row))
+                    row.extend([""] * min(column_repeat, remaining))
+                else:
+                    if column_repeat > maximum_columns or len(row) + column_repeat > maximum_columns:
+                        raise ValueError("expense_file_too_many_columns")
+                    row.extend([value] * column_repeat)
+            while row and row[-1] == "":
+                row.pop()
+            if not row:
+                # Large repeated blank-row ranges are normal ODS used-range
+                # padding and do not represent imported records.
+                continue
+            if row_repeat > maximum_rows or len(matrix) + row_repeat > maximum_rows:
+                raise ValueError("expense_file_too_many_rows")
+            for _ in range(row_repeat):
+                matrix.append(list(row))
+        name = table.attrib.get("{%s}name" % table_namespace) or f"Sheet {table_index}"
+        result.append((name, matrix))
+    if not result:
+        raise ValueError("invalid_expense_ods")
+    return result
+
+
+def parse_expense_file(file_name: str, payload: bytes) -> dict[str, object]:
+    """Normalize a browser-local expense import from CSV, XLSX or ODS without persisting it."""
+    if not payload or len(payload) > MAX_PORTFOLIO_FILE_BYTES:
+        raise ValueError("invalid_expense_file_size")
+    suffix = Path(file_name).suffix.lower()
+    if suffix == ".csv":
+        try:
+            text = payload.decode("utf-8-sig")
+        except UnicodeDecodeError as error:
+            raise ValueError("expense_csv_not_utf8") from error
+        try:
+            dialect = csv.Sniffer().sniff(text[:4096], delimiters=",\t;")
+        except csv.Error:
+            dialect = csv.excel
+        matrices = [("CSV", [list(row) for row in csv.reader(io.StringIO(text), dialect)])]
+    elif suffix == ".xlsx":
+        matrices = _xlsx_sheet_matrices(payload)
+    elif suffix == ".ods":
+        matrices = _ods_sheet_matrices(payload)
+    else:
+        raise ValueError("unsupported_expense_file")
+
+    aliases = {
+        "date": {"date", "transactiondate", "expensedate", "paidon", "paymentdate"},
+        "amount": {"amount", "expenseamount", "spent", "debit", "withdrawal", "value"},
+        "category": {"category", "expensecategory", "type", "group", "head"},
+        "description": {"description", "merchant", "particulars", "narration", "details", "note", "expense"},
+        "payment": {"payment", "paymentmethod", "paymentmode", "mode", "account"},
+    }
+
+    def normalized(value: object) -> str:
+        return re.sub(r"[^a-z0-9]", "", str(value or "").lower())
+
+    def parse_date(value: object) -> date:
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            serial = float(value)
+            if not math.isfinite(serial) or not 1 <= serial <= 100000:
+                raise ValueError("invalid_expense_date")
+            return date(1899, 12, 30) + timedelta(days=int(serial))
+        text = str(value or "").strip()
+        for pattern in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d-%b-%Y", "%d %b %Y", "%m/%d/%Y"):
+            try:
+                return datetime.strptime(text, pattern).date()
+            except ValueError:
+                continue
+        raise ValueError("invalid_expense_date")
+
+    def parse_amount(value: object) -> float:
+        text = str(value or "").strip().replace(",", "").replace("₹", "")
+        if text.startswith("(") and text.endswith(")"):
+            text = text[1:-1]
+        try:
+            amount = abs(float(text))
+        except (TypeError, ValueError) as error:
+            raise ValueError("invalid_expense_amount") from error
+        if not math.isfinite(amount) or amount <= 0 or amount > 1_000_000_000:
+            raise ValueError("invalid_expense_amount")
+        return round(amount, 2)
+
+    rows: list[dict[str, object]] = []
+    issues: list[dict[str, object]] = []
+    sheets_read: list[str] = []
+    detected_layouts: set[str] = set()
+    seen: set[tuple[object, ...]] = set()
+
+    def append_row(
+        *,
+        row_date: date,
+        category: str,
+        description: str,
+        payment: str,
+        amount: float,
+        sheet_name: object,
+        source_row_number: int,
+    ) -> None:
+        identity = (row_date.isoformat(), category.casefold(), description.casefold(), payment.casefold(), amount)
+        if identity in seen:
+            return
+        seen.add(identity)
+        rows.append({
+            "date": row_date.isoformat(),
+            "category": category[:120],
+            "description": description[:120],
+            "payment": payment[:120],
+            "amount": amount,
+            "source_sheet": str(sheet_name),
+            "source_row": source_row_number,
+        })
+
+    month_numbers = {
+        name: number
+        for number, month in enumerate(
+            ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"),
+            start=1,
+        )
+        for name in (month.lower(), month[:3].lower())
+    }
+
+    for sheet_name, matrix in matrices:
+        header_index = None
+        mapping: dict[str, int] = {}
+        for index, candidate in enumerate(matrix[:30]):
+            candidate_map: dict[str, int] = {}
+            for column, cell in enumerate(candidate):
+                key = normalized(cell)
+                for field, names in aliases.items():
+                    if field not in candidate_map and key in names:
+                        candidate_map[field] = column
+            if "date" in candidate_map and "amount" in candidate_map:
+                header_index = index
+                mapping = candidate_map
+                break
+        if header_index is None:
+            # Annual household ledgers often put months across columns and
+            # expense categories down rows. Convert each populated category ×
+            # month cell into one editable monthly-total entry.
+            year_match = re.search(r"(?:19|20)\d{2}", str(sheet_name))
+            annual_header_index = None
+            month_columns: list[tuple[int, int]] = []
+            if year_match:
+                for index, candidate in enumerate(matrix[:15]):
+                    found = [
+                        (month_numbers[normalized(cell)], column)
+                        for column, cell in enumerate(candidate)
+                        if normalized(cell) in month_numbers
+                    ]
+                    if len({month for month, _column in found}) >= 6:
+                        annual_header_index = index
+                        month_columns = found
+                        break
+            expense_start = next(
+                (
+                    index for index, candidate in enumerate(matrix)
+                    if candidate and normalized(candidate[0]) in {"expense", "expenses"}
+                ),
+                None,
+            )
+            expense_end = next(
+                (
+                    index for index, candidate in enumerate(matrix)
+                    if expense_start is not None
+                    and index > expense_start
+                    and candidate
+                    and normalized(candidate[0]) in {"totalexpense", "totalexpenses", "totalexp"}
+                ),
+                None,
+            )
+            if annual_header_index is None or expense_start is None or expense_end is None:
+                continue
+            header = matrix[annual_header_index]
+            total_row = matrix[expense_end]
+            summary_columns = [
+                column for column, cell in enumerate(header)
+                if normalized(cell) in {"total", "annualtotal", "yearlytotal"}
+            ]
+            ordered_months = sorted(month_columns, key=lambda item: item[1])
+            selected_month_columns: list[tuple[int, int]] = []
+            for position, (month_number, start_column) in enumerate(ordered_months):
+                next_month_column = (
+                    ordered_months[position + 1][1]
+                    if position + 1 < len(ordered_months)
+                    else len(header)
+                )
+                next_summary_column = min(
+                    (column for column in summary_columns if column > start_column),
+                    default=next_month_column,
+                )
+                stop_column = min(next_month_column, next_summary_column)
+                candidates = range(start_column, max(start_column + 1, stop_column))
+                selected_column = max(
+                    candidates,
+                    key=lambda column: abs(float(_portfolio_number(total_row[column]) or 0))
+                    if column < len(total_row) else 0,
+                )
+                selected_month_columns.append((month_number, selected_column))
+
+            year = int(year_match.group(0))
+            sheet_rows_before = len(rows)
+            for month_number, amount_column in selected_month_columns:
+                imported_month_total = 0.0
+                for source_index in range(expense_start + 1, expense_end):
+                    raw = matrix[source_index]
+                    category = str(raw[0] if raw else "").strip()[:120]
+                    if not category or amount_column >= len(raw):
+                        continue
+                    number = _portfolio_number(raw[amount_column])
+                    if number is None or not math.isfinite(float(number)) or float(number) == 0:
+                        continue
+                    try:
+                        amount = parse_amount(number)
+                    except ValueError as error:
+                        if len(issues) < 25:
+                            issues.append({"sheet": str(sheet_name), "row": source_index + 1, "reason": str(error)})
+                        continue
+                    append_row(
+                        row_date=date(year, month_number, 1),
+                        category=category,
+                        description="Monthly category total",
+                        payment="Other",
+                        amount=amount,
+                        sheet_name=sheet_name,
+                        source_row_number=source_index + 1,
+                    )
+                    imported_month_total += amount
+                expected_total = (
+                    _portfolio_number(total_row[amount_column])
+                    if amount_column < len(total_row)
+                    else None
+                )
+                if (
+                    expected_total is not None
+                    and float(expected_total) >= 0
+                    and abs(imported_month_total - float(expected_total)) > 0.05
+                    and len(issues) < 25
+                ):
+                    issues.append({
+                        "sheet": str(sheet_name),
+                        "row": expense_end + 1,
+                        "reason": f"monthly_total_mismatch_{month_number}",
+                    })
+            if len(rows) > sheet_rows_before:
+                sheets_read.append(str(sheet_name))
+                detected_layouts.add("annual_category_matrix")
+            if len(rows) > 5000:
+                raise ValueError("expense_file_too_many_rows")
+            continue
+        sheets_read.append(str(sheet_name))
+        detected_layouts.add("transaction_rows")
+        blank_streak = 0
+        for source_row_number, raw in enumerate(matrix[header_index + 1:], start=header_index + 2):
+            if not any(str(value or "").strip() for value in raw):
+                blank_streak += 1
+                if blank_streak >= 20:
+                    break
+                continue
+            blank_streak = 0
+            try:
+                row_date = parse_date(raw[mapping["date"]] if mapping["date"] < len(raw) else "")
+                amount = parse_amount(raw[mapping["amount"]] if mapping["amount"] < len(raw) else "")
+                def optional(field: str, fallback: str) -> str:
+                    column = mapping.get(field)
+                    value = str(raw[column] if column is not None and column < len(raw) else "").strip()
+                    return value[:120] or fallback
+                category = optional("category", "Other")
+                description = optional("description", "Imported expense")
+                payment = optional("payment", "Other")
+                append_row(
+                    row_date=row_date,
+                    category=category,
+                    description=description,
+                    payment=payment,
+                    amount=amount,
+                    sheet_name=sheet_name,
+                    source_row_number=source_row_number,
+                )
+            except ValueError as error:
+                if len(issues) < 25:
+                    issues.append({"sheet": str(sheet_name), "row": source_row_number, "reason": str(error)})
+            if len(rows) > 5000:
+                raise ValueError("expense_file_too_many_rows")
+    if not rows:
+        raise ValueError("no_valid_expense_rows")
+    rows.sort(key=lambda row: (str(row["date"]), str(row["description"])))
+    return {
+        "ok": True,
+        "contract_version": "expense-import-preview-v1",
+        "file_name": file_name,
+        "rows": rows,
+        "row_count": len(rows),
+        "rejected_count": len(issues),
+        "issues": issues,
+        "sheets_read": sheets_read,
+        "detected_layouts": sorted(detected_layouts),
+        "persistence": "browser_local_only_after_client_confirmation",
+    }
+
+
+def is_supported_expense_import_file_name(value: object) -> bool:
+    """Keep the HTTP upload boundary aligned with the expense parsers."""
+    return isinstance(value, str) and re.fullmatch(
+        r"[A-Za-z0-9._ ()&-]{1,128}\.(?:csv|xlsx|ods)",
+        value,
+        re.IGNORECASE,
+    ) is not None
 
 
 def parse_universal_portfolio_file(file_name: str, payload: bytes) -> dict[str, object]:
@@ -22684,6 +23138,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         )
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler name
+        if self.path == "/api/expenses/preview":
+            payload = self._read_json_payload(MAX_PORTFOLIO_IMPORT_BYTES)
+            if payload is not None:
+                self._send_expense_preview(payload)
+            return
+
         if self.path == "/api/mutual-funds/analyze":
             payload = self._read_json_payload(MAX_PORTFOLIO_IMPORT_BYTES)
             if payload is not None:
@@ -23178,6 +23638,24 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": reason})
             return
         self._send_json(HTTPStatus.OK, preview)
+
+    def _send_expense_preview(self, payload: dict[str, object]) -> None:
+        file_name = payload.get("file_name")
+        encoded = payload.get("content_base64")
+        if (
+            not is_supported_expense_import_file_name(file_name)
+            or not isinstance(encoded, str)
+        ):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_expense_file"})
+            return
+        try:
+            raw = base64.b64decode(encoded, validate=True)
+            result = parse_expense_file(file_name, raw)
+        except (ValueError, binascii.Error) as error:
+            reason = str(error) if isinstance(error, ValueError) else "invalid_expense_file"
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": reason})
+            return
+        self._send_json(HTTPStatus.OK, result)
 
     def _send_universal_portfolio_import(self, payload: dict[str, object]) -> None:
         file_name = payload.get("file_name")
