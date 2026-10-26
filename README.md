@@ -7,10 +7,13 @@ the interface, exchanges the owner-entered Kite request token for the daily
 access token, and verifies the read-only profile endpoint. The API secret is used
 only for the token checksum and is never retained. The API key and access token
 remain only in server-process memory and are not written to files or logs. The
-Current workflows are read-only. Seasonality now stores validated completed
-daily candles in a local append-only SQLite database and requests only newer
-sessions on later loads; the same persistent foundation will next be extended
-to dashboard and breadth workflows.
+current workflows are read-only. Completed-session market history, reviewed
+evidence and workspace snapshots use the local SQLite data foundation; missing,
+partial and stale observations remain explicit.
+
+Use [docs/OPERATIONS.md](docs/OPERATIONS.md) for startup, navigation, command
+palette, Kite/EOD workflows, portfolio-ledger behaviour, backup/recovery,
+troubleshooting and final-delivery checks.
 
 See [docs/PROJECT_MILESTONES.md](docs/PROJECT_MILESTONES.md) for the recorded
 build sequence, completion criteria, and deferred features.
@@ -20,6 +23,6 @@ evidence.
 The proposed architecture and validation plan for the next page is recorded in
 [docs/MARKET_SENTIMENT_BLUEPRINT.md](docs/MARKET_SENTIMENT_BLUEPRINT.md).
 
-All pages must load `dist/styles.css` after their page-specific styles. It is the
-shared typography contract for the 14px body, 16–18px headings, and 13px
-secondary text.
+All pages load `dist/styles.css` after page-specific styles. It contains the
+shared terminal shell, dual themes, compact Calibri typography, accessibility
+states and workspace composition rules.

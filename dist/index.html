@@ -156,6 +156,35 @@
       font-variant-numeric: tabular-nums;
     }
 
+    #eodUpdateButton {
+      display: inline-flex;
+      min-width: 112px;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      line-height: 1;
+    }
+
+    #eodUpdateButton > span { white-space: nowrap; }
+
+    #eodUpdateButton > small {
+      display: block;
+      max-width: 170px;
+      overflow: hidden;
+      opacity: .82;
+      font-size: 8px;
+      font-weight: 600;
+      line-height: 1.1;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #eodUpdateButton.eod-running > small { max-width: 148px; }
+    #eodUpdateButton.eod-updated > small { color: var(--success); opacity: 1; }
+    #eodUpdateButton.eod-partial > small { color: var(--warning); opacity: 1; }
+    #eodUpdateButton.eod-failed > small { color: var(--danger); opacity: 1; }
+
     .action-button.kite-authenticated {
       border-color: var(--success);
       background: var(--success);
@@ -1695,9 +1724,10 @@
       .mutual-fund-position-row { grid-template-columns: minmax(110px, 1fr) 1fr auto; }
     }
   </style>
-  <link rel="stylesheet" href="styles.css?v=terminal-interface-v24-sidebar-consistency-7">
+  <link rel="stylesheet" href="styles.css?v=terminal-interface-v24-alpha-research-17">
 </head>
 <body data-active-page="dashboard">
+  <a class="skip-link" href="#mainContent">Skip to main content</a>
   <header class="topbar">
     <button class="menu-button" id="menuButton" aria-label="Open navigation" aria-expanded="false">☰</button>
     <div class="brand" aria-label="PG-terminal">
@@ -1705,10 +1735,11 @@
       <div class="brand-name">PG-terminal</div>
       <div class="brand-note">private market workspace</div>
     </div>
-    <div class="terminal-command" aria-hidden="true">
-      <span>⌕</span>
-      <span>Search securities, indices, functions…</span>
-      <kbd>CTRL K</kbd>
+    <div class="terminal-command" role="search">
+      <span aria-hidden="true">⌕</span>
+      <input id="terminalCommandInput" type="search" autocomplete="off" spellcheck="false" placeholder="Search pages, securities, functions…" aria-label="Search pages, securities and terminal functions" aria-expanded="false" aria-controls="terminalCommandResults" aria-autocomplete="list">
+      <kbd aria-hidden="true">CTRL K</kbd>
+      <div class="terminal-command-results" id="terminalCommandResults" role="listbox" aria-label="Terminal search results" hidden></div>
     </div>
     <div class="terminal-clock" aria-label="Local market terminal time">
       <span id="terminalClockDate">—</span>
@@ -1750,7 +1781,7 @@
           </form>
         </div>
       </div>
-      <button class="action-button" id="eodUpdateButton" type="button" aria-live="polite" aria-label="Refresh all supported market data and workspace summaries" title="Refresh all supported market data and workspace summaries" disabled>EOD update</button>
+      <button class="action-button" id="eodUpdateButton" type="button" aria-live="polite" aria-label="Refresh all supported market data and workspace summaries" title="Refresh all supported market data and workspace summaries" disabled><span id="eodUpdateLabel">EOD update</span><small id="eodUpdateState">Ready</small></button>
     </div>
   </header>
 
@@ -1759,7 +1790,7 @@
       <div class="sidebar-label">Workspace</div>
       <nav>
         <ul class="nav-list">
-          <li><button class="nav-button active" data-page="Dashboard" style="--item-color:#3273dc"><span class="nav-icon"></span><span>Dashboard</span></button></li>
+          <li><button class="nav-button active" data-page="Dashboard" aria-current="page" style="--item-color:#3273dc"><span class="nav-icon"></span><span>Dashboard</span></button></li>
           <li><button class="nav-button" data-page="Market Sentiment" style="--item-color:#c92f34"><span class="nav-icon"></span><span>Market Sentiment</span></button></li>
           <li><button class="nav-button" data-page="F&amp;O" style="--item-color:#5368d9"><span class="nav-icon"></span><span>F&amp;O</span></button></li>
           <li><button class="nav-button" data-page="Screener" style="--item-color:#24934d"><span class="nav-icon"></span><span>Screener</span></button></li>
@@ -1781,7 +1812,7 @@
 
     <div class="scrim" id="scrim" aria-hidden="true"></div>
 
-    <main>
+    <main id="mainContent" tabindex="-1">
       <div class="content">
         <div id="dashboardView">
           <div class="page-tabs" aria-label="Dashboard views">
@@ -1916,7 +1947,7 @@
               <span><strong>Risk history</strong> <span id="dashboardPortfolioRiskCoverage">—</span></span>
             </div>
             <div class="workspace-summary-actions">
-              <div class="workspace-summary-note" id="dashboardPortfolioNote">The dashboard keeps no copy of your holdings. Portfolio results appear here only after an in-memory analysis in this browser session.</div>
+              <div class="workspace-summary-note" id="dashboardPortfolioNote">The editable portfolio ledger is stored only in this browser. Uploaded files remain in memory for the current session.</div>
               <div class="workspace-summary-buttons">
                 <button class="panel-button primary" id="viewDashboardPortfolioButton" type="button">Open portfolio</button>
               </div>
@@ -2562,7 +2593,72 @@
 
           <p class="section-note">Directional classifications are descriptive. They remain outside the market-regime score and do not represent trading instructions.</p>
 
-          <div class="evidence-grid">
+          <section class="analysis-section fno-positioning-map" aria-labelledby="fnoPositioningMapTitle">
+            <div class="fno-section-heading">
+              <div>
+                <span class="terminal-kicker">POSITIONING MAP · SAME-CONTRACT COMPARISONS</span>
+                <h2 id="fnoPositioningMapTitle">How price and open interest moved together</h2>
+              </div>
+              <span class="sentiment-band" id="fnoPositioningRead">Awaiting comparison</span>
+            </div>
+            <p class="fno-positioning-context" id="fnoPositioningContext">A second completed observation of the same contract is required before the distribution can be drawn.</p>
+            <div class="fno-quadrant-grid" aria-label="Futures positioning quadrants">
+              <article class="fno-quadrant positive" id="fnoLongBuildQuadrant">
+                <div class="fno-quadrant-axis"><span>PRICE ↑</span><span>OI ↑</span></div>
+                <strong id="fnoLongBuildCount">—</strong>
+                <h3>Long build-up</h3>
+                <p>Price and participation rose together.</p>
+                <div class="fno-quadrant-meter"><span id="fnoLongBuildBar"></span></div>
+              </article>
+              <article class="fno-quadrant negative" id="fnoShortBuildQuadrant">
+                <div class="fno-quadrant-axis"><span>PRICE ↓</span><span>OI ↑</span></div>
+                <strong id="fnoShortBuildCount">—</strong>
+                <h3>Short build-up</h3>
+                <p>Price weakened as participation expanded.</p>
+                <div class="fno-quadrant-meter"><span id="fnoShortBuildBar"></span></div>
+              </article>
+              <article class="fno-quadrant caution" id="fnoLongUnwindQuadrant">
+                <div class="fno-quadrant-axis"><span>PRICE ↓</span><span>OI ↓</span></div>
+                <strong id="fnoLongUnwindCount">—</strong>
+                <h3>Long unwinding</h3>
+                <p>Price and participation contracted together.</p>
+                <div class="fno-quadrant-meter"><span id="fnoLongUnwindBar"></span></div>
+              </article>
+              <article class="fno-quadrant recovery" id="fnoShortCoverQuadrant">
+                <div class="fno-quadrant-axis"><span>PRICE ↑</span><span>OI ↓</span></div>
+                <strong id="fnoShortCoverCount">—</strong>
+                <h3>Short covering</h3>
+                <p>Price rose while open positions reduced.</p>
+                <div class="fno-quadrant-meter"><span id="fnoShortCoverBar"></span></div>
+              </article>
+            </div>
+            <div class="fno-map-footer">
+              <span><strong id="fnoNoSignalCount">—</strong> no-clear-signal observations</span>
+              <span id="fnoMapCoverage">Coverage and noise safeguards will appear with data.</span>
+            </div>
+          </section>
+
+          <section class="analysis-section fno-movement-section" aria-labelledby="fnoMovementTitle">
+            <div class="fno-section-heading">
+              <div>
+                <span class="terminal-kicker">MOVEMENT TAPE · LATEST COMPLETED SESSION</span>
+                <h2 id="fnoMovementTitle">Where the derivatives tape moved most</h2>
+              </div>
+              <span class="fno-section-note">Ranked by absolute move · descriptive only</span>
+            </div>
+            <div class="fno-movement-grid">
+              <article>
+                <h3>Largest price moves</h3>
+                <div class="fno-ranked-list" id="fnoPriceLeaders"><p>Awaiting comparable contracts.</p></div>
+              </article>
+              <article>
+                <h3>Largest open-interest moves</h3>
+                <div class="fno-ranked-list" id="fnoOiLeaders"><p>Awaiting comparable contracts.</p></div>
+              </article>
+            </div>
+          </section>
+
+          <div class="evidence-grid fno-evidence-grid">
             <article class="evidence-card flow-chart-card">
               <div class="evidence-heading"><h2>Futures price and open interest</h2><span class="sentiment-band" id="futuresOiBand">Unavailable</span></div>
               <p class="evidence-reason" id="futuresOiReason">Run EOD update after market close to establish the near-month baseline.</p>
@@ -2627,7 +2723,64 @@
             This first contract exposes transparent price, trend, relative-strength, and volatility evidence only. It is a descriptive research table—not a recommendation, backtest, or trade-ranking model.
           </div>
 
-          <div class="universe-controls" aria-label="Screener filters">
+          <section class="analysis-section screener-participation-section" aria-labelledby="screenerParticipationTitle">
+            <div class="screener-section-heading">
+              <div>
+                <span class="terminal-kicker">PARTICIPATION BOARD · LOCAL F&amp;O UNIVERSE</span>
+                <h2 id="screenerParticipationTitle">How broadly stocks are participating</h2>
+              </div>
+              <span class="sentiment-band" id="screenerParticipationBand">Awaiting screen</span>
+            </div>
+            <p class="screener-participation-copy" id="screenerParticipationCopy">Load the local screen to compare price direction, benchmark-relative strength and trend participation.</p>
+            <div class="screener-participation-grid">
+              <article class="screener-participation-card">
+                <span>POSITIVE · 20 SESSIONS</span><strong id="screenerPositive20Count">—</strong>
+                <div class="screener-participation-track"><i id="screenerPositive20Bar"></i></div>
+                <small id="screenerPositive20Share">of ready universe</small>
+              </article>
+              <article class="screener-participation-card">
+                <span>OUTPERFORMING NIFTY 50</span><strong id="screenerOutperformCount">—</strong>
+                <div class="screener-participation-track"><i id="screenerOutperformBar"></i></div>
+                <small id="screenerOutperformShare">over 20 sessions</small>
+              </article>
+              <article class="screener-participation-card">
+                <span>ABOVE 50-SESSION AVERAGE</span><strong id="screenerAbove50Count">—</strong>
+                <div class="screener-participation-track"><i id="screenerAbove50Bar"></i></div>
+                <small id="screenerAbove50Share">of ready universe</small>
+              </article>
+              <article class="screener-participation-card">
+                <span>ABOVE 200-SESSION AVERAGE</span><strong id="screenerAbove200Count">—</strong>
+                <div class="screener-participation-track"><i id="screenerAbove200Bar"></i></div>
+                <small id="screenerAbove200Share">of ready universe</small>
+              </article>
+            </div>
+          </section>
+
+          <section class="analysis-section screener-extremes-section" aria-labelledby="screenerExtremesTitle">
+            <div class="screener-section-heading">
+              <div>
+                <span class="terminal-kicker">RELATIVE-STRENGTH EXTREMES · 20 SESSIONS</span>
+                <h2 id="screenerExtremesTitle">Strongest and weakest local observations</h2>
+              </div>
+              <span class="screener-section-note">Evidence extremes, not candidate ranks</span>
+            </div>
+            <div class="screener-extreme-grid">
+              <article class="screener-extreme-card strongest" id="screenerStrongestCard">
+                <span>STRONGEST EXCESS VS NIFTY 50</span>
+                <h3 id="screenerStrongestSymbol">Awaiting screen</h3>
+                <strong id="screenerStrongestExcess">—</strong>
+                <div class="screener-extreme-metrics" id="screenerStrongestMetrics">Return, trend and drawdown evidence will appear here.</div>
+              </article>
+              <article class="screener-extreme-card weakest" id="screenerWeakestCard">
+                <span>WEAKEST EXCESS VS NIFTY 50</span>
+                <h3 id="screenerWeakestSymbol">Awaiting screen</h3>
+                <strong id="screenerWeakestExcess">—</strong>
+                <div class="screener-extreme-metrics" id="screenerWeakestMetrics">Return, trend and drawdown evidence will appear here.</div>
+              </article>
+            </div>
+          </section>
+
+          <div class="universe-controls screener-primary-controls" aria-label="Screener filters">
             <div class="selector-field">
               <label for="screenerSearchInput">Symbol search</label>
               <input id="screenerSearchInput" type="search" placeholder="e.g. INFY" autocomplete="off">
@@ -2669,14 +2822,14 @@
             <p class="universe-source" id="screenerSourceNote">Universe and readiness are calculated from the local append-only EOD store.</p>
           </div>
 
-          <section class="summary-grid" aria-label="Screener readiness summary">
+          <section class="summary-grid screener-readiness-grid" aria-label="Screener readiness summary">
             <article class="summary-card"><div class="summary-value" id="screenerUniverseValue">—</div><div class="summary-meta">Stored F&amp;O equities</div></article>
             <article class="summary-card"><div class="summary-value" id="screenerReadyValue">—</div><div class="summary-meta">Ready · 252 aligned sessions</div></article>
             <article class="summary-card"><div class="summary-value" id="screenerPartialValue">—</div><div class="summary-meta">Partial / stale / unavailable</div></article>
             <article class="summary-card"><div class="summary-value" id="screenerAsOfValue">—</div><div class="summary-meta">Latest benchmark session</div></article>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section screener-table-section">
             <h2>Transparent local factor table</h2>
             <p class="section-note" id="screenerTableNote">Load the local screen to inspect coverage and factor values.</p>
             <div class="table-guide"><strong>How to read:</strong> Begin with Status and Sessions. Positive returns and distances above moving averages indicate recent strength; 20-day excess shows performance relative to Nifty 50. A 52-week position near 100% is near the annual high, drawdown measures distance below that high, and realised volatility describes variability—not direction.</div>
@@ -2688,7 +2841,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section screener-contract-section">
             <h2>Contract and limitations</h2>
             <p class="section-note">Every displayed column has a fixed formula. Missing data stays missing; no neutral value is substituted.</p>
             <div class="analysis-note" id="screenerContractNote">The local screener contract has not been loaded.</div>
@@ -2708,7 +2861,7 @@
             <div class="analysis-status" id="seasonalityDataStatus">Historical data not loaded</div>
           </div>
 
-          <div class="universe-controls" aria-label="Seasonality universe selection">
+          <div class="universe-controls seasonality-primary-controls" aria-label="Seasonality universe selection">
             <div class="selector-field">
               <label for="seasonalityIndexSelect">Equity index</label>
               <select id="seasonalityIndexSelect"></select>
@@ -2724,7 +2877,7 @@
             <p class="universe-source" id="seasonalitySelectionNote">Lists are locally frozen reference choices. History is requested only when Load seasonality is selected.</p>
           </div>
 
-          <section class="seasonality-headline-grid" aria-label="Current month seasonality summary">
+          <section class="seasonality-headline-grid seasonality-current-grid" aria-label="Current month seasonality summary">
             <article class="summary-card">
               <div class="summary-label" id="currentMonthLabel">Current month</div>
               <div class="summary-value" id="nifty50MonthReturn">—</div>
@@ -2740,7 +2893,7 @@
             </article>
           </section>
 
-          <div class="universe-controls" aria-label="Historical monthly comparison selection">
+          <div class="universe-controls seasonality-history-controls" aria-label="Historical monthly comparison selection">
             <div class="selector-field">
               <label for="historicalMonthSelect">Historical calendar month</label>
               <select id="historicalMonthSelect">
@@ -2767,7 +2920,7 @@
             <p class="universe-source">Results compare average return for the selected calendar month across the rolling 10-year history.</p>
           </div>
 
-          <section class="seasonality-headline-grid" aria-label="Selected historical month comparison">
+          <section class="seasonality-headline-grid seasonality-history-grid" aria-label="Selected historical month comparison">
             <article class="summary-card" id="historicalIndexCard">
               <div class="summary-label">Historical monthly indices</div>
               <div class="leader-list">
@@ -2786,7 +2939,7 @@
             </article>
           </section>
 
-          <section class="summary-grid" aria-label="Seasonality summary">
+          <section class="summary-grid seasonality-quality-grid" aria-label="Seasonality evidence quality">
             <article class="summary-card">
               <div class="summary-value" id="seasonalityMonthsValue">— of 12</div>
               <div class="summary-meta">Months with history</div>
@@ -2799,9 +2952,13 @@
               <div class="summary-value" id="seasonalitySessionsValue">—</div>
               <div class="summary-meta">Completed sessions</div>
             </article>
+            <article class="summary-card">
+              <div class="summary-value" id="seasonalitySurvivedValue">— of 12</div>
+              <div class="summary-meta">Held-out months survived</div>
+            </article>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section seasonality-month-section">
             <h2>Month of year — <span id="seasonalityInstrumentLabel">NIFTY 50</span></h2>
             <p class="section-note" id="seasonalityMonthNote">Monthly return and trading-range summary.</p>
             <div class="table-guide"><strong>How to read:</strong> Each row groups all observations for that calendar month. Count is the sample size; average return shows typical direction, average range shows movement within the month, and highest/lowest returns show extremes. A positive average is historical tendency, not a forecast.</div>
@@ -2813,7 +2970,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section seasonality-weekday-section">
             <h2>Day of week</h2>
             <p class="section-note" id="seasonalityWeekdayNote">Daily-return behaviour grouped by exchange trading weekday.</p>
             <div class="table-guide"><strong>How to read:</strong> Each row groups completed sessions by exchange weekday. Compare average return with the highest and lowest observations and check Count; a small average beside wide extremes usually indicates a weak, noisy weekday effect.</div>
@@ -2825,7 +2982,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section seasonality-turn-section">
             <h2>Turn of month</h2>
             <p class="section-note" id="seasonalityTurnNote">Last three and first three trading sessions of each month compared with all remaining sessions.</p>
             <div class="table-guide"><strong>How to read:</strong> Compare Turn window with Other sessions. Average and median show effect size, while Positive Sessions shows consistency. The turn-of-month effect is more credible only when average and median agree and the held-out test below also survives.</div>
@@ -2837,7 +2994,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section seasonality-heldout-section">
             <h2>Held-out check — train vs. test</h2>
             <p class="section-note">A validation frame intended to reject unstable patterns rather than certify predictions.</p>
             <div class="table-guide"><strong>How to read:</strong> Train excess is discovered in the earlier sample; Test excess checks the later unseen sample. Same Direction is necessary but not sufficient. Survived requires the predefined consistency rules, and a failed row should not be presented as a seasonal edge.</div>
@@ -2850,7 +3007,7 @@
             <div class="analysis-note" id="seasonalityHeldOutNote">Load completed history to run the chronological train/test check.</div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section seasonality-turn-heldout-section">
             <h2>Turn of month — held-out check</h2>
             <div class="table-guide"><strong>How to read:</strong> Compare the train and test rows separately. Edge is the turn-window daily average minus other sessions; the p-value measures how compatible the observed difference is with noise. Significant must remain true in both periods before treating the effect as stable evidence.</div>
             <div class="table-wrap">
@@ -2881,14 +3038,44 @@
             Scheduled macro events only. Unscheduled news, consensus estimates, surprise scores, and trade-impact labels are excluded.
           </div>
 
-          <section class="summary-grid" aria-label="Macro event calendar summary">
+          <section class="summary-grid events-coverage-grid" aria-label="Macro event calendar summary">
             <article class="summary-card"><div class="summary-value" id="eventsUpcomingValue">—</div><div class="summary-meta">Current + upcoming events</div></article>
             <article class="summary-card"><div class="summary-value" id="eventsSevenDayValue">—</div><div class="summary-meta">Within seven days</div></article>
             <article class="summary-card"><div class="summary-value" id="eventsIndiaValue">—</div><div class="summary-meta">India events</div></article>
             <article class="summary-card"><div class="summary-value" id="eventsUsValue">—</div><div class="summary-meta">U.S. events</div></article>
           </section>
 
-          <div class="universe-controls" aria-label="Macro event filters">
+          <section class="analysis-section events-focus-section" aria-labelledby="eventsFocusTitle">
+            <div class="events-focus-grid">
+              <article class="events-lead-card">
+                <span class="terminal-kicker">NEXT VERIFIED CATALYST</span>
+                <div class="events-lead-date" id="eventsLeadDate">Awaiting calendar</div>
+                <h2 id="eventsFocusTitle"><span id="eventsLeadTitle">No reviewed event loaded</span></h2>
+                <p id="eventsLeadMeta">Load the reviewed calendar snapshot to see the next scheduled macro catalyst.</p>
+                <p class="events-lead-note" id="eventsLeadNote">Dates can change; verify the linked official source before relying on an event time.</p>
+              </article>
+              <div class="events-horizon-board">
+                <div class="terminal-section-head">
+                  <div>
+                    <span class="terminal-kicker">CATALYST HORIZON · FILTER-AWARE</span>
+                    <h2>Upcoming event tape</h2>
+                  </div>
+                  <span class="terminal-context" id="eventsHorizonStatus">Awaiting calendar</span>
+                </div>
+                <div class="events-timeline" id="eventsTimeline">
+                  <div class="events-timeline-empty">Current and upcoming reviewed events will appear here.</div>
+                </div>
+              </div>
+            </div>
+            <div class="events-mix-grid" aria-label="Visible event mix">
+              <article><span>CENTRAL-BANK POLICY</span><strong id="eventsCentralBankCount">—</strong><small>visible events</small></article>
+              <article><span>INFLATION RELEASES</span><strong id="eventsInflationCount">—</strong><small>visible events</small></article>
+              <article><span>GROWTH / PRODUCTION</span><strong id="eventsGrowthCount">—</strong><small>visible events</small></article>
+              <article><span>WITHIN 30 DAYS</span><strong id="eventsThirtyDayCount">—</strong><small>visible events</small></article>
+            </div>
+          </section>
+
+          <div class="universe-controls events-primary-controls" aria-label="Macro event filters">
             <div class="selector-field">
               <label for="eventRegionSelect">Region</label>
               <select id="eventRegionSelect">
@@ -2912,7 +3099,7 @@
             <p class="universe-source" id="eventNextNote">The next scheduled event will appear after the calendar loads.</p>
           </div>
 
-          <section class="analysis-section">
+          <section class="analysis-section events-table-section">
             <h2>Current and upcoming macro events</h2>
             <p class="section-note">Timed U.S. releases include their India Standard Time conversion. All-day dates have no assumed release time.</p>
             <div class="table-guide"><strong>How to read:</strong> Date/window is the official scheduled period; India time is shown only when the source specifies a clock time. Days counts down from today, with 0 for an event in progress. Use Type and Region to filter, then open the official source and read the Note before relying on the schedule.</div>
@@ -2924,7 +3111,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section events-sources-section">
             <h2>Calendar source readiness</h2>
             <p class="section-note">Only verified dated snapshots can populate the event table. RBI MPC dates use its official 23-Mar-2026 schedule; no decision time is assumed.</p>
             <div class="table-guide"><strong>How to read:</strong> Verified snapshot means the displayed dates were checked against the linked authority. Review note records timing caveats or possible revisions. A pending source may remain listed for transparency but cannot contribute dated events until verified.</div>
@@ -2936,7 +3123,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section events-contract-section">
             <h2>Contract and limitations</h2>
             <p class="section-note">This is a reviewed event snapshot, not a continuously synchronized economic calendar.</p>
             <div class="analysis-note" id="newsEventsContractNote">The macro-events contract has not been loaded.</div>
@@ -2959,14 +3146,75 @@
           <div class="analysis-status" id="earningsStatus">Local earnings data not loaded</div>
           <div class="analysis-note">Automated exchange-site collection is disabled. Import a reviewed CSV prepared from an issuer or exchange filing; every row must include an HTTPS source link.</div>
 
-          <section class="summary-grid" aria-label="Earnings data summary">
+          <section class="summary-grid earnings-coverage-grid" aria-label="Earnings data summary">
             <article class="summary-card"><div class="summary-value" id="earningsCompaniesValue">—</div><div class="summary-meta">Companies</div></article>
             <article class="summary-card"><div class="summary-value" id="earningsYoyReadyValue">—</div><div class="summary-meta">YoY-comparable rows</div></article>
             <article class="summary-card"><div class="summary-value" id="earningsTurnaroundValue">—</div><div class="summary-meta">Turned profitable</div></article>
             <article class="summary-card"><div class="summary-value" id="earningsLossValue">—</div><div class="summary-meta">Moved to loss</div></article>
           </section>
 
-          <div class="universe-controls" aria-label="Earnings import and filters">
+          <section class="analysis-section earnings-pulse-section" aria-labelledby="earningsPulseTitle">
+            <div class="terminal-section-head">
+              <div>
+                <span class="terminal-kicker">REPORTED MOMENTUM · COMPARABLE LATEST QUARTERS</span>
+                <h2 id="earningsPulseTitle">How broadly earnings are improving</h2>
+              </div>
+              <span class="terminal-state is-muted" id="earningsPulseBand">Import required</span>
+            </div>
+            <p class="section-note" id="earningsPulseCopy">Import source-linked current and prior-year quarters to measure reported growth breadth. Consensus surprise is not available in this contract.</p>
+            <div class="earnings-pulse-grid">
+              <article class="earnings-pulse-card is-positive">
+                <span>POSITIVE REVENUE YOY</span>
+                <strong id="earningsRevenuePositiveCount">—</strong>
+                <div class="terminal-meter"><i id="earningsRevenuePositiveBar"></i></div>
+                <small id="earningsRevenuePositiveShare">Awaiting comparable rows</small>
+              </article>
+              <article class="earnings-pulse-card is-positive">
+                <span>PROFIT IMPROVED YOY</span>
+                <strong id="earningsProfitImprovedCount">—</strong>
+                <div class="terminal-meter"><i id="earningsProfitImprovedBar"></i></div>
+                <small id="earningsProfitImprovedShare">Awaiting comparable rows</small>
+              </article>
+              <article class="earnings-pulse-card is-negative">
+                <span>PROFIT WEAKENED YOY</span>
+                <strong id="earningsProfitWeakenedCount">—</strong>
+                <div class="terminal-meter"><i id="earningsProfitWeakenedBar"></i></div>
+                <small id="earningsProfitWeakenedShare">Awaiting comparable rows</small>
+              </article>
+              <article class="earnings-pulse-card is-accent">
+                <span>POSITIVE EPS YOY</span>
+                <strong id="earningsEpsPositiveCount">—</strong>
+                <div class="terminal-meter"><i id="earningsEpsPositiveBar"></i></div>
+                <small id="earningsEpsPositiveShare">Awaiting comparable rows</small>
+              </article>
+            </div>
+          </section>
+
+          <section class="analysis-section earnings-extremes-section" aria-labelledby="earningsExtremesTitle">
+            <div class="terminal-section-head">
+              <div>
+                <span class="terminal-kicker">REVENUE GROWTH EXTREMES · LATEST COMPARABLE QUARTER</span>
+                <h2 id="earningsExtremesTitle">Strongest and weakest reported observations</h2>
+              </div>
+              <span class="terminal-context">Reported evidence, not candidate ranks</span>
+            </div>
+            <div class="earnings-extremes-grid">
+              <article class="earnings-extreme-card is-positive">
+                <span>STRONGEST REVENUE YOY</span>
+                <h3 id="earningsStrongestSymbol">Awaiting evidence</h3>
+                <strong id="earningsStrongestGrowth">—</strong>
+                <p id="earningsStrongestMetrics">Import comparable source-linked quarters to identify the strongest observation.</p>
+              </article>
+              <article class="earnings-extreme-card is-negative">
+                <span>WEAKEST REVENUE YOY</span>
+                <h3 id="earningsWeakestSymbol">Awaiting evidence</h3>
+                <strong id="earningsWeakestGrowth">—</strong>
+                <p id="earningsWeakestMetrics">Import comparable source-linked quarters to identify the weakest observation.</p>
+              </article>
+            </div>
+          </section>
+
+          <div class="universe-controls earnings-primary-controls" aria-label="Earnings import and filters">
             <div class="selector-field">
               <label for="earningsCsvInput">Quarterly-results CSV</label>
               <input id="earningsCsvInput" type="file" accept=".csv,text/csv">
@@ -2997,7 +3245,7 @@
             <p class="universe-source" id="earningsImportHelp">Required headers: Symbol, Company Name, Sector, Basis, Fiscal Year, Quarter, Period End, Reported At, Currency, Unit, Revenue, Net Profit, EPS, Source URL. Dates use YYYY-MM-DD; Basis is consolidated or standalone; Unit is crore, lakh, or million.</p>
           </div>
 
-          <section class="analysis-section">
+          <section class="analysis-section earnings-table-section">
             <h2>Latest reported quarter by company and basis</h2>
             <p class="section-note" id="earningsAsOfNote">Import reviewed quarterly results to populate the analysis.</p>
             <div class="table-guide"><strong>How to read:</strong> Revenue YoY compares the latest quarter with the same fiscal quarter one year earlier; QoQ compares the immediately preceding imported quarter. Profit change remains visible when a percentage would be misleading because the prior profit was zero or negative. Check Basis, Unit, Status, and the source filing before comparing companies.</div>
@@ -3009,7 +3257,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section earnings-contract-section">
             <h2>Contract and limitations</h2>
             <div class="analysis-note" id="earningsContractNote">The earnings-analysis contract has not been loaded.</div>
           </section>
@@ -3113,6 +3361,29 @@
           </div>
 
           <div id="portfolioHoldingsPanel" role="tabpanel" aria-labelledby="portfolioHoldingsTab">
+            <section class="analysis-section portfolio-ledger-section" aria-labelledby="portfolioLedgerTitle">
+              <div class="portfolio-section-head portfolio-ledger-head">
+                <div><span>EDITABLE HOLDINGS</span><h2 id="portfolioLedgerTitle">Portfolio ledger</h2></div>
+                <p id="portfolioLedgerStatus">The supplied holdings are stored only in this browser and mapped to the dashboard.</p>
+              </div>
+              <div class="portfolio-ledger-actions">
+                <button class="panel-button" id="portfolioLedgerResetButton" type="button">Reset</button>
+                <button class="panel-button" id="portfolioLedgerAddButton" type="button">＋ Add row</button>
+                <button class="panel-button primary" id="portfolioLedgerAnalyzeButton" type="button">Save changes</button>
+              </div>
+              <div class="table-wrap portfolio-ledger-wrap">
+                <table class="portfolio-ledger-table">
+                  <thead><tr><th>Account</th><th>Holding</th><th>Entry date</th><th>Quantity</th><th>Avg. cost</th><th>LTP / NAV</th><th>Invested</th><th>Current value</th><th>Return</th><th>Action</th></tr></thead>
+                  <tbody id="portfolioLedgerBody"></tbody>
+                  <tfoot><tr><th colspan="6">Portfolio total</th><th id="portfolioLedgerInvestedTotal">—</th><th id="portfolioLedgerCurrentTotal">—</th><th><strong id="portfolioLedgerPnlTotal">—</strong><small id="portfolioLedgerReturnTotal">—</small></th><th></th></tr></tfoot>
+                </table>
+              </div>
+              <div class="portfolio-ledger-foot">
+                <p class="portfolio-ledger-note">Edit a field and choose <strong>Save changes</strong>. Values and returns recalculate automatically.</p>
+                <button class="portfolio-ledger-add-link" id="portfolioLedgerAddFooterButton" type="button">＋ Add another holding</button>
+              </div>
+            </section>
+
             <section class="analysis-section combined-portfolio-overview portfolio-story-section" id="portfolioOverviewSection" aria-labelledby="combinedPortfolioTitle" hidden>
               <div class="portfolio-section-head"><div><span>01 · OVERVIEW</span><h2 id="combinedPortfolioTitle">Complete portfolio</h2></div><p id="combinedPortfolioNote">Upload one file to separate stocks and mutual funds and build the combined view.</p></div>
               <div class="summary-grid combined-portfolio-summary" aria-label="Combined portfolio summary">
@@ -3371,14 +3642,75 @@
             <div class="analysis-status" id="stockYtdStatus">Stock ranking not loaded</div>
           </div>
 
-          <section class="summary-grid" aria-label="Stock ranking summary">
+          <section class="summary-grid stock-ytd-coverage-grid" aria-label="Stock ranking summary">
             <article class="summary-card"><div class="summary-value" id="stockYtdUniverseValue">—</div><div class="summary-meta">Current NIFTY 500 rows</div></article>
             <article class="summary-card"><div class="summary-value" id="stockYtdReadyValue">—</div><div class="summary-meta">Fully evaluated rows</div></article>
             <article class="summary-card"><div class="summary-value" id="stockYtdLeaderValue">—</div><div class="summary-meta">Highest selected-year return</div></article>
             <article class="summary-card"><div class="summary-value" id="stockYtdLaggardValue">—</div><div class="summary-meta">Lowest selected-year return</div></article>
           </section>
 
-          <div class="universe-controls" aria-label="Stock ranking controls">
+          <section class="analysis-section stock-ytd-participation-section" aria-labelledby="stockYtdParticipationTitle">
+            <div class="terminal-section-head">
+              <div>
+                <span class="terminal-kicker">LEADERSHIP BREADTH · SELECTED CALENDAR YEAR</span>
+                <h2 id="stockYtdParticipationTitle">How broadly current constituents are participating</h2>
+              </div>
+              <span class="terminal-state is-muted" id="stockYtdBreadthBand">Kite connection required</span>
+            </div>
+            <p class="section-note" id="stockYtdBreadthCopy">Connect Kite and load completed daily candles to measure the selected year across the current NIFTY 500 universe.</p>
+            <div class="stock-ytd-participation-grid">
+              <article class="stock-ytd-participation-card is-positive">
+                <span>POSITIVE YEAR RETURN</span>
+                <strong id="stockYtdPositiveCount">—</strong>
+                <div class="terminal-meter"><i id="stockYtdPositiveBar"></i></div>
+                <small id="stockYtdPositiveShare">Awaiting evaluated rows</small>
+              </article>
+              <article class="stock-ytd-participation-card is-negative">
+                <span>NEGATIVE YEAR RETURN</span>
+                <strong id="stockYtdNegativeCount">—</strong>
+                <div class="terminal-meter"><i id="stockYtdNegativeBar"></i></div>
+                <small id="stockYtdNegativeShare">Awaiting evaluated rows</small>
+              </article>
+              <article class="stock-ytd-participation-card is-cyan">
+                <span>ABOVE 20-SESSION AVERAGE</span>
+                <strong id="stockYtdAbove20Count">—</strong>
+                <div class="terminal-meter"><i id="stockYtdAbove20Bar"></i></div>
+                <small id="stockYtdAbove20Share">Awaiting evaluated rows</small>
+              </article>
+              <article class="stock-ytd-participation-card is-accent">
+                <span>ABOVE 200-SESSION AVERAGE</span>
+                <strong id="stockYtdAbove200Count">—</strong>
+                <div class="terminal-meter"><i id="stockYtdAbove200Bar"></i></div>
+                <small id="stockYtdAbove200Share">Awaiting evaluated rows</small>
+              </article>
+            </div>
+          </section>
+
+          <section class="analysis-section stock-ytd-extremes-section" aria-labelledby="stockYtdExtremesTitle">
+            <div class="terminal-section-head">
+              <div>
+                <span class="terminal-kicker">RETURN EXTREMES · VISIBLE EVALUATED SET</span>
+                <h2 id="stockYtdExtremesTitle">Strongest and weakest selected-year observations</h2>
+              </div>
+              <span class="terminal-context">Leadership evidence, not candidate ranks</span>
+            </div>
+            <div class="stock-ytd-extremes-grid">
+              <article class="stock-ytd-extreme-card is-positive">
+                <span>STRONGEST RETURN</span>
+                <h3 id="stockYtdStrongestSymbol">Awaiting ranking</h3>
+                <strong id="stockYtdStrongestReturn">—</strong>
+                <p id="stockYtdStrongestMetrics">Load a selected year to identify the strongest observation.</p>
+              </article>
+              <article class="stock-ytd-extreme-card is-negative">
+                <span>WEAKEST RETURN</span>
+                <h3 id="stockYtdWeakestSymbol">Awaiting ranking</h3>
+                <strong id="stockYtdWeakestReturn">—</strong>
+                <p id="stockYtdWeakestMetrics">Load a selected year to identify the weakest observation.</p>
+              </article>
+            </div>
+          </section>
+
+          <div class="universe-controls stock-ytd-primary-controls" aria-label="Stock ranking controls">
             <div class="selector-field">
               <label for="stockYtdYearSelect">Performance year</label>
               <select id="stockYtdYearSelect"><option value="">Latest available year</option></select>
@@ -3405,7 +3737,7 @@
             <p class="universe-source" id="stockYtdAsOfNote">The current constituent snapshot is used for every year; historical selections therefore carry survivorship bias.</p>
           </div>
 
-          <section class="analysis-section">
+          <section class="analysis-section stock-ytd-table-section">
             <h2>Stock performance ranking</h2>
             <p class="section-note" id="stockYtdPriceNote">LTP is the latest completed close for the selected year.</p>
             <div class="table-guide"><strong>How to read:</strong> YTD compares the selected year’s final available close with the last completed close before that year began. Positive distance from a moving average means price closed above that trend; negative distance means it closed below. Use the year and order controls to rank either leaders or laggards. Partial and unavailable rows stay visible so missing history is not hidden.</div>
@@ -3417,7 +3749,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section stock-ytd-contract-section">
             <h2>Contract and limitations</h2>
             <div class="analysis-note" id="stockYtdContractNote">The stock-ranking contract has not been loaded.</div>
           </section>
@@ -3436,7 +3768,7 @@
             <div class="analysis-status" id="historicalRegimesStatus">Historical cycle atlas not loaded</div>
           </div>
 
-          <div class="universe-controls" aria-label="Historical regime controls">
+          <div class="universe-controls historical-regimes-controls" aria-label="Historical regime controls">
             <div class="selector-field">
               <label for="historicalRegimesIndexSelect">Index history</label>
               <select id="historicalRegimesIndexSelect">
@@ -3457,14 +3789,39 @@
             <p class="universe-source">The story is primary; data disciplines the story. Daily gaps are never fabricated—older periods step down to weekly, monthly, quarterly, annual or documentary evidence.</p>
           </div>
 
-          <section class="summary-grid" aria-label="Historical cycle summary">
+          <section class="summary-grid historical-cycle-summary" aria-label="Historical cycle summary">
             <article class="summary-card"><div class="summary-value" id="historicalHistoryValue">—</div><div class="summary-meta">Completed daily observations in local atlas</div></article>
             <article class="summary-card"><div class="summary-value positive" id="historicalBullValue">—</div><div class="summary-meta">20% bullish phases</div></article>
             <article class="summary-card"><div class="summary-value negative" id="historicalBearValue">—</div><div class="summary-meta">20% bearish phases</div></article>
             <article class="summary-card"><div class="summary-value" id="historicalCorrectionValue">—</div><div class="summary-meta">10–20% corrections</div></article>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section historical-cycle-tape-section">
+            <h2>Regime timeline · local daily atlas</h2>
+            <p class="section-note" id="historicalCycleTapeNote">Build the atlas to compare the most recent confirmed bullish, bearish and correction phases.</p>
+            <div class="historical-cycle-tape" id="historicalCycleTape">
+              <article class="historical-cycle-event unavailable"><span>Awaiting atlas</span><strong>No confirmed price cycle loaded</strong></article>
+            </div>
+          </section>
+
+          <section class="analysis-section historical-featured-section">
+            <div class="historical-featured-head">
+              <div>
+                <h2>Selected episode story</h2>
+                <p class="section-note" id="historicalFeaturedMeta">Choose an episode to read the trigger, transmission, consequence and recovery sequence.</p>
+              </div>
+              <label class="selector-field" for="historicalEpisodeSelect"><span>Episode</span><select id="historicalEpisodeSelect"><option value="">Awaiting atlas</option></select></label>
+            </div>
+            <div class="historical-featured-episode" id="historicalFeaturedEpisode">
+              <article><span>1 · What happened?</span><p>Historical episode evidence has not been loaded.</p></article>
+              <article><span>2 · How did it happen?</span><p>Transmission evidence has not been loaded.</p></article>
+              <article><span>3 · What came out of it?</span><p>Consequences have not been loaded.</p></article>
+              <article><span>4 · How did markets come out?</span><p>Recovery evidence has not been loaded.</p></article>
+            </div>
+            <div class="historical-featured-evidence" id="historicalFeaturedEvidence"></div>
+          </section>
+
+          <section class="analysis-section historical-method-section">
             <h2>The story contract</h2>
             <p class="section-note">Every era and episode must answer the same four questions. A table or chart supports these chapters; it does not replace them.</p>
             <div class="historical-story-method-grid" id="historicalStoryMethodGrid">
@@ -3475,7 +3832,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section historical-frequency-section">
             <h2>Historical evidence frequency</h2>
             <p class="section-note">Resolution is period-specific. The engine takes the last available observation in each period and never interpolates missing prices.</p>
             <div class="historical-frequency-grid" id="historicalFrequencyGrid">
@@ -3487,7 +3844,7 @@
             <div class="analysis-note" id="historicalResolutionNote">The local series will also report its daily, weekly, monthly, quarterly and annual roll-up counts.</div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section historical-official-section">
             <h2>Official evidence spine</h2>
             <p class="section-note" id="historicalOfficialHistoryNote">Annual RBI Handbook observations have not been imported yet. These are long-horizon anchors, not substitutes for daily turning points.</p>
             <div class="summary-grid" id="historicalOfficialSeriesGrid">
@@ -3498,7 +3855,7 @@
             <div class="table-wrap"><table><thead><tr><th>Financial year</th><th>Sensex average</th><th>Sensex change</th><th>Real GDP growth</th><th>WPI change</th><th>Call money</th><th>INR / USD average</th><th>INR depreciation</th><th>Central GFD / GDP</th><th>FX reserves</th><th>WPI average</th><th>WPI base</th></tr></thead><tbody id="historicalOfficialTimelineBody"><tr><td colspan="12">Official annual history has not been imported.</td></tr></tbody></table></div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section historical-point-in-time-section">
             <h2>Point-in-time evidence readiness</h2>
             <p class="section-note" id="historicalPointInTimeNote">The release-date and revision audit has not been loaded. Retrospective official history can describe an episode but cannot automatically enter its historical information set.</p>
             <div class="summary-grid" id="historicalPointInTimeGrid">
@@ -3511,7 +3868,7 @@
             <div class="table-wrap"><table><thead><tr><th>Evidence family</th><th>Status</th><th>Release-dated</th><th>Retrospective only</th><th>Series ready</th><th>Frequency / coverage</th><th>Next requirement</th></tr></thead><tbody id="historicalPointInTimeBody"><tr><td colspan="7">Point-in-time readiness has not been audited.</td></tr></tbody></table></div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section historical-entry-section">
             <h2>Entry-date snapshots and held-out validation</h2>
             <p class="section-note" id="historicalEntryValidationNote">Entry snapshots have not been calculated yet. The contract will keep evidence known at the start separate from what happened afterwards.</p>
             <div class="summary-grid" id="historicalEntryValidationGrid">
@@ -3527,7 +3884,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section historical-traits-section">
             <h2>Recurring episode traits</h2>
             <p class="section-note" id="historicalFingerprintNote">Episode fingerprints have not been calculated yet. Missing categories will remain visible rather than being inferred.</p>
             <div class="historical-fingerprint-grid" id="historicalTraitGrid">
@@ -3535,7 +3892,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section historical-episodes-section">
             <h2>Sourced episode stories · 1978/79–2024/25</h2>
             <p class="section-note">These chapters connect observable annual market and macro evidence to official RBI and SEBI historical accounts. Evidence points describe the window; they do not prove a single cause.</p>
             <div class="historical-era-list" id="historicalEpisodeList">
@@ -3543,7 +3900,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section historical-era-section">
             <h2>Indian market story map</h2>
             <p class="section-note">These are research containers, not final verdicts. Each chapter becomes more quantitative as authoritative price and macro histories are connected.</p>
             <div class="historical-era-list" id="historicalEraList">
@@ -3551,7 +3908,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section historical-architecture-section">
             <h2>Identifier architecture</h2>
             <p class="section-note">The system separates what was observable at the time from what happened afterwards. This prevents future outcomes from leaking into the historical label.</p>
             <div class="historical-architecture-grid" id="historicalArchitectureGrid">
@@ -3563,7 +3920,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section historical-taxonomy-section">
             <h2>Market-cycle taxonomy</h2>
             <div class="table-guide"><strong>How to read:</strong> A bullish or bearish phase needs a 20% reversal from a confirmed extreme. A correction is a completed 10–20% drawdown. A rapid bear is a research flag when the 20% decline is confirmed within 45 sessions; it is not an official “crash” declaration.</div>
             <div class="historical-taxonomy-grid">
@@ -3573,26 +3930,26 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section historical-bull-section">
             <h2>Bullish regimes</h2>
             <p class="section-note" id="historicalBullNote">No bullish phases evaluated yet.</p>
             <div class="table-wrap"><table><thead><tr><th>Start trough</th><th>Confirmed</th><th>Peak / latest</th><th>Maximum advance</th><th>Duration</th><th>In-phase max drawdown</th><th>20 sessions after peak</th><th>60 sessions after peak</th><th>252 sessions after peak</th><th>Status</th></tr></thead><tbody id="historicalBullBody"><tr><td colspan="10">Historical atlas has not been loaded.</td></tr></tbody></table></div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section historical-bear-section">
             <h2>Bearish regimes and rapid-decline candidates</h2>
             <p class="section-note" id="historicalBearNote">No bearish phases evaluated yet.</p>
             <div class="table-guide"><strong>How to read:</strong> “Rapid bear” means the index reached the 20% threshold within 45 completed sessions. Recovery is the first later close at or above the prior peak, not merely a 20% bounce from the trough.</div>
             <div class="table-wrap"><table><thead><tr><th>Start peak</th><th>Confirmed</th><th>Trough / latest</th><th>Maximum decline</th><th>Duration</th><th>Speed</th><th>Prior peak recovered</th><th>20 sessions after trough</th><th>60 sessions after trough</th><th>Status</th></tr></thead><tbody id="historicalBearBody"><tr><td colspan="10">Historical atlas has not been loaded.</td></tr></tbody></table></div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section historical-correction-section">
             <h2>Corrections</h2>
             <p class="section-note" id="historicalCorrectionNote">No corrections evaluated yet.</p>
             <div class="table-wrap"><table><thead><tr><th>Prior peak</th><th>Trough</th><th>Recovery</th><th>Drawdown</th><th>Decline sessions</th><th>Recovery sessions</th><th>Total duration</th><th>20 sessions after trough</th><th>60 sessions after trough</th><th>Status</th></tr></thead><tbody id="historicalCorrectionBody"><tr><td colspan="10">Historical atlas has not been loaded.</td></tr></tbody></table></div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section historical-contraction-section">
             <h2>Economic contractions: recessions and depressions</h2>
             <p class="section-note">Equity-market cycles and economic cycles overlap imperfectly. The system will not call a recession or depression from price action alone.</p>
             <div class="split-panels">
@@ -3609,7 +3966,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section historical-behaviour-section">
             <h2>Behavioural fingerprints to test</h2>
             <p class="section-note">Human emotion cannot be observed directly. These are measurable hypotheses we can compare across episodes before allowing them to influence the current classifier.</p>
             <div class="historical-fingerprint-grid">
@@ -3621,7 +3978,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section historical-contract-section">
             <h2>Contract and limitations</h2>
             <div class="analysis-note" id="historicalRegimesContractNote">historical-regimes-v2 · Daily price cycles and the lower-frequency long-history story layer remain explicit about their different evidence standards.</div>
             <div class="historical-source-list" id="historicalSourceList"></div>
@@ -3641,7 +3998,7 @@
             <div class="analysis-status" id="backtestsStatus">Foundation ready · no approved strategies</div>
           </div>
 
-          <div class="universe-controls" aria-label="Backtest controls">
+          <div class="universe-controls backtests-primary-controls" aria-label="Backtest controls">
             <div class="selector-field">
               <label for="backtestsIndexSelect">Historical index</label>
               <select id="backtestsIndexSelect">
@@ -3661,14 +4018,51 @@
             <p class="universe-source">The first test is an episode-level classification study. It does not simulate trades or claim an investable return.</p>
           </div>
 
-          <section class="summary-grid" aria-label="Backtest research summary">
+          <section class="summary-grid backtests-overview-grid" aria-label="Backtest research summary">
             <article class="summary-card"><div class="summary-value" id="backtestsRegisteredValue">—</div><div class="summary-meta">Registered research contracts</div></article>
             <article class="summary-card"><div class="summary-value" id="backtestsCompletedValue">—</div><div class="summary-meta">Chronological tests completed</div></article>
             <article class="summary-card"><div class="summary-value" id="backtestsHeldOutValue">—</div><div class="summary-meta">Held-out evidence gates passed</div></article>
             <article class="summary-card"><div class="summary-value" id="backtestsApprovedValue">—</div><div class="summary-meta">Approved for decision support</div></article>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section backtests-decision-section" aria-labelledby="backtestsDecisionTitle">
+            <div class="backtests-section-heading">
+              <div>
+                <span class="terminal-kicker">Validation verdict</span>
+                <h2 id="backtestsDecisionTitle">What survived the research gates</h2>
+              </div>
+              <span class="backtests-verdict blocked" id="backtestsVerdictBadge">Decision support blocked</span>
+            </div>
+            <p class="backtests-decision-copy" id="backtestsDecisionCopy">Run the registered tests to separate completed research, held-out evidence and blocked hypotheses.</p>
+            <div class="backtests-decision-grid">
+              <article class="backtests-decision-card verdict">
+                <span>Admission</span>
+                <strong id="backtestsDecisionAdmission">Awaiting test</strong>
+                <div class="backtests-meter"><i id="backtestsDecisionAdmissionMeter"></i></div>
+                <p id="backtestsDecisionAdmissionNote">No research contract has been evaluated.</p>
+              </article>
+              <article class="backtests-decision-card evidence">
+                <span>Point-in-time evidence</span>
+                <strong id="backtestsDecisionEvidence">—</strong>
+                <div class="backtests-meter"><i id="backtestsDecisionEvidenceMeter"></i></div>
+                <p id="backtestsDecisionEvidenceNote">Release-dated evidence families have not been audited.</p>
+              </article>
+              <article class="backtests-decision-card heldout">
+                <span>Held-out stability</span>
+                <strong id="backtestsDecisionHeldout">—</strong>
+                <div class="backtests-meter"><i id="backtestsDecisionHeldoutMeter"></i></div>
+                <p id="backtestsDecisionHeldoutNote">Later-period evidence has not been tested.</p>
+              </article>
+              <article class="backtests-decision-card strongest">
+                <span>Strongest auditable observation</span>
+                <strong id="backtestsDecisionStrongest">—</strong>
+                <div class="backtests-meter"><i id="backtestsDecisionStrongestMeter"></i></div>
+                <p id="backtestsDecisionStrongestNote">No eligible held-out observation is loaded.</p>
+              </article>
+            </div>
+          </section>
+
+          <section class="analysis-section backtests-contract-section">
             <h2>Backtest contract</h2>
             <p class="section-note">A result appears here only after its rules, information set, universe, execution assumptions and validation split are frozen. Attractive charts cannot override a failed contract.</p>
             <div class="historical-architecture-grid">
@@ -3680,7 +4074,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section backtests-evidence-section">
             <h2>Entry-evidence admission gate</h2>
             <p class="section-note" id="backtestsEvidenceNote">Run the registered tests to audit which historical evidence can enter a decision-date snapshot without hindsight.</p>
             <div class="summary-grid" id="backtestsEvidenceGrid">
@@ -3694,7 +4088,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section backtests-traits-section">
             <h2>Historical-regime entry-trait test</h2>
             <p class="section-note" id="backtestsValidationNote">Run the registered tests to compare traits formed only from entry-date evidence with later 252-session outcomes.</p>
             <div class="summary-grid" id="backtestsValidationGrid">
@@ -3709,7 +4103,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section backtests-seasonality-section">
             <h2>All-index month seasonality test</h2>
             <p class="section-note" id="backtestsSeasonalityNote">Every supported index is tested as one index-by-month family. The discovery half is corrected for multiple testing before the held-out half is examined.</p>
             <div class="summary-grid" id="backtestsSeasonalityGrid">
@@ -3724,7 +4118,7 @@
             <div class="table-wrap"><table><thead><tr><th>Index</th><th>Month</th><th>Discovery excess</th><th>Family q-value</th><th>Held-out excess</th><th>Held-out p-value</th><th>Result</th></tr></thead><tbody id="backtestsSeasonalityCandidateBody"><tr><td colspan="7">No corrected discovery candidates have been loaded.</td></tr></tbody></table></div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section backtests-queue-section">
             <h2>Research queue</h2>
             <p class="section-note">These are candidate test families, not active strategies. Each remains blocked until its point-in-time data contract is auditable.</p>
             <div class="historical-fingerprint-grid">
@@ -3736,13 +4130,13 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section backtests-registry-section">
             <h2>Test registry</h2>
             <div class="table-guide"><strong>How to read:</strong> “Blocked” is a valid research outcome. A test must show discovery and held-out results separately, retain failed variants, and disclose every material assumption before it can move beyond exploration.</div>
             <div class="table-wrap"><table><thead><tr><th>Test</th><th>Hypothesis version</th><th>Universe</th><th>Discovery period</th><th>Held-out period</th><th>Costs included</th><th>Status</th></tr></thead><tbody id="backtestsRegistryBody"><tr><td colspan="7">No backtest contract has been loaded.</td></tr></tbody></table></div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section backtests-guardrails-section">
             <h2>Guardrails</h2>
             <div class="analysis-note" id="backtestsContractNote">Research-only foundation. No result on this page is a recommendation, execution instruction or promise of future performance. The engine will reject look-ahead data, current-constituent backfills, silent interpolation, outcome-driven rule changes and cost-free performance claims.</div>
           </section>
@@ -3761,14 +4155,14 @@
             <div class="analysis-status" id="alphaResearchStatus">Foundation not loaded</div>
           </div>
 
-          <section class="summary-grid" aria-label="Alpha Research readiness">
+          <section class="summary-grid alpha-overview-grid" aria-label="Alpha Research readiness">
             <article class="summary-card"><div class="summary-value" id="alphaLayersValue">—</div><div class="summary-meta">Architecture layers</div></article>
             <article class="summary-card"><div class="summary-value" id="alphaReadyValue">—</div><div class="summary-meta">Layers ready</div></article>
             <article class="summary-card"><div class="summary-value" id="alphaPartialValue">—</div><div class="summary-meta">Partial or foundation</div></article>
             <article class="summary-card"><div class="summary-value" id="alphaIdeasValue">0</div><div class="summary-meta">Ranked research ideas</div></article>
           </section>
 
-          <section class="analysis-section" id="alphaResearchStoryPanel" aria-label="Alpha Research evidence story">
+          <section class="analysis-section alpha-story-section" id="alphaResearchStoryPanel" aria-label="Alpha Research evidence story">
             <div class="section-heading-row"><div><div class="story-kicker">ALPHA RESEARCH STORY V11</div><h2 id="alphaStoryHeadline">Joining the evidence…</h2></div><div class="analysis-status" id="alphaStoryStatus">Checking readiness</div></div>
             <p class="section-note" id="alphaStoryInterpretation">The page will summarize what is working, the first material blocker and the next evidence task.</p>
             <div class="historical-architecture-grid" id="alphaStoryGrid">
@@ -3777,10 +4171,27 @@
             <div class="analysis-note" id="alphaStoryBoundary">Research readiness only. No forecast, recommendation or order.</div>
           </section>
 
+          <section class="analysis-section alpha-pipeline-section" aria-labelledby="alphaPipelineTitle">
+            <div class="alpha-pipeline-heading">
+              <div><span class="alpha-pipeline-kicker">Evidence chain · upstream gates control every downstream output</span><h2 id="alphaPipelineTitle">Path from validated data to a publishable research card</h2></div>
+              <span class="alpha-pipeline-badge blocked" id="alphaPipelineBadge">Publication blocked</span>
+            </div>
+            <p class="section-note" id="alphaPipelineNote">Loading the frozen architecture and first material blocker…</p>
+            <div class="alpha-pipeline-grid" id="alphaPipelineGrid">
+              <article class="alpha-pipeline-node blocked"><span>01</span><strong>Awaiting architecture</strong><small>No evidence chain loaded.</small></article>
+            </div>
+            <div class="alpha-output-strip">
+              <article><span>Operational layers</span><strong id="alphaPipelineOperational">—</strong></article>
+              <article><span>Developing layers</span><strong id="alphaPipelineDeveloping">—</strong></article>
+              <article><span>Blocked layers</span><strong id="alphaPipelineBlocked">—</strong></article>
+              <article><span>Published cards</span><strong id="alphaPipelineCards">0</strong></article>
+            </div>
+          </section>
+
           <details class="analysis-section alpha-audit-details" id="alphaTechnicalAudit">
             <summary><span class="alpha-audit-summary-copy"><span>Technical evidence and publication audits</span><small id="alphaAuditSummaryMeta">Open to review factor, filing, validation, overlay and research-card contracts.</small></span></summary>
             <div class="alpha-audit-body">
-          <section class="analysis-section">
+          <section class="analysis-section alpha-policy-section">
             <div class="section-heading-row"><div><div class="story-kicker">THE JOINED ARCHITECTURE</div><h2>Evidence before candidates</h2></div><button class="panel-button" id="refreshAlphaResearchButton" type="button">Refresh readiness</button></div>
             <p class="section-note">A layer may be useful while still incomplete. Ranked ideas remain blocked until factor evidence, regime compatibility, chronological validation and portfolio impact can be reviewed together.</p>
             <div class="historical-fingerprint-grid" id="alphaArchitectureGrid">
@@ -3788,7 +4199,7 @@
             </div>
           </section>
 
-          <section class="analysis-section">
+          <section class="analysis-section alpha-boundary-section">
             <h2>Current development focus</h2>
             <p class="section-note" id="alphaFocusNote">The next research contract will be shown after the architecture loads.</p>
             <div class="historical-architecture-grid" id="alphaFocusGrid"></div>
@@ -4070,6 +4481,8 @@
     const themeToggleText = document.getElementById('themeToggleText');
     const menuButton = document.getElementById('menuButton');
     const scrim = document.getElementById('scrim');
+    const terminalCommandInput = document.getElementById('terminalCommandInput');
+    const terminalCommandResults = document.getElementById('terminalCommandResults');
     const dashboardView = document.getElementById('dashboardView');
     const refreshDashboardStoryButton = document.getElementById('refreshDashboardStoryButton');
     const viewStoryPortfolioButton = document.getElementById('viewStoryPortfolioButton');
@@ -4156,6 +4569,11 @@
     const portfolioHoldingsPanel = document.getElementById('portfolioHoldingsPanel');
     const portfolioLoanPanel = document.getElementById('portfolioLoanPanel');
     const portfolioMutualFundsPanel = document.getElementById('portfolioMutualFundsPanel');
+    const portfolioLedgerBody = document.getElementById('portfolioLedgerBody');
+    const portfolioLedgerAddButton = document.getElementById('portfolioLedgerAddButton');
+    const portfolioLedgerAddFooterButton = document.getElementById('portfolioLedgerAddFooterButton');
+    const portfolioLedgerResetButton = document.getElementById('portfolioLedgerResetButton');
+    const portfolioLedgerAnalyzeButton = document.getElementById('portfolioLedgerAnalyzeButton');
     const loanHistoryBody = document.getElementById('loanHistoryBody');
     const loanTotalsBody = document.getElementById('loanTotalsBody');
     const loanScheduleBody = document.getElementById('loanScheduleBody');
@@ -4214,6 +4632,7 @@
     const seasonalityMonthsValue = document.getElementById('seasonalityMonthsValue');
     const seasonalityStrongestValue = document.getElementById('seasonalityStrongestValue');
     const seasonalitySessionsValue = document.getElementById('seasonalitySessionsValue');
+    const seasonalitySurvivedValue = document.getElementById('seasonalitySurvivedValue');
     const seasonalityMonthNote = document.getElementById('seasonalityMonthNote');
     const seasonalityWeekdayNote = document.getElementById('seasonalityWeekdayNote');
     const currentMonthLabel = document.getElementById('currentMonthLabel');
@@ -4249,6 +4668,8 @@
     const sidebarConnectionStatus = document.getElementById('sidebarConnectionStatus');
     const refreshIndexButton = document.getElementById('refreshIndexButton');
     const eodUpdateButton = document.getElementById('eodUpdateButton');
+    const eodUpdateLabel = document.getElementById('eodUpdateLabel');
+    const eodUpdateState = document.getElementById('eodUpdateState');
     const indexSnapshotBody = document.getElementById('indexSnapshotBody');
     const indexSnapshotNote = document.getElementById('indexSnapshotNote');
     const loadBreadthButton = document.getElementById('loadBreadthButton');
@@ -4290,12 +4711,122 @@
     let portfolioProgressTimer = null;
     let portfolioProgressStartedAt = 0;
     let portfolioProgressBaseDetail = '';
+    const portfolioLedgerStorageKey = 'pg-terminal-portfolio-ledger-v1';
+    const suppliedPortfolioLedger = [
+      { account: 'Primary', instrument: 'ICICI Pru short term fund', symbol: 'MF', entry_date: '2026-08-06', quantity: 6085.69, average_cost: 70.65, ltp: 70.45 },
+      { account: 'Primary', instrument: 'NCD', symbol: 'SHRIRAM FIN', entry_date: '2026-01-05', quantity: 1, average_cost: 99990, ltp: 104963 },
+      { account: 'Primary', instrument: 'Nifty PSU Bank ETF', symbol: 'PSUBANK', entry_date: '2026-10-01', quantity: 350, average_cost: 79.16, ltp: 80.32 },
+      { account: 'Primary', instrument: 'Nifty 50 ETF', symbol: 'NIFTYBEES', entry_date: '2026-10-23', quantity: 110, average_cost: 256.86, ltp: 258.37 },
+      { account: 'MB', instrument: 'Nippon Large Cap - direct growth', symbol: 'MF', entry_date: '2026-01-21', quantity: 1016.266, average_cost: 98.39, ltp: 94.07 },
+      { account: 'MB', instrument: 'ICICI prud multi asset - direct growth', symbol: 'MF', entry_date: '2024-10-07', quantity: 92.707, average_cost: 808.95, ltp: 852.62 },
+      { account: 'MB', instrument: 'HDFC mid-cap opp fund - direct growth', symbol: 'MF', entry_date: '2024-10-07', quantity: 380.498, average_cost: 197.1, ltp: 213.42 },
+      { account: 'MB', instrument: 'Franklin Templeton US opportunities FOF - direct growth', symbol: 'MF', entry_date: '2025-08-21', quantity: 345.117, average_cost: 86.92, ltp: 100.36 },
+      { account: 'MB', instrument: 'BEL', symbol: 'BEL', entry_date: '2024-06-04', quantity: 70, average_cost: 245.5, ltp: 362.5 },
+      { account: 'MB', instrument: 'GOLD ETF', symbol: 'GOLDBEES', entry_date: '2026-02-05', quantity: 355, average_cost: 124.12, ltp: 115.83 },
+      { account: 'MB', instrument: 'SILVER ETF', symbol: 'SILVERBEES', entry_date: '2026-02-05', quantity: 140, average_cost: 222.17, ltp: 183.41 },
+      { account: 'MB', instrument: 'Eris Life Sciences', symbol: 'ERIS', entry_date: '2026-03-23', quantity: 4, average_cost: 1273.9, ltp: 1108 },
+    ];
+    let portfolioLedgerRows = [];
     let dashboardMarketStory = null;
     let homeLoanTracker = null;
+    let terminalCommandMatches = [];
+    let terminalCommandActiveIndex = -1;
     const displayMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     function currentTheme() {
       return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+    }
+
+    const terminalCommandCatalogue = [
+      { label: 'Dashboard', detail: 'Market overview and connected story', page: 'Dashboard', terms: 'home regime breadth nifty index overview' },
+      { label: 'Market Sentiment', detail: 'Regime, flows and price strength', page: 'Market Sentiment', terms: 'sentiment flows regime risk' },
+      { label: 'F&O', detail: 'Futures price and open-interest positioning', page: 'F&O', terms: 'futures options derivatives oi positioning' },
+      { label: 'Screener', detail: 'Search and compare securities', page: 'Screener', terms: 'stocks securities equities search filter' },
+      { label: 'Seasonality Analysis', detail: 'Month, weekday and turn-of-month evidence', page: 'Seasonality Analysis', terms: 'calendar month weekday history' },
+      { label: 'Earnings Analysis', detail: 'Reported company fundamentals', page: 'Earnings Analysis', terms: 'results revenue profit eps filings' },
+      { label: 'Portfolio Analysis', detail: 'Editable holdings and portfolio diagnostics', page: 'Portfolio Analysis', terms: 'holdings ledger mutual funds risk returns' },
+      { label: 'Events Calendar', detail: 'Reviewed macro catalysts', page: 'Events Calendar', terms: 'events macro rbi fed cpi calendar' },
+      { label: 'Stock Data YTD', detail: 'Calendar-year stock performance', page: 'Stock Data YTD', terms: 'stock performance returns year to date ytd' },
+      { label: 'Historical Regimes', detail: 'Market episodes and policy cycles', page: 'Historical Regimes', terms: 'history regimes bull bear correction recession rbi' },
+      { label: 'Backtests', detail: 'Chronological validation evidence', page: 'Backtests', terms: 'test validation holdout strategy' },
+      { label: 'Alpha Research', detail: 'Evidence gates and candidate research', page: 'Alpha Research', terms: 'alpha factors candidates ranking research' },
+      { label: 'Run EOD update', detail: 'Refresh supported completed-session data', action: 'eod', terms: 'refresh update data sync' },
+      { label: 'Kite connection', detail: 'Open broker connection controls', action: 'kite', terms: 'login connect zerodha broker' },
+      { label: 'Portfolio ledger', detail: 'Open editable holdings table', action: 'ledger', terms: 'edit add remove rows holdings' },
+      { label: 'Load market breadth', detail: 'Open Dashboard and calculate breadth', action: 'breadth', terms: 'nifty 500 participation dma sectors' },
+      { label: 'Switch colour theme', detail: 'Toggle light and dark palettes', action: 'theme', terms: 'dark light appearance colour color' },
+    ];
+
+    function closeTerminalCommand() {
+      terminalCommandResults.hidden = true;
+      terminalCommandInput.setAttribute('aria-expanded', 'false');
+      terminalCommandInput.removeAttribute('aria-activedescendant');
+      terminalCommandActiveIndex = -1;
+    }
+
+    function terminalNavigate(page) {
+      const button = document.querySelector(`.nav-button[data-page="${page}"]`);
+      if (button) button.click();
+    }
+
+    function renderTerminalCommandResults() {
+      const query = terminalCommandInput.value.trim().toLowerCase();
+      terminalCommandMatches = terminalCommandCatalogue.filter((command) => {
+        const haystack = `${command.label} ${command.detail} ${command.terms || ''}`.toLowerCase();
+        return !query || haystack.includes(query) || query.split(/\s+/).every((term) => haystack.includes(term));
+      }).slice(0, 7);
+      if (query.length >= 2) {
+        terminalCommandMatches.push({ label: `Search “${terminalCommandInput.value.trim()}”`, detail: 'Filter the security Screener', action: 'security-search', query: terminalCommandInput.value.trim() });
+      }
+      terminalCommandActiveIndex = terminalCommandMatches.length ? 0 : -1;
+      terminalCommandResults.innerHTML = terminalCommandMatches.length ? terminalCommandMatches.map((command, index) => `<button class="terminal-command-result${index === terminalCommandActiveIndex ? ' active' : ''}" id="terminalCommandResult${index}" type="button" role="option" aria-selected="${index === terminalCommandActiveIndex}" data-terminal-command-index="${index}"><strong>${escapeHtml(command.label)}</strong><span>${escapeHtml(command.detail)}</span></button>`).join('') : '<div class="terminal-command-empty">No matching page or function.</div>';
+      terminalCommandResults.hidden = false;
+      terminalCommandInput.setAttribute('aria-expanded', 'true');
+      if (terminalCommandActiveIndex >= 0) terminalCommandInput.setAttribute('aria-activedescendant', `terminalCommandResult${terminalCommandActiveIndex}`);
+    }
+
+    function updateTerminalCommandActive(nextIndex) {
+      if (!terminalCommandMatches.length) return;
+      terminalCommandActiveIndex = (nextIndex + terminalCommandMatches.length) % terminalCommandMatches.length;
+      terminalCommandResults.querySelectorAll('.terminal-command-result').forEach((item, index) => {
+        const active = index === terminalCommandActiveIndex;
+        item.classList.toggle('active', active);
+        item.setAttribute('aria-selected', String(active));
+      });
+      terminalCommandInput.setAttribute('aria-activedescendant', `terminalCommandResult${terminalCommandActiveIndex}`);
+      const activeItem = document.getElementById(`terminalCommandResult${terminalCommandActiveIndex}`);
+      if (activeItem) activeItem.scrollIntoView({ block: 'nearest' });
+    }
+
+    function executeTerminalCommand(index) {
+      const command = terminalCommandMatches[index];
+      if (!command) return;
+      closeTerminalCommand();
+      terminalCommandInput.value = '';
+      if (command.page) {
+        terminalNavigate(command.page);
+      } else if (command.action === 'eod') {
+        if (!eodUpdateButton.disabled) eodUpdateButton.click();
+        else showNotice('EOD update is unavailable until Kite is connected.');
+      } else if (command.action === 'kite') {
+        kiteLoginButton.click();
+      } else if (command.action === 'ledger') {
+        terminalNavigate('Portfolio Analysis');
+        setPortfolioTab('holdings');
+        document.getElementById('portfolioLedgerTitle').scrollIntoView({ block: 'start' });
+      } else if (command.action === 'breadth') {
+        terminalNavigate('Dashboard');
+        if (!loadBreadthButton.disabled) loadBreadthButton.click();
+        document.getElementById('marketBreadthTitle').scrollIntoView({ block: 'start' });
+      } else if (command.action === 'theme') {
+        themeToggle.click();
+      } else if (command.action === 'security-search') {
+        terminalNavigate('Screener');
+        screenerSearchInput.value = command.query;
+        if (screenerRows.length) renderScreenerRows();
+        else loadLocalScreener(false);
+        screenerSearchInput.focus();
+      }
     }
 
     function updateThemeControl() {
@@ -4389,6 +4920,7 @@
       seasonalityMonthsValue.textContent = '— of 12';
       seasonalityStrongestValue.textContent = '—';
       seasonalitySessionsValue.textContent = '—';
+      seasonalitySurvivedValue.textContent = '— of 12';
       seasonalityDataStatus.textContent = 'Historical data not loaded';
       seasonalityLoadStatus.textContent = kiteLoginButton.classList.contains('kite-authenticated')
         ? 'Ready to load completed daily history.'
@@ -4436,6 +4968,64 @@
       short_covering: 'Short covering',
       no_clear_signal: 'No clear signal',
     };
+
+    function renderFnoPositioningMap(counts = {}, rows = [], comparableCount = 0, coverageText = '') {
+      const states = [
+        ['long_build_up', 'fnoLongBuildCount', 'fnoLongBuildBar'],
+        ['short_build_up', 'fnoShortBuildCount', 'fnoShortBuildBar'],
+        ['long_unwinding', 'fnoLongUnwindCount', 'fnoLongUnwindBar'],
+        ['short_covering', 'fnoShortCoverCount', 'fnoShortCoverBar'],
+      ];
+      const classifiedTotal = states.reduce((total, [key]) => total + Number(counts[key] || 0), 0);
+      states.forEach(([key, countId, barId]) => {
+        const value = Number(counts[key] || 0);
+        document.getElementById(countId).textContent = comparableCount ? value.toLocaleString('en-IN') : '—';
+        document.getElementById(barId).style.width = classifiedTotal ? `${100 * value / classifiedTotal}%` : '0%';
+      });
+      const noSignal = Number(counts.no_clear_signal || 0);
+      document.getElementById('fnoNoSignalCount').textContent = comparableCount ? noSignal.toLocaleString('en-IN') : '—';
+      document.getElementById('fnoMapCoverage').textContent = coverageText || 'Coverage and noise safeguards will appear with data.';
+      const rankedStates = states
+        .map(([key]) => [key, Number(counts[key] || 0)])
+        .sort((left, right) => right[1] - left[1]);
+      const leader = rankedStates[0];
+      const read = document.getElementById('fnoPositioningRead');
+      const context = document.getElementById('fnoPositioningContext');
+      if (!comparableCount) {
+        read.textContent = 'Awaiting comparison';
+        read.className = 'sentiment-band';
+        context.textContent = 'A second completed observation of the same contract is required before the distribution can be drawn.';
+      } else {
+        read.textContent = `${futuresStateLabels[leader[0]]} leads`;
+        read.className = `sentiment-band ${leader[0] === 'short_build_up' ? 'defensive' : leader[0] === 'long_build_up' ? 'constructive' : 'mixed'}`;
+        const classifiedShare = 100 * classifiedTotal / comparableCount;
+        context.textContent = `${classifiedTotal.toLocaleString('en-IN')} of ${comparableCount.toLocaleString('en-IN')} comparable contracts cleared the price/OI noise floor (${classifiedShare.toFixed(1)}%). ${futuresStateLabels[leader[0]]} is the largest classified quadrant with ${leader[1].toLocaleString('en-IN')} observations.`;
+      }
+
+      const renderLeaders = (targetId, key) => {
+        const eligible = rows
+          .filter((row) => Number.isFinite(Number(row[key])))
+          .sort((left, right) => Math.abs(Number(right[key])) - Math.abs(Number(left[key])))
+          .slice(0, 5);
+        const target = document.getElementById(targetId);
+        if (!eligible.length) {
+          target.innerHTML = '<p>Awaiting comparable contracts.</p>';
+          return;
+        }
+        const maximum = Math.max(...eligible.map((row) => Math.abs(Number(row[key]))), 0.01);
+        target.innerHTML = eligible.map((row, index) => {
+          const value = Number(row[key]);
+          return `<div class="fno-ranked-row ${value >= 0 ? 'positive' : 'negative'}">
+            <span class="fno-rank">${index + 1}</span>
+            <span class="fno-ranked-name"><strong>${row.underlying}</strong><small>${futuresStateLabels[row.state] || row.state}</small></span>
+            <span class="fno-ranked-track"><i style="width:${100 * Math.abs(value) / maximum}%"></i></span>
+            <strong class="fno-ranked-value">${signedPercentage(value)}</strong>
+          </div>`;
+        }).join('');
+      };
+      renderLeaders('fnoPriceLeaders', 'price_change_pct');
+      renderLeaders('fnoOiLeaders', 'oi_change_pct');
+    }
 
     function renderFuturesOiTable() {
       const filter = document.getElementById('futuresOiStateFilter').value;
@@ -4901,6 +5491,12 @@
         };
         document.getElementById('futuresOiTableNote').textContent = `${futuresOi.latest_coverage}/${expectedUniverse} contracts (${coveragePct.toFixed(1)}%) · ${futuresOi.latest_missing_count ?? Math.max(0, expectedUniverse - futuresOi.latest_coverage)} missing · ${futuresOi.stale_gap_count || 0} stale gaps · ${futuresOi.liquidity_excluded_count || 0} excluded for zero volume/OI.`;
         document.getElementById('futuresOiSafeguards').textContent = `Noise floor: |price| ≥ ${safeguards.minimum_absolute_price_change_pct.toFixed(2)}%, |OI| ≥ ${safeguards.minimum_absolute_oi_change_pct.toFixed(2)}% · maximum gap ${safeguards.maximum_calendar_gap_days} days · regime scoring off.`;
+        renderFnoPositioningMap(
+          counts,
+          futuresOiRows,
+          futuresOi.comparable_count,
+          `${futuresOi.latest_coverage}/${expectedUniverse} contracts · ${coveragePct.toFixed(1)}% coverage · ${futuresOi.rollover_baseline_count || 0} rollover baselines`,
+        );
         renderFuturesOiTable();
       } else {
         setSentimentBand('futuresOiBand', '');
@@ -4910,6 +5506,7 @@
         futuresOiRows = [];
         document.getElementById('futuresOiTableNote').textContent = 'Two observations of the same contract are required. These states do not affect the regime score.';
         document.getElementById('futuresOiSafeguards').textContent = 'Noise and coverage safeguards will appear with data.';
+        renderFnoPositioningMap();
         renderFuturesOiTable();
       }
     }
@@ -5942,6 +6539,7 @@
         stockYtdStatus.textContent = 'Connect Kite to load the ranking';
         stockYtdBody.innerHTML = '<tr><td colspan="9">Connect Kite to load the NIFTY 500 ranking.</td></tr>';
         document.getElementById('stockYtdResultCount').textContent = 'Connect Kite to retrieve completed daily candles.';
+        renderStockYtdComposition();
       }
     }
 
@@ -6057,6 +6655,53 @@
         `${rows.length.toLocaleString('en-IN')} of ${screenerRows.length.toLocaleString('en-IN')} rows shown · descriptive evidence only.`;
     }
 
+    function renderScreenerComposition(rows = [], benchmarkReturn = null) {
+      const readyRows = rows.filter((row) => row.status === 'ready');
+      const total = readyRows.length;
+      const metrics = [
+        ['return_20d_pct', 'screenerPositive20Count', 'screenerPositive20Bar', 'screenerPositive20Share'],
+        ['excess_20d_vs_nifty_pct', 'screenerOutperformCount', 'screenerOutperformBar', 'screenerOutperformShare'],
+        ['vs_50dma_pct', 'screenerAbove50Count', 'screenerAbove50Bar', 'screenerAbove50Share'],
+        ['vs_200dma_pct', 'screenerAbove200Count', 'screenerAbove200Bar', 'screenerAbove200Share'],
+      ];
+      const shares = {};
+      metrics.forEach(([key, countId, barId, shareId]) => {
+        const count = readyRows.filter((row) => row[key] !== null && row[key] !== undefined && Number(row[key]) > 0).length;
+        const share = total ? 100 * count / total : 0;
+        shares[key] = share;
+        document.getElementById(countId).textContent = total ? count.toLocaleString('en-IN') : '—';
+        document.getElementById(barId).style.width = `${share}%`;
+        document.getElementById(shareId).textContent = total ? `${share.toFixed(1)}% of ${total.toLocaleString('en-IN')} ready stocks` : 'of ready universe';
+      });
+
+      const band = document.getElementById('screenerParticipationBand');
+      const copy = document.getElementById('screenerParticipationCopy');
+      if (!total) {
+        band.textContent = 'Awaiting screen';
+        band.className = 'sentiment-band';
+        copy.textContent = 'Load the local screen to compare price direction, benchmark-relative strength and trend participation.';
+      } else {
+        const compositeShare = (shares.return_20d_pct + shares.excess_20d_vs_nifty_pct + shares.vs_50dma_pct + shares.vs_200dma_pct) / 4;
+        const state = compositeShare >= 60 ? 'Broad participation' : compositeShare >= 40 ? 'Selective participation' : 'Narrow participation';
+        band.textContent = state;
+        band.className = `sentiment-band ${compositeShare >= 60 ? 'constructive' : compositeShare >= 40 ? 'mixed' : 'defensive'}`;
+        copy.textContent = `${shares.return_20d_pct.toFixed(1)}% of ready stocks gained over 20 sessions and ${shares.excess_20d_vs_nifty_pct.toFixed(1)}% outperformed Nifty 50. ${shares.vs_200dma_pct.toFixed(1)}% remain above their 200-session average. Benchmark return: ${formatScreenerNumber(benchmarkReturn, 2, true, '%')}.`;
+      }
+
+      const ranked = readyRows
+        .filter((row) => row.excess_20d_vs_nifty_pct !== null && row.excess_20d_vs_nifty_pct !== undefined)
+        .sort((left, right) => Number(right.excess_20d_vs_nifty_pct) - Number(left.excess_20d_vs_nifty_pct));
+      const renderExtreme = (row, prefix) => {
+        document.getElementById(`${prefix}Symbol`).textContent = row ? row.symbol : 'Awaiting screen';
+        document.getElementById(`${prefix}Excess`).textContent = row ? formatScreenerNumber(row.excess_20d_vs_nifty_pct, 2, true, ' pt') : '—';
+        document.getElementById(`${prefix}Metrics`).textContent = row
+          ? `20-session return ${formatScreenerNumber(row.return_20d_pct, 2, true, '%')} · vs 200DMA ${formatScreenerNumber(row.vs_200dma_pct, 2, true, '%')} · 52-week drawdown ${formatScreenerNumber(row.drawdown_52w_pct, 2, true, '%')} · realised volatility ${formatScreenerNumber(row.realised_volatility_20d_pct, 2, false, '%')}`
+          : 'Return, trend and drawdown evidence will appear here.';
+      };
+      renderExtreme(ranked[0], 'screenerStrongest');
+      renderExtreme(ranked[ranked.length - 1], 'screenerWeakest');
+    }
+
     function renderScreener(result) {
       screenerPayload = result;
       screenerRows = Array.isArray(result.rows) ? result.rows : [];
@@ -6081,6 +6726,7 @@
         `<strong>${escapeHtml(contract.version || 'local-stock-screener-v1')}</strong><br>`
         + Object.entries(formulas).map(([key, value]) => `${escapeHtml(key)}: ${escapeHtml(value)}`).join('<br>')
         + `<br><br>${limitations.map((item) => `• ${escapeHtml(item)}`).join('<br>')}`;
+      renderScreenerComposition(screenerRows, result.benchmark_return_20d_pct);
       renderScreenerRows();
     }
 
@@ -6098,6 +6744,7 @@
       } catch (_error) {
         document.getElementById('screenerDataStatus').textContent = 'Local screen unavailable';
         document.getElementById('screenerTableBody').innerHTML = '<tr><td colspan="12">Stored stock history could not be evaluated.</td></tr>';
+        renderScreenerComposition();
         return false;
       } finally {
         refreshScreenerButton.disabled = false;
@@ -6110,6 +6757,59 @@
     function formatEventDate(value) {
       if (!value) return '—';
       return formatDisplayDate(String(value).slice(0, 10));
+    }
+
+    function renderMacroEventComposition(rows = []) {
+      const categoryLabels = {
+        central_bank: 'Central bank',
+        inflation: 'Inflation',
+        growth: 'Growth / production',
+      };
+      const setCount = (id, value) => {
+        document.getElementById(id).textContent = rows.length ? Number(value).toLocaleString('en-IN') : '—';
+      };
+      setCount('eventsCentralBankCount', rows.filter((event) => event.category === 'central_bank').length);
+      setCount('eventsInflationCount', rows.filter((event) => event.category === 'inflation').length);
+      setCount('eventsGrowthCount', rows.filter((event) => event.category === 'growth').length);
+      setCount('eventsThirtyDayCount', rows.filter((event) => Number(event.days_until) <= 30).length);
+
+      const lead = rows[0];
+      const leadDays = lead ? Number(lead.days_until) : null;
+      document.getElementById('eventsLeadDate').textContent = lead
+        ? lead.ongoing
+          ? `IN PROGRESS · THROUGH ${formatEventDate(lead.end_at || lead.start_at)}`
+          : `${leadDays === 0 ? 'TODAY' : `${leadDays} ${leadDays === 1 ? 'DAY' : 'DAYS'}`} · ${formatEventDate(lead.start_at)}`
+        : 'AWAITING CALENDAR';
+      document.getElementById('eventsLeadTitle').textContent = lead ? lead.title : 'No reviewed event loaded';
+      document.getElementById('eventsLeadMeta').textContent = lead
+        ? `${lead.region} · ${categoryLabels[lead.category] || lead.category} · ${lead.india_time ? `${formatDisplayDateTime(lead.india_time)} IST` : 'official time not specified'}`
+        : 'Load the reviewed calendar snapshot to see the next scheduled macro catalyst.';
+      document.getElementById('eventsLeadNote').textContent = lead
+        ? lead.note || 'Verify the linked official source before relying on the schedule.'
+        : 'Dates can change; verify the linked official source before relying on an event time.';
+      document.getElementById('eventNextNote').textContent = lead
+        ? lead.ongoing
+          ? `In progress: ${lead.title} · through ${formatEventDate(lead.end_at || lead.start_at)}.`
+          : `Next: ${lead.title} · ${formatEventDate(lead.start_at)} · ${leadDays} ${leadDays === 1 ? 'day' : 'days'} away.`
+        : 'No current or upcoming event matches the selected filters.';
+
+      document.getElementById('eventsHorizonStatus').textContent = rows.length
+        ? `${rows.length} visible · next six shown`
+        : 'No visible events';
+      document.getElementById('eventsTimeline').innerHTML = rows.length
+        ? rows.slice(0, 6).map((event) => {
+          const horizon = Number(event.days_until) <= 7 ? 'near' : Number(event.days_until) <= 30 ? 'month' : 'later';
+          const dayLabel = event.ongoing ? 'LIVE' : Number(event.days_until) === 0 ? 'TODAY' : `D-${Number(event.days_until)}`;
+          return `<article class="events-timeline-item is-${horizon}">
+            <span class="events-timeline-day">${dayLabel}</span>
+            <div>
+              <strong>${escapeHtml(event.title)}</strong>
+              <small>${formatEventDate(event.start_at)} · ${escapeHtml(event.region)} · ${escapeHtml(categoryLabels[event.category] || event.category)}</small>
+            </div>
+            <a class="official-source-link" href="${escapeHtml(event.source_url)}" target="_blank" rel="noreferrer">SOURCE</a>
+          </article>`;
+        }).join('')
+        : '<div class="events-timeline-empty">No reviewed events match the selected region and event type.</div>';
     }
 
     function renderMacroEventRows() {
@@ -6143,6 +6843,7 @@
         : '<tr><td colspan="8">No current or upcoming events match the selected filters.</td></tr>';
       document.getElementById('eventFilterStatus').textContent =
         `${rows.length} of ${macroEventRows.length} current/upcoming events shown · scheduled macro events only.`;
+      renderMacroEventComposition(rows);
     }
 
     function renderMacroEventsCalendar(result) {
@@ -6161,7 +6862,7 @@
       document.getElementById('eventNextNote').textContent = next.title
         ? next.ongoing
           ? `In progress: ${next.title} · through ${formatEventDate(next.end_at || next.start_at)}.`
-          : `Next: ${next.title} · ${formatEventDate(next.start_at)} · ${Number(next.days_until)} days away.`
+          : `Next: ${next.title} · ${formatEventDate(next.start_at)} · ${Number(next.days_until)} ${Number(next.days_until) === 1 ? 'day' : 'days'} away.`
         : 'No upcoming event is stored in the reviewed snapshot.';
       document.getElementById('newsEventsIntroNote').textContent =
         `${contract.version || 'macro-events-calendar-v1'} · scheduled macro events only. Automated sync, unscheduled news, and impact scoring remain off.`;
@@ -6198,6 +6899,7 @@
       } catch (_error) {
         document.getElementById('newsEventsStatus').textContent = 'Macro calendar unavailable';
         document.getElementById('macroEventsBody').innerHTML = '<tr><td colspan="8">The local macro-event snapshot could not be loaded.</td></tr>';
+        renderMacroEventComposition();
         return false;
       } finally {
         refreshNewsEventsButton.disabled = false;
@@ -6213,14 +6915,20 @@
     }
 
     function renderSeasonalityRows(targetId, rows) {
-      document.getElementById(targetId).innerHTML = rows.map((row) => `<tr>
+      document.getElementById(targetId).innerHTML = rows.map((row) => {
+        const average = Number(row.average_return_pct);
+        const directionClass = Number.isFinite(average)
+          ? average > 0.05 ? 'seasonality-positive' : average < -0.05 ? 'seasonality-negative' : 'seasonality-neutral'
+          : '';
+        return `<tr class="${directionClass}">
         <td>${escapeHtml(row.period)}</td>
         <td>${row.count}</td>
         <td>${formatSeasonalityPercentage(row.average_return_pct, true)}</td>
         <td>${formatSeasonalityPercentage(row.average_range_pct)}</td>
         <td>${formatSeasonalityPercentage(row.highest_return_pct, true)}</td>
         <td>${formatSeasonalityPercentage(row.lowest_return_pct, true)}</td>
-      </tr>`).join('');
+      </tr>`;
+      }).join('');
     }
 
     function yesOrNo(value) {
@@ -6253,6 +6961,7 @@
         <td>${yesOrNo(row.survived)}</td>
       </tr>`).join('');
       const summary = result.held_out_summary;
+      seasonalitySurvivedValue.textContent = `${summary.survived} of 12`;
       document.getElementById('seasonalityHeldOutNote').textContent =
         `Chronological split at ${formatDisplayDate(result.holdout_split_date)}. ${summary.same_direction}/12 months kept the same excess-return direction; ${summary.train_significant} were significant in training after FDR adjustment; ${summary.survived} survived both halves.`;
 
@@ -6725,6 +7434,69 @@
       return `${signed && number > 0 ? '+' : ''}${number.toLocaleString('en-IN', { maximumFractionDigits: 2 })} ${escapeHtml(unit || '')}`.trim();
     }
 
+    function earningsGrowth(value) {
+      if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
+      const number = Number(value);
+      return `${number > 0 ? '+' : ''}${number.toLocaleString('en-IN', { maximumFractionDigits: 2 })}%`;
+    }
+
+    function renderEarningsComposition(rows = []) {
+      const comparable = rows.filter((row) => row.status === 'ready');
+      const total = comparable.length;
+      const revenuePositive = comparable.filter((row) => Number(row.revenue_yoy_pct) > 0).length;
+      const profitImproved = comparable.filter((row) => ['profit_improved', 'turned_profitable'].includes(row.profit_state)).length;
+      const profitWeakened = comparable.filter((row) => ['profit_declined', 'moved_to_loss'].includes(row.profit_state)).length;
+      const epsPositive = comparable.filter((row) => Number(row.eps_yoy_pct) > 0).length;
+      const share = (count) => total ? (count / total) * 100 : 0;
+      const setPulse = (key, count) => {
+        const percent = share(count);
+        document.getElementById(`earnings${key}Count`).textContent = total ? count.toLocaleString('en-IN') : '—';
+        document.getElementById(`earnings${key}Bar`).style.width = `${Math.max(0, Math.min(100, percent))}%`;
+        document.getElementById(`earnings${key}Share`).textContent = total
+          ? `${percent.toFixed(1)}% of ${total.toLocaleString('en-IN')} comparable rows`
+          : 'Awaiting comparable rows';
+      };
+      setPulse('RevenuePositive', revenuePositive);
+      setPulse('ProfitImproved', profitImproved);
+      setPulse('ProfitWeakened', profitWeakened);
+      setPulse('EpsPositive', epsPositive);
+
+      const band = document.getElementById('earningsPulseBand');
+      const copy = document.getElementById('earningsPulseCopy');
+      band.className = 'terminal-state';
+      if (!total) {
+        band.textContent = 'Import required';
+        band.classList.add('is-muted');
+        copy.textContent = 'Import source-linked current and prior-year quarters to measure reported growth breadth. Consensus surprise is not available in this contract.';
+      } else {
+        const constructiveShare = (share(revenuePositive) + share(profitImproved) + share(epsPositive)) / 3;
+        if (constructiveShare >= 60) {
+          band.textContent = 'Broad improvement';
+          band.classList.add('is-positive');
+        } else if (constructiveShare >= 40) {
+          band.textContent = 'Mixed earnings tape';
+          band.classList.add('is-caution');
+        } else {
+          band.textContent = 'Broad weakness';
+          band.classList.add('is-negative');
+        }
+        copy.textContent = `${share(revenuePositive).toFixed(1)}% reported positive revenue growth, ${share(profitImproved).toFixed(1)}% improved profit and ${share(epsPositive).toFixed(1)}% reported positive EPS growth across the visible comparable set. Consensus surprise is not available.`;
+      }
+
+      const ranked = comparable
+        .filter((row) => row.revenue_yoy_pct !== null && row.revenue_yoy_pct !== undefined && Number.isFinite(Number(row.revenue_yoy_pct)))
+        .sort((left, right) => Number(right.revenue_yoy_pct) - Number(left.revenue_yoy_pct));
+      const setExtreme = (prefix, row) => {
+        document.getElementById(`earnings${prefix}Symbol`).textContent = row ? `${row.symbol} · ${row.company_name}` : 'Awaiting evidence';
+        document.getElementById(`earnings${prefix}Growth`).textContent = row ? earningsGrowth(row.revenue_yoy_pct) : '—';
+        document.getElementById(`earnings${prefix}Metrics`).textContent = row
+          ? `${row.fiscal_year} ${row.quarter} · ${row.basis} · profit ${String(row.profit_state).replaceAll('_', ' ')} · EPS YoY ${earningsGrowth(row.eps_yoy_pct)} · reported ${formatDisplayDate(row.reported_at)}`
+          : `Import comparable source-linked quarters to identify the ${prefix.toLowerCase()} observation.`;
+      };
+      setExtreme('Strongest', ranked[0]);
+      setExtreme('Weakest', ranked[ranked.length - 1]);
+    }
+
     function renderEarningsTable() {
       const rows = filteredEarningsRows();
       if (!rows.length) {
@@ -6753,6 +7525,7 @@
       document.getElementById('earningsResultCount').textContent = earningsPayload
         ? `${rows.length.toLocaleString('en-IN')} of ${earningsRows.length.toLocaleString('en-IN')} latest rows shown.`
         : 'No local earnings rows loaded.';
+      renderEarningsComposition(rows);
     }
 
     function renderEarnings(result) {
@@ -7881,6 +8654,118 @@
       }
     }
 
+    function cloneSuppliedPortfolioLedger() {
+      return suppliedPortfolioLedger.map((row) => ({ ...row }));
+    }
+
+    function loadPortfolioLedger() {
+      try {
+        const stored = window.localStorage.getItem(portfolioLedgerStorageKey);
+        portfolioLedgerRows = stored === null ? cloneSuppliedPortfolioLedger() : JSON.parse(stored);
+        if (!Array.isArray(portfolioLedgerRows)) portfolioLedgerRows = cloneSuppliedPortfolioLedger();
+      } catch (_error) {
+        portfolioLedgerRows = cloneSuppliedPortfolioLedger();
+      }
+    }
+
+    function savePortfolioLedger() {
+      try {
+        window.localStorage.setItem(portfolioLedgerStorageKey, JSON.stringify(portfolioLedgerRows));
+        return true;
+      } catch (_error) {
+        return false;
+      }
+    }
+
+    function portfolioLedgerValue(value) {
+      const number = Number(value);
+      return Number.isFinite(number) ? number : 0;
+    }
+
+    function portfolioLedgerComputed(row) {
+      const quantity = portfolioLedgerValue(row.quantity);
+      const averageCost = portfolioLedgerValue(row.average_cost);
+      const ltp = portfolioLedgerValue(row.ltp);
+      const invested = quantity * averageCost;
+      const current = quantity * ltp;
+      const pnl = current - invested;
+      return { invested, current, pnl, returnPct: invested > 0 ? (pnl / invested) * 100 : null };
+    }
+
+    function renderPortfolioLedger() {
+      let investedTotal = 0;
+      let currentTotal = 0;
+      portfolioLedgerBody.innerHTML = portfolioLedgerRows.length ? portfolioLedgerRows.map((row, index) => {
+        const computed = portfolioLedgerComputed(row);
+        investedTotal += Math.round((computed.invested + Number.EPSILON) * 100) / 100;
+        currentTotal += Math.round((computed.current + Number.EPSILON) * 100) / 100;
+        const value = (field) => escapeHtml(row[field] === null || row[field] === undefined ? '' : String(row[field]));
+        const numberInput = (field, label) => `<input class="portfolio-ledger-input number" type="number" step="any" min="0" data-ledger-index="${index}" data-ledger-field="${field}" value="${value(field)}" aria-label="${label} for ${escapeHtml(row.instrument || `holding ${index + 1}`)}">`;
+        return `<tr>
+          <td><input class="portfolio-ledger-input account" data-ledger-index="${index}" data-ledger-field="account" value="${value('account')}" aria-label="Account for holding ${index + 1}"></td>
+          <td><div class="portfolio-ledger-holding"><input class="portfolio-ledger-input instrument" data-ledger-index="${index}" data-ledger-field="instrument" value="${value('instrument')}" aria-label="Instrument for holding ${index + 1}"><input class="portfolio-ledger-input symbol" data-ledger-index="${index}" data-ledger-field="symbol" value="${value('symbol')}" aria-label="Symbol for holding ${index + 1}" placeholder="SYMBOL"></div></td>
+          <td><input class="portfolio-ledger-input date" type="date" data-ledger-index="${index}" data-ledger-field="entry_date" value="${value('entry_date')}" aria-label="Entry date for ${escapeHtml(row.instrument || `holding ${index + 1}`)}"></td>
+          <td>${numberInput('quantity', 'Quantity')}</td><td>${numberInput('average_cost', 'Average cost')}</td><td>${numberInput('ltp', 'LTP or NAV')}</td>
+          <td>${portfolioNumber(computed.invested, true)}</td><td>${portfolioNumber(computed.current, true)}</td>
+          <td class="portfolio-ledger-return ${stockYtdMetricClass(computed.pnl)}"><strong>${computed.pnl > 0 ? '+' : ''}${portfolioNumber(computed.pnl, true)}</strong><small>${stockYtdMetric(computed.returnPct)}</small></td>
+          <td><button class="portfolio-ledger-remove" type="button" data-ledger-remove="${index}" aria-label="Remove ${escapeHtml(row.instrument || `holding ${index + 1}`)}">Remove</button></td>
+        </tr>`;
+      }).join('') : '<tr><td colspan="10" class="portfolio-ledger-empty">No holdings yet. Choose “Add row” to create the first one.</td></tr>';
+      const pnlTotal = currentTotal - investedTotal;
+      const returnTotal = investedTotal > 0 ? (pnlTotal / investedTotal) * 100 : null;
+      document.getElementById('portfolioLedgerInvestedTotal').textContent = portfolioNumber(investedTotal, true);
+      document.getElementById('portfolioLedgerCurrentTotal').textContent = portfolioNumber(currentTotal, true);
+      const pnlElement = document.getElementById('portfolioLedgerPnlTotal');
+      pnlElement.textContent = `${pnlTotal > 0 ? '+' : ''}${portfolioNumber(pnlTotal, true)}`;
+      pnlElement.className = stockYtdMetricClass(pnlTotal);
+      const returnElement = document.getElementById('portfolioLedgerReturnTotal');
+      returnElement.textContent = stockYtdMetric(returnTotal);
+      returnElement.className = stockYtdMetricClass(returnTotal);
+      document.getElementById('portfolioLedgerStatus').textContent = `${portfolioLedgerRows.length.toLocaleString('en-IN')} holdings · ${portfolioNumber(currentTotal, true)} current value · stored only in this browser.`;
+    }
+
+    function portfolioLedgerAnalysisPreview() {
+      const rows = portfolioLedgerRows.filter((row) => String(row.instrument || '').trim() && String(row.symbol || '').trim() && portfolioLedgerValue(row.quantity) > 0).map((row) => {
+        const computed = portfolioLedgerComputed(row);
+        return {
+          Account: row.account || '',
+          Instrument: row.instrument || '',
+          Symbol: row.symbol || '',
+          'Entry Date': row.entry_date || '',
+          Quantity: portfolioLedgerValue(row.quantity),
+          'Average Cost': portfolioLedgerValue(row.average_cost),
+          'Invested Value': computed.invested,
+          'LTP / NAV': portfolioLedgerValue(row.ltp),
+          'Current Value': computed.current,
+        };
+      });
+      return {
+        rows,
+        detected_mapping: {
+          symbol: 'Symbol', name: 'Instrument', quantity: 'Quantity', average_cost: 'Average Cost',
+          current_value: 'Current Value', latest_price: 'LTP / NAV', entry_date: 'Entry Date',
+          invested_value: 'Invested Value', weight: null, sector: null,
+        },
+      };
+    }
+
+    async function analyzePortfolioLedger(showSuccess = true) {
+      const preview = portfolioLedgerAnalysisPreview();
+      if (!preview.rows.length) {
+        document.getElementById('portfolioLedgerStatus').textContent = 'Add at least one complete holding before analysis.';
+        if (showSuccess) showNotice('Add an instrument, symbol and positive quantity before analysis.');
+        return false;
+      }
+      savePortfolioLedger();
+      portfolioPreview = preview;
+      document.getElementById('portfolioStatus').textContent = 'Analyzing editable ledger';
+      const analyzed = await analyzePortfolio(showSuccess, false);
+      if (analyzed) {
+        document.getElementById('portfolioLedgerStatus').textContent = `${preview.rows.length.toLocaleString('en-IN')} holdings mapped to Portfolio Analysis and Dashboard · stored only in this browser.`;
+      }
+      return analyzed;
+    }
+
     function renderDashboardPortfolioSummary(result) {
       const status = document.getElementById('dashboardPortfolioStatus');
       const metricIds = [
@@ -7900,13 +8785,13 @@
       if (!result) {
         status.textContent = 'Upload required';
         status.className = 'workspace-summary-status unavailable';
-        document.getElementById('dashboardPortfolioCopy').textContent = 'Upload the latest holdings file in Portfolio Analysis to bring current returns and benchmark context into this dashboard.';
+        document.getElementById('dashboardPortfolioCopy').textContent = 'Open Portfolio Analysis to edit or analyze the browser-local holdings ledger.';
         metricIds.forEach((id) => setMetric(id, null, '—'));
         document.getElementById('dashboardPortfolioAsOf').textContent = '—';
         document.getElementById('dashboardPortfolioBenchmark').textContent = '—';
         document.getElementById('dashboardPortfolioGsec').textContent = '—';
         document.getElementById('dashboardPortfolioRiskCoverage').textContent = '—';
-        document.getElementById('dashboardPortfolioNote').textContent = 'The dashboard keeps no copy of your holdings. Portfolio results appear here only after an in-memory analysis in this browser session.';
+        document.getElementById('dashboardPortfolioNote').textContent = 'The editable portfolio ledger is stored only in this browser. Uploaded files remain in memory for the current session.';
         return;
       }
 
@@ -8018,7 +8903,7 @@
       portfolioIssuesBody.innerHTML = issues.length ? issues.map((row) => `<tr><td>${Number(row.row_number).toLocaleString('en-IN')}</td><td>${escapeHtml(row.symbol)}</td><td>${escapeHtml(String(row.reason).replaceAll('_', ' '))}</td></tr>`).join('')
         : '<tr><td colspan="3">No validation issues were found.</td></tr>';
       document.getElementById('portfolioContractNote').textContent = `${result.contract_version || 'portfolio-analysis-v1'}. ${(result.limitations || []).join(' ')}`;
-      document.getElementById('portfolioUploadStatus').textContent = `${Number(coverage.eligible_positions || 0)} eligible positions · ${Number(coverage.amfi_history_positions || 0)} AMFI histories · ${Number(coverage.amfi_nav_priced || 0)} AMFI current NAV · ${Number(coverage.google_finance_priced || 0)} Google Finance · ${Number(coverage.local_eod_priced || 0)} refreshed local EOD · ${Number(coverage.uploaded_price_fallback || 0)} uploaded fallback · data remains in memory only.`;
+      document.getElementById('portfolioUploadStatus').textContent = `${Number(coverage.eligible_positions || 0)} eligible positions · ${Number(coverage.amfi_history_positions || 0)} AMFI histories · ${Number(coverage.amfi_nav_priced || 0)} AMFI current NAV · ${Number(coverage.google_finance_priced || 0)} Google Finance · ${Number(coverage.local_eod_priced || 0)} refreshed local EOD · ${Number(coverage.uploaded_price_fallback || 0)} uploaded fallback · ledger stays in this browser.`;
       renderDashboardPortfolioSummary(result);
       renderDashboardStoryPortfolio(result, dashboardMarketStory);
       renderCombinedPortfolioStory();
@@ -8141,6 +9026,62 @@
         });
     }
 
+    function renderStockYtdComposition(rows = []) {
+      const evaluated = rows.filter((row) => row.ytd_performance_pct !== null && row.ytd_performance_pct !== undefined);
+      const total = evaluated.length;
+      const positive = evaluated.filter((row) => Number(row.ytd_performance_pct) > 0).length;
+      const negative = evaluated.filter((row) => Number(row.ytd_performance_pct) < 0).length;
+      const above20 = evaluated.filter((row) => Number(row.from_20dma_pct) > 0).length;
+      const above200 = evaluated.filter((row) => Number(row.from_200dma_pct) > 0).length;
+      const share = (count) => total ? (count / total) * 100 : 0;
+      const setParticipation = (key, count) => {
+        const percent = share(count);
+        document.getElementById(`stockYtd${key}Count`).textContent = total ? count.toLocaleString('en-IN') : '—';
+        document.getElementById(`stockYtd${key}Bar`).style.width = `${Math.max(0, Math.min(100, percent))}%`;
+        document.getElementById(`stockYtd${key}Share`).textContent = total
+          ? `${percent.toFixed(1)}% of ${total.toLocaleString('en-IN')} evaluated rows`
+          : 'Awaiting evaluated rows';
+      };
+      setParticipation('Positive', positive);
+      setParticipation('Negative', negative);
+      setParticipation('Above20', above20);
+      setParticipation('Above200', above200);
+
+      const band = document.getElementById('stockYtdBreadthBand');
+      const copy = document.getElementById('stockYtdBreadthCopy');
+      band.className = 'terminal-state';
+      if (!total) {
+        band.textContent = 'Kite connection required';
+        band.classList.add('is-muted');
+        copy.textContent = 'Connect Kite and load completed daily candles to measure the selected year across the current NIFTY 500 universe.';
+      } else {
+        const breadthScore = (share(positive) + share(above200)) / 2;
+        if (breadthScore >= 60) {
+          band.textContent = 'Broad leadership';
+          band.classList.add('is-positive');
+        } else if (breadthScore >= 40) {
+          band.textContent = 'Selective leadership';
+          band.classList.add('is-caution');
+        } else {
+          band.textContent = 'Broad weakness';
+          band.classList.add('is-negative');
+        }
+        const year = stockYtdPayload && stockYtdPayload.selected_year ? stockYtdPayload.selected_year : 'selected year';
+        copy.textContent = `${share(positive).toFixed(1)}% delivered a positive ${year} return, ${share(above20).toFixed(1)}% finished above the 20-session average and ${share(above200).toFixed(1)}% finished above the 200-session average in the visible evaluated set.`;
+      }
+
+      const ranked = [...evaluated].sort((left, right) => Number(right.ytd_performance_pct) - Number(left.ytd_performance_pct));
+      const setExtreme = (prefix, row) => {
+        document.getElementById(`stockYtd${prefix}Symbol`).textContent = row ? `${row.symbol} · ${row.name || row.symbol}` : 'Awaiting ranking';
+        document.getElementById(`stockYtd${prefix}Return`).textContent = row ? stockYtdMetric(row.ytd_performance_pct) : '—';
+        document.getElementById(`stockYtd${prefix}Metrics`).textContent = row
+          ? `${row.sector} · vs 20DMA ${stockYtdMetric(row.from_20dma_pct)} · vs 200DMA ${stockYtdMetric(row.from_200dma_pct)} · close ${row.ltp === null ? '—' : formatPrice(row.ltp)}`
+          : `Load a selected year to identify the ${prefix.toLowerCase()} observation.`;
+      };
+      setExtreme('Strongest', ranked[0]);
+      setExtreme('Weakest', ranked[ranked.length - 1]);
+    }
+
     function renderStockYtdTable() {
       const rows = filteredStockYtdRows();
       if (!rows.length) {
@@ -8161,6 +9102,7 @@
       document.getElementById('stockYtdResultCount').textContent = stockYtdPayload
         ? `${rows.length.toLocaleString('en-IN')} of ${stockYtdRows.length.toLocaleString('en-IN')} rows shown · unavailable data remains at the bottom.`
         : 'Connect Kite to retrieve completed daily candles.';
+      renderStockYtdComposition(rows);
     }
 
     function renderStockYtd(result) {
@@ -8226,6 +9168,7 @@
         return true;
       } catch (_error) {
         stockYtdStatus.textContent = 'The local stock-ranking service is unavailable';
+        renderStockYtdComposition();
         return false;
       } finally {
         loadStockYtdButton.textContent = 'Load NIFTY 500 ranking';
@@ -8243,6 +9186,60 @@
       return Number.isFinite(Number(calendarDays))
         ? `${sessionText} · ${Number(calendarDays).toLocaleString('en-IN')} days`
         : sessionText;
+    }
+
+    function renderHistoricalCycleTape(bulls, bears, corrections) {
+      const events = [
+        ...bulls.map((row) => ({
+          type: 'bull', label: 'Bullish phase', date: row.start_date, end: row.extreme_date,
+          move: row.move_pct, duration: row.duration_sessions, status: row.status,
+        })),
+        ...bears.map((row) => ({
+          type: 'bear', label: row.rapid_decline ? 'Rapid bear' : 'Bearish phase', date: row.start_date, end: row.extreme_date,
+          move: row.move_pct, duration: row.duration_sessions, status: row.status,
+        })),
+        ...corrections.map((row) => ({
+          type: 'correction', label: 'Correction', date: row.peak_date, end: row.trough_date,
+          move: row.drawdown_pct, duration: row.total_sessions, status: row.status,
+        })),
+      ].sort((left, right) => String(left.date || '').localeCompare(String(right.date || ''))).slice(-12);
+      const tape = document.getElementById('historicalCycleTape');
+      tape.innerHTML = events.length
+        ? events.map((event) => `<article class="historical-cycle-event ${event.type}">
+            <span>${escapeHtml(event.label)} · ${formatDisplayDate(event.date)}</span>
+            <strong>${signedPercentage(event.move)}</strong>
+            <small>to ${formatDisplayDate(event.end)} · ${Number(event.duration || 0).toLocaleString('en-IN')} sessions</small>
+          </article>`).join('')
+        : '<article class="historical-cycle-event unavailable"><span>Awaiting atlas</span><strong>No confirmed price cycle loaded</strong></article>';
+      document.getElementById('historicalCycleTapeNote').textContent = events.length
+        ? `${events.length} most recent completed or active price-cycle observations. Threshold labels are transparent conventions; documentary eras remain separate.`
+        : 'Build the atlas to compare the most recent confirmed bullish, bearish and correction phases.';
+    }
+
+    function renderHistoricalFeaturedEpisode(episodes, requestedIndex) {
+      const index = Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < episodes.length
+        ? requestedIndex
+        : Math.max(0, episodes.length - 1);
+      const episode = episodes[index];
+      if (!episode) return;
+      const chapters = [
+        ['1 · What happened?', episode.what_happened],
+        ['2 · How did it happen?', episode.how_it_happened],
+        ['3 · What came out of it?', episode.what_came_out],
+        ['4 · How did markets come out?', episode.how_markets_came_out],
+      ];
+      document.getElementById('historicalFeaturedMeta').textContent =
+        `${episode.period} · ${episode.family} · ${episode.title} · ${episode.research_state}`;
+      document.getElementById('historicalFeaturedEpisode').innerHTML = chapters.map(([label, copy]) => `<article>
+        <span>${escapeHtml(label)}</span><p>${escapeHtml(copy || 'Evidence unavailable.')}</p>
+      </article>`).join('');
+      const evidence = Array.isArray(episode.evidence) ? episode.evidence.slice(0, 7) : [];
+      document.getElementById('historicalFeaturedEvidence').innerHTML = evidence.map((point) => `<div>
+        <strong>${Number(point.value) > 0 ? '+' : ''}${Number(point.value).toFixed(2)}${escapeHtml(point.suffix)}</strong>
+        <span>${escapeHtml(point.label)} · ${escapeHtml(point.period)}</span>
+      </div>`).join('');
+      const select = document.getElementById('historicalEpisodeSelect');
+      if (select.value !== String(index)) select.value = String(index);
     }
 
     function renderHistoricalRegimes(result) {
@@ -8270,6 +9267,17 @@
       const entryTraitValidation = Array.isArray(entryValidation.trait_validation) ? entryValidation.trait_validation : [];
       const pointInTime = result.point_in_time_readiness || {};
       const pointInTimeSummary = pointInTime.summary || {};
+      renderHistoricalCycleTape(bulls, bears, corrections);
+      const episodeSelect = document.getElementById('historicalEpisodeSelect');
+      const previousEpisodeValue = episodeSelect.value;
+      const previousEpisode = previousEpisodeValue === '' ? Number.NaN : Number(previousEpisodeValue);
+      episodeSelect.innerHTML = episodeStories.length
+        ? episodeStories.map((episode, index) => `<option value="${index}">${escapeHtml(episode.period)} · ${escapeHtml(episode.title)}</option>`).join('')
+        : '<option value="">No sourced episodes</option>';
+      const selectedEpisode = Number.isInteger(previousEpisode) && previousEpisode >= 0 && previousEpisode < episodeStories.length
+        ? previousEpisode
+        : Math.max(0, episodeStories.length - 1);
+      renderHistoricalFeaturedEpisode(episodeStories, selectedEpisode);
       const pointInTimeCategories = Array.isArray(pointInTime.categories) ? pointInTime.categories : [];
 
       document.getElementById('historicalStoryMethodGrid').innerHTML = storyMethod.length
@@ -8430,11 +9438,11 @@
               .map((key) => sourceByKey[String(key)])
               .filter(Boolean)
               .map((source) => `<a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">${escapeHtml(source.name)}</a>`);
-            return `<article class="historical-era">
-              <div class="historical-era-head">
+            return `<details class="historical-era historical-episode-record">
+              <summary class="historical-era-head">
                 <div><div class="historical-era-period">${escapeHtml(episode.period)} · ${escapeHtml(episode.family)}</div><h3>${escapeHtml(episode.title)}</h3></div>
                 <div class="historical-era-meta">${escapeHtml(episode.research_state)}</div>
-              </div>
+              </summary>
               <div class="historical-era-story">
                 <div class="historical-era-chapter"><strong>What happened?</strong><p>${escapeHtml(episode.what_happened)}</p></div>
                 <div class="historical-era-chapter"><strong>How did it happen?</strong><p>${escapeHtml(episode.how_it_happened)}</p></div>
@@ -8456,7 +9464,7 @@
               </details>
               <div class="historical-episode-evidence">${evidence.map((point) => `<div class="historical-evidence-point"><strong>${Number(point.value) > 0 ? '+' : ''}${Number(point.value).toFixed(2)}${escapeHtml(point.suffix)}</strong><span>${escapeHtml(point.label)} · ${escapeHtml(point.period)}</span></div>`).join('')}</div>
               <div class="historical-episode-sources">Official anchors: ${sourceLinks.join(' · ') || 'additional source joins pending'}</div>
-            </article>`;
+            </details>`;
           }).join('')
         : '<article class="historical-era"><div class="historical-era-head"><div><div class="historical-era-period">1978/79–2024/25</div><h3>Official macro evidence is not fully connected yet</h3></div></div></article>';
 
@@ -8635,6 +9643,62 @@
       const seasonalityIndices = Array.isArray(seasonality.indices) ? seasonality.indices : [];
       const seasonalityCandidates = Array.isArray(seasonality.candidates) ? seasonality.candidates : [];
       const correctedCandidates = seasonalityCandidates.filter((row) => row.discovery_significant);
+      const heldOutTraits = traits.filter((row) => Number(row.held_out && row.held_out.episodes || 0) > 0);
+      const heldOutTraitPasses = heldOutTraits.filter((row) => row.held_out_gate_passed).length;
+      const heldOutSeasonalityPasses = seasonalityCandidates.filter((row) => row.survived).length;
+      const heldOutPasses = heldOutTraitPasses + heldOutSeasonalityPasses;
+      const heldOutCandidates = heldOutTraits.length + correctedCandidates.length;
+      const evidenceFamilies = Number(evidenceSummary.categories || 0);
+      const evidenceReady = Number(evidenceSummary.ready_categories || 0);
+      const evidencePct = evidenceFamilies ? Math.round((evidenceReady / evidenceFamilies) * 100) : 0;
+      const heldOutPct = heldOutCandidates ? Math.round((heldOutPasses / heldOutCandidates) * 100) : 0;
+      const approved = Number(summary.approved_for_decision_support || 0);
+      const strongestTrait = heldOutTraits
+        .filter((row) => row.held_out.median_252_return_pct != null && Number.isFinite(Number(row.held_out.median_252_return_pct)))
+        .sort((a, b) => Math.abs(Number(b.held_out.median_252_return_pct)) - Math.abs(Number(a.held_out.median_252_return_pct)))[0];
+      const strongestSeasonality = correctedCandidates
+        .filter((row) => Number.isFinite(Number(row.test_excess_pct)))
+        .sort((a, b) => Math.abs(Number(b.test_excess_pct)) - Math.abs(Number(a.test_excess_pct)))[0];
+      const strongestTraitValue = strongestTrait ? Math.abs(Number(strongestTrait.held_out.median_252_return_pct)) : -1;
+      const strongestSeasonalityValue = strongestSeasonality ? Math.abs(Number(strongestSeasonality.test_excess_pct)) : -1;
+      const strongestIsTrait = strongestTraitValue >= strongestSeasonalityValue;
+      const strongestValue = strongestIsTrait ? strongestTraitValue : strongestSeasonalityValue;
+      const strongestLabel = strongestIsTrait && strongestTrait
+        ? strongestTrait.label
+        : strongestSeasonality ? `${strongestSeasonality.instrument} · ${strongestSeasonality.period}` : 'No eligible observation';
+      const strongestDisplay = strongestValue >= 0
+        ? signedPercentage(strongestIsTrait ? strongestTrait.held_out.median_252_return_pct : strongestSeasonality.test_excess_pct)
+        : '—';
+      const strongestPassed = strongestIsTrait
+        ? Boolean(strongestTrait && strongestTrait.held_out_gate_passed)
+        : Boolean(strongestSeasonality && strongestSeasonality.survived);
+
+      const verdictBadge = document.getElementById('backtestsVerdictBadge');
+      verdictBadge.textContent = approved ? 'Decision support admitted' : 'Decision support blocked';
+      verdictBadge.className = `backtests-verdict ${approved ? 'ready' : 'blocked'}`;
+      document.getElementById('backtestsDecisionCopy').textContent = approved
+        ? `${approved} registered result${approved === 1 ? '' : 's'} cleared every configured admission gate. Review the audit trail before use.`
+        : `${Number(summary.chronological_tests_completed || 0)} chronological test${Number(summary.chronological_tests_completed || 0) === 1 ? '' : 's'} completed, but none cleared every evidence, sample-stability and implementation gate.`;
+      document.getElementById('backtestsDecisionAdmission').textContent = approved ? `${approved} admitted` : '0 admitted';
+      document.getElementById('backtestsDecisionAdmissionNote').textContent = approved
+        ? 'At least one contract is approved for decision support; this is not a trade instruction.'
+        : 'Negative and blocked outcomes remain visible; no result may drive a decision yet.';
+      document.getElementById('backtestsDecisionAdmissionMeter').style.width = approved ? '100%' : '3%';
+      document.getElementById('backtestsDecisionEvidence').textContent = `${evidenceReady}/${evidenceFamilies || 0} families ready`;
+      document.getElementById('backtestsDecisionEvidenceNote').textContent = pointInTime.entry_snapshot_admission === 'ready'
+        ? 'Release-vintage evidence is ready for entry-date testing.'
+        : `${Number(evidenceSummary.release_dated_observations || 0).toLocaleString('en-IN')} release-dated observations; admission remains blocked.`;
+      document.getElementById('backtestsDecisionEvidenceMeter').style.width = `${Math.max(evidencePct, evidenceFamilies ? 3 : 0)}%`;
+      document.getElementById('backtestsDecisionHeldout').textContent = heldOutCandidates ? `${heldOutPasses}/${heldOutCandidates} passed` : 'No candidates';
+      document.getElementById('backtestsDecisionHeldoutNote').textContent = heldOutCandidates
+        ? `${heldOutTraitPasses} trait gate${heldOutTraitPasses === 1 ? '' : 's'} and ${heldOutSeasonalityPasses} corrected month effect${heldOutSeasonalityPasses === 1 ? '' : 's'} survived later-period checks.`
+        : 'No eligible held-out candidate was available.';
+      document.getElementById('backtestsDecisionHeldoutMeter').style.width = `${Math.max(heldOutPct, heldOutCandidates ? 3 : 0)}%`;
+      document.getElementById('backtestsDecisionStrongest').textContent = strongestDisplay;
+      document.getElementById('backtestsDecisionStrongestNote').textContent = strongestValue >= 0
+        ? `${strongestLabel}. ${strongestPassed ? 'Held-out gate passed; still research-only.' : 'Observed in held-out data, but its gate did not pass.'}`
+        : 'No eligible held-out observation is loaded.';
+      document.getElementById('backtestsDecisionStrongestMeter').style.width = strongestValue >= 0 ? `${Math.min(100, Math.max(4, strongestValue * 4))}%` : '0%';
       document.getElementById('backtestsSeasonalityGrid').innerHTML = `
         <article class="summary-card"><div class="summary-value">${Number(seasonalitySummary.indices_tested || 0).toLocaleString('en-IN')}/${Number(seasonalitySummary.supported_indices || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Supported indices tested</div></article>
         <article class="summary-card"><div class="summary-value">${Number(seasonalitySummary.month_tests_evaluated || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Index-month tests</div></article>
@@ -8727,8 +9791,37 @@
       document.getElementById('alphaReadyValue').textContent = Number(summary.ready || 0).toLocaleString('en-IN');
       document.getElementById('alphaPartialValue').textContent = Number(summary.partial_or_foundation || 0).toLocaleString('en-IN');
       document.getElementById('alphaIdeasValue').textContent = Number(summary.ranked_ideas || 0).toLocaleString('en-IN');
+      const operationalLayers = layers.filter((layer) => layer.state === 'ready').length;
+      const developingLayers = layers.filter((layer) => ['partial', 'foundation'].includes(layer.state)).length;
+      const blockedLayers = layers.filter((layer) => layer.state === 'blocked').length;
+      const firstBlockedIndex = layers.findIndex((layer) => layer.state === 'blocked');
+      const firstBlocked = firstBlockedIndex >= 0 ? layers[firstBlockedIndex] : null;
+      const publishedCards = Number(result.research_cards && result.research_cards.summary && result.research_cards.summary.cards_published || 0);
+      const publicationGates = Number(result.research_cards && result.research_cards.summary && result.research_cards.summary.publication_gates || 0);
+      const publicationGatesReady = Number(result.research_cards && result.research_cards.summary && result.research_cards.summary.gates_ready || 0);
+      const pipelineBadge = document.getElementById('alphaPipelineBadge');
+      pipelineBadge.textContent = publishedCards ? `${publishedCards} card${publishedCards === 1 ? '' : 's'} published` : 'Publication blocked';
+      pipelineBadge.className = `alpha-pipeline-badge ${publishedCards ? 'ready' : 'blocked'}`;
+      document.getElementById('alphaPipelineNote').textContent = firstBlocked
+        ? `The chain first stops at ${firstBlocked.title}: ${firstBlocked.summary} Downstream ranks and cards remain withheld.`
+        : 'Every architecture layer is operational; publication gates still determine whether a complete research card may appear.';
+      document.getElementById('alphaPipelineGrid').innerHTML = layers.length
+        ? layers.map((layer, index) => {
+            const state = layer.state === 'ready' ? 'ready' : layer.state === 'blocked' ? 'blocked' : 'developing';
+            const label = layer.state === 'ready' ? 'Operational' : layer.state === 'blocked' ? 'Blocked' : 'Developing';
+            return `<article class="alpha-pipeline-node ${state}${index === firstBlockedIndex ? ' first-blocker' : ''}">
+              <span>${String(index + 1).padStart(2, '0')} · ${label}</span>
+              <strong>${escapeHtml(layer.title || 'Architecture layer')}</strong>
+              <small>${escapeHtml(layer.next_gate || layer.summary || 'No next gate specified.')}</small>
+            </article>`;
+          }).join('')
+        : '<article class="alpha-pipeline-node blocked"><span>01 · Blocked</span><strong>Architecture unavailable</strong><small>No evidence layers were returned.</small></article>';
+      document.getElementById('alphaPipelineOperational').textContent = `${operationalLayers}/${layers.length || 0}`;
+      document.getElementById('alphaPipelineDeveloping').textContent = developingLayers.toLocaleString('en-IN');
+      document.getElementById('alphaPipelineBlocked').textContent = blockedLayers.toLocaleString('en-IN');
+      document.getElementById('alphaPipelineCards').textContent = publishedCards.toLocaleString('en-IN');
       document.getElementById('alphaAuditSummaryMeta').textContent =
-        `${Number(summary.layers || 0)} layers · ${Number(summary.ready || 0)} operational · ${Number(summary.partial_or_foundation || 0)} developing · ${Number(summary.blocked || 0)} blocked. Open for the full audit trail.`;
+        `${Number(summary.layers || 0)} layers · ${Number(summary.ready || 0)} operational · ${Number(summary.partial_or_foundation || 0)} developing · ${Number(summary.blocked || 0)} blocked · ${publicationGatesReady}/${publicationGates} publication gates ready. Open for the full audit trail.`;
       document.getElementById('alphaArchitectureGrid').innerHTML = layers.length
         ? layers.map((layer, index) => `<article class="historical-fingerprint-card ${layer.state === 'ready' ? 'ready' : layer.state === 'blocked' ? 'unavailable' : 'partial'}">
             <div class="historical-step">${String(index + 1).padStart(2, '0')} · ${escapeHtml(stateLabel[layer.state] || layer.state || 'Unknown')}</div>
@@ -9356,17 +10449,21 @@
         return;
       }
       eodUpdateButton.disabled = true;
+      eodUpdateButton.classList.remove('eod-updated', 'eod-partial', 'eod-failed');
       const totalStages = 15;
       let completedStages = 0;
+      let updateSucceeded = false;
+      let updateAborted = false;
       const failedStages = [];
       const retriedStages = [];
       const updateProgress = (stage) => {
         const percentage = Math.round(completedStages * 100 / totalStages);
         eodUpdateButton.classList.add('eod-running');
         eodUpdateButton.style.setProperty('--eod-progress', `${percentage}%`);
-        eodUpdateButton.textContent = window.innerWidth <= 430
+        eodUpdateLabel.textContent = window.innerWidth <= 430
           ? `EOD · ${percentage}%`
           : `Updating EOD · ${percentage}%`;
+        eodUpdateState.textContent = stage;
         eodUpdateButton.title = stage;
         eodUpdateButton.setAttribute('aria-label', `${stage}. ${percentage}% complete`);
       };
@@ -9418,22 +10515,36 @@
         );
         const workspacesRefreshed = await runStage('Refreshing every workspace and portfolio story', refreshAllWorkspaceViewsAfterEod);
         if (indexUpdated && eodIndicesUpdated && institutionalFlowsUpdated && confirmedFpiUpdated && macroContextUpdated && globalRiskUpdated && futuresOiUpdated && breadthUpdated && stockHistoryUpdated && monthlyLeadersUpdated && historicalLeadersUpdated && officialHistoryUpdated && sentimentUpdated && factorSnapshotSaved && workspacesRefreshed) {
+          updateSucceeded = true;
           const retrySummary = retriedStages.length
             ? ` ${retriedStages.length} stage${retriedStages.length === 1 ? '' : 's'} recovered on retry.`
             : '';
           showNotice(`EOD update completed. All market data, workspaces, and the in-memory portfolio story are refreshed.${retrySummary}`);
         } else {
-          const failedSummary = failedStages.slice(0, 3).join(' · ');
-          const remaining = Math.max(0, failedStages.length - 3);
-          showNotice(`EOD update completed with ${failedStages.length} unavailable stage${failedStages.length === 1 ? '' : 's'}: ${failedSummary}${remaining ? ` · +${remaining} more` : ''}.`);
+          const failedSummary = failedStages.join(' · ');
+          showNotice(`EOD update completed with ${failedStages.length} unavailable stage${failedStages.length === 1 ? '' : 's'}: ${failedSummary}.`);
         }
+      } catch (_error) {
+        updateAborted = true;
+        showNotice('EOD update failed before every stage could complete. The completed-stage count remains visible on the update control.');
       } finally {
         window.setTimeout(() => {
+          const successfulStages = Math.max(0, completedStages - failedStages.length);
+          const completionState = updateSucceeded
+            ? 'successful'
+            : (updateAborted || failedStages.length >= totalStages ? 'failed' : 'partial');
           eodUpdateButton.classList.remove('eod-running');
           eodUpdateButton.style.removeProperty('--eod-progress');
-          eodUpdateButton.textContent = 'EOD update';
-          eodUpdateButton.title = 'Refresh all supported market data and workspace summaries';
-          eodUpdateButton.setAttribute('aria-label', 'Refresh all supported market data and workspace summaries');
+          eodUpdateButton.classList.toggle('eod-updated', completionState === 'successful');
+          eodUpdateButton.classList.toggle('eod-partial', completionState === 'partial');
+          eodUpdateButton.classList.toggle('eod-failed', completionState === 'failed');
+          eodUpdateLabel.textContent = updateSucceeded ? 'EOD updated' : 'EOD update';
+          eodUpdateState.textContent = `${completionState.charAt(0).toUpperCase()}${completionState.slice(1)} · ${successfulStages}/${totalStages}`;
+          const unavailableDetail = failedStages.length
+            ? ` Unavailable: ${failedStages.join(', ')}.`
+            : '';
+          eodUpdateButton.title = `${completionState.charAt(0).toUpperCase()}${completionState.slice(1)} EOD completion: ${successfulStages} of ${totalStages} stages succeeded.${unavailableDetail} Run again to refresh all supported market data and workspace summaries.`;
+          eodUpdateButton.setAttribute('aria-label', `${completionState.charAt(0).toUpperCase()}${completionState.slice(1)} EOD completion. ${successfulStages} of ${totalStages} stages succeeded.${unavailableDetail} Refresh all supported market data and workspace summaries again.`);
           eodUpdateButton.disabled = !kiteLoginButton.classList.contains('kite-authenticated');
         }, 900);
       }
@@ -9746,6 +10857,42 @@
       if (portfolioPreview && Array.isArray(portfolioPreview.rows)) analyzePortfolio();
     });
     clearPortfolioButton.addEventListener('click', clearPortfolio);
+    portfolioLedgerBody.addEventListener('change', (event) => {
+      const input = event.target.closest('[data-ledger-index][data-ledger-field]');
+      if (!input) return;
+      const index = Number(input.dataset.ledgerIndex);
+      const field = input.dataset.ledgerField;
+      if (!portfolioLedgerRows[index] || !field) return;
+      portfolioLedgerRows[index][field] = ['quantity', 'average_cost', 'ltp'].includes(field)
+        ? portfolioLedgerValue(input.value)
+        : input.value;
+      savePortfolioLedger();
+      renderPortfolioLedger();
+    });
+    portfolioLedgerBody.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-ledger-remove]');
+      if (!button) return;
+      portfolioLedgerRows.splice(Number(button.dataset.ledgerRemove), 1);
+      savePortfolioLedger();
+      renderPortfolioLedger();
+    });
+    function addPortfolioLedgerRow() {
+      portfolioLedgerRows.push({ account: 'Primary', instrument: '', symbol: '', entry_date: '', quantity: 0, average_cost: 0, ltp: 0 });
+      savePortfolioLedger();
+      renderPortfolioLedger();
+      const newRowInput = portfolioLedgerBody.querySelector(`tr:last-child .portfolio-ledger-input.instrument`);
+      if (newRowInput) newRowInput.focus();
+    }
+    portfolioLedgerAddButton.addEventListener('click', addPortfolioLedgerRow);
+    portfolioLedgerAddFooterButton.addEventListener('click', addPortfolioLedgerRow);
+    portfolioLedgerResetButton.addEventListener('click', () => {
+      portfolioLedgerRows = cloneSuppliedPortfolioLedger();
+      savePortfolioLedger();
+      renderPortfolioLedger();
+      analyzePortfolioLedger(false);
+      showNotice('The supplied holdings have been restored and mapped to the dashboard.');
+    });
+    portfolioLedgerAnalyzeButton.addEventListener('click', () => analyzePortfolioLedger(true));
     portfolioHoldingsTab.addEventListener('click', () => setPortfolioTab('holdings'));
     portfolioLoanTab.addEventListener('click', () => setPortfolioTab('loan'));
     portfolioMutualFundsTab.addEventListener('click', () => setPortfolioTab('mutual-funds'));
@@ -9757,6 +10904,10 @@
     stockYtdSearchInput.addEventListener('input', renderStockYtdTable);
     loadHistoricalRegimesButton.addEventListener('click', () => loadHistoricalRegimes(true));
     historicalRegimesIndexSelect.addEventListener('change', () => loadHistoricalRegimes(false));
+    document.getElementById('historicalEpisodeSelect').addEventListener('change', (event) => {
+      const episodes = Array.isArray(historicalRegimesPayload?.episode_stories) ? historicalRegimesPayload.episode_stories : [];
+      renderHistoricalFeaturedEpisode(episodes, Number(event.target.value));
+    });
     loadBacktestsButton.addEventListener('click', () => loadBacktests(true));
     backtestsIndexSelect.addEventListener('change', () => loadBacktests(false));
     refreshAlphaResearchButton.addEventListener('click', async () => {
@@ -9956,6 +11107,10 @@
         const heading = compactStoryText(section?.querySelector('h2, h3')?.textContent, `Evidence table ${index + 1}`);
         const details = document.createElement('details');
         details.className = 'workspace-evidence-details';
+        if (view.id === 'seasonalityView' && section?.matches('.seasonality-month-section, .seasonality-weekday-section, .seasonality-turn-section')) {
+          details.open = true;
+          details.classList.add('workspace-evidence-primary');
+        }
         const summary = document.createElement('summary');
         summary.textContent = `Evidence audit · ${heading}`;
         tableWrap.parentNode.insertBefore(details, tableWrap);
@@ -10017,8 +11172,12 @@
 
     document.querySelectorAll('.nav-button').forEach((button) => {
       button.addEventListener('click', () => {
-        document.querySelectorAll('.nav-button').forEach((item) => item.classList.remove('active'));
+        document.querySelectorAll('.nav-button').forEach((item) => {
+          item.classList.remove('active');
+          item.removeAttribute('aria-current');
+        });
         button.classList.add('active');
+        button.setAttribute('aria-current', 'page');
         window.scrollTo(0, 0);
         const isDashboard = button.dataset.page === 'Dashboard';
         const isMarketSentiment = button.dataset.page === 'Market Sentiment';
@@ -10089,8 +11248,43 @@
       button.addEventListener('click', () => showNotice(button.dataset.notice));
     });
 
+    terminalCommandInput.addEventListener('focus', renderTerminalCommandResults);
+    terminalCommandInput.addEventListener('input', renderTerminalCommandResults);
+    terminalCommandInput.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        updateTerminalCommandActive(terminalCommandActiveIndex + 1);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        updateTerminalCommandActive(terminalCommandActiveIndex - 1);
+      } else if (event.key === 'Enter' && terminalCommandActiveIndex >= 0) {
+        event.preventDefault();
+        executeTerminalCommand(terminalCommandActiveIndex);
+      } else if (event.key === 'Escape') {
+        event.stopPropagation();
+        closeTerminalCommand();
+        terminalCommandInput.blur();
+      }
+    });
+    terminalCommandResults.addEventListener('mousedown', (event) => event.preventDefault());
+    terminalCommandResults.addEventListener('click', (event) => {
+      const option = event.target.closest('[data-terminal-command-index]');
+      if (option) executeTerminalCommand(Number(option.dataset.terminalCommandIndex));
+    });
+    document.addEventListener('pointerdown', (event) => {
+      if (!event.target.closest('.terminal-command')) closeTerminalCommand();
+    });
+
     document.addEventListener('keydown', (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        terminalCommandInput.focus();
+        terminalCommandInput.select();
+        renderTerminalCommandResults();
+        return;
+      }
       if (event.key === 'Escape') {
+        closeTerminalCommand();
         setNavigation(false);
         setKitePanel(false, true);
       }
@@ -10100,6 +11294,9 @@
     restoreKiteStatus();
     renderDashboardPortfolioSummary(null);
     renderDashboardStoryPortfolio(null, null);
+    loadPortfolioLedger();
+    renderPortfolioLedger();
+    analyzePortfolioLedger(false);
     loadDashboardWorkspace();
   </script>
 </body>

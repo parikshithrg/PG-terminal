@@ -1,6 +1,6 @@
 # Session handoff
 
-Updated: 2026-10-22
+Updated: 2026-10-26
 
 ## Alpha research build checkpoint — 2026-10-17
 
@@ -11,12 +11,21 @@ Updated: 2026-10-22
   historical membership files, or proceed to `fundamental-evidence-execution-v14`
   while those external files are assembled.
 - `full-site-story-and-ux-v22` and `production-readiness-v23` are complete.
-  `terminal-interface-revamp-v24` is now active: the shared terminal foundation
-  is complete across every page, Dashboard and Market Sentiment have completed
-  composition passes, and Seasonality Analysis is the first page-specific
-  cleanup pass. Keep the operations guide frozen until
-  every page is migrated, then rewrite it against the final navigation and
-  visual states.
+  `terminal-interface-revamp-v24` is now complete: the shared terminal foundation
+  is complete across every page, and Dashboard, Market Sentiment, Seasonality
+  Analysis, Historical Regimes, F&O, Screener, Earnings Analysis, Events Calendar and
+  Stock Data YTD, Backtests and Alpha Research have completed composition passes. Every page not on hold now has a first composition pass;
+  Portfolio Analysis now includes the owner-supplied editable browser-local
+  holdings ledger and Dashboard mapping. The final cross-page pass adds skip
+  navigation, current-page semantics and a functional `Ctrl/Cmd+K` command palette
+  for workspace navigation, reviewed terminal functions and Screener security
+  queries. `operations-guide-v25` is now complete: the runbook matches the final
+  navigation, EOD states, portfolio ledger, evidence boundaries and verified
+  backup/recovery workflow. `final-release-audit-v26` is complete: 228 tests,
+  database integrity, static assets, all 12 workspaces in both themes, command
+  routing and persisted portfolio-to-Dashboard mapping passed. Health metadata now
+  reports `release-ready`. The working tree is intentionally left uncommitted until
+  the owner explicitly requests the release commit.
 - Official historical NSE/BSE filing exports are the main external dependency.
   No missing evidence may be replaced with synthetic, scraped or aggregator
   values, and no candidate may be published before every frozen gate passes.
@@ -122,13 +131,45 @@ Updated: 2026-10-22
   compact cards/tables and grid canvas without removing functional tabs or
   changing data behaviour. The verified shared-foundation reference is
   `docs/design-concepts/all-pages-terminal-foundation-v24.png`. The broad
-  page-creation pass is complete; Seasonality Analysis is the first individual
-  cleanup/composition pass.
-  The top command field is a deferred decision: make it a functional
-  cross-workspace search/command palette at the end of v24 or remove it; do not
-  ship it as decorative UI. Continue page-by-page with Seasonality Analysis and
-  Historical Regimes before applying the system to the
-  remaining pages.
+  page-creation pass is complete. Seasonality Analysis now has its individual
+  cleanup/composition pass: overview and evidence quality lead, the twelve
+  monthly observations render as a compact direction-coloured calendar map,
+  weekday and turn-of-month evidence stays visible, and the chronological
+  validation tables remain collapsed audits. Historical Regimes now adds a
+  recent-cycle tape, a selectable four-chapter episode story and compact evidence
+  tiles; the 17 sourced episode records and secondary validation material remain
+  collapsed until requested. Existing historical loaders, IDs, frequency rules
+  and safety contracts are unchanged. F&O now presents the latest same-contract
+  observations as a four-quadrant price/OI map and ranked price/OI movement
+  tapes, with coverage and noise safeguards visible and the sortable contract
+  table preserved as a collapsed audit. Existing calculations, filters, IDs and
+  the descriptive-only boundary are unchanged. Screener now presents participation
+  breadth and strongest/weakest relative-strength observations before its controls;
+  the 210-security factor table remains a collapsed evidence audit and all search,
+  readiness, evidence and sorting behaviour is preserved. Earnings Analysis now
+  foregrounds comparable-quarter coverage, revenue/profit/EPS breadth and the
+  strongest/weakest revenue-growth observations. Consensus surprise remains
+  explicitly unavailable, and the full filing-linked issuer table stays collapsed.
+  Import provenance, filters, search and refresh behaviour are preserved. Events
+  Calendar now foregrounds the next verified catalyst, countdown, six-event horizon
+  tape and event-type density. Region and category filters update that composition
+  layer, and the calendar/source tables remain collapsed source-linked audits. Stock
+  Data YTD now presents filter-aware positive/negative year breadth, moving-average
+  confirmation and strongest/weakest observations before the collapsed ranking.
+  Its selectors and survivorship-bias boundary are unchanged, and Kite-disconnected
+  state remains explicit. Backtests now foregrounds the actual validation outcome:
+  decision-support admission, point-in-time evidence coverage, held-out stability and
+  the strongest eligible held-out observation. Zero survivors remain a visible valid
+  negative result, while the existing contracts, audits, registry and guardrails stay
+  intact below. Alpha Research now leads with a seven-stage evidence chain from
+  validated data to research-card publication, highlights Catalyst as the first live
+  blocked layer, and keeps downstream ranks/cards visibly withheld. Its full official-
+  file, factor, validation, overlay and publication audit remains expandable and
+  unchanged. Portfolio Analysis now has an editable browser-local ledger and
+  dashboard mapping. The top command field is functional rather than decorative:
+  it supports keyboard search, workspace and function commands, and security-query
+  handoff to the Screener. Skip navigation and active-page semantics complete the
+  v24 cross-page accessibility pass.
 
 - The authoritative sequence is now validated data → regime/risk budget →
   factor core → catalyst overlay → portfolio-impact gate → chronological

@@ -105,6 +105,7 @@ from server import (
     parse_futures_daily_snapshot,
     parse_fred_global_csv,
     parse_fred_global_zip,
+    parse_yahoo_global_chart,
     parse_rbi_macro_snapshot,
     parse_rbi_annual_series_table,
     parse_rbi_transposed_annual_growth_table,
@@ -205,7 +206,7 @@ class AlphaResearchFoundationTest(unittest.TestCase):
         self.assertEqual(result["eod_orchestration"]["maximum_attempts_per_stage"], 2)
         self.assertEqual(result["database"]["backup_method"], "sqlite_online_backup")
         self.assertEqual(result["database"]["backup_overwrite"], "forbidden")
-        self.assertEqual(result["next_milestone"], "terminal-interface-revamp-v24")
+        self.assertEqual(result["next_milestone"], "release-ready")
 
     def test_production_health_report_checks_store_and_static_assets(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -4410,6 +4411,34 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual({row["metric_key"] for row in rows}, {
             "sp500", "us_vix", "usd_jpy", "broad_usd", "brent_crude"
         })
+
+    def test_yahoo_global_parser_accepts_completed_daily_closes(self):
+        payload = json.dumps(
+            {
+                "chart": {
+                    "result": [
+                        {
+                            "meta": {"symbol": "^GSPC", "dataGranularity": "1d"},
+                            "timestamp": [1790294400, 1790380800, 1790467200],
+                            "indicators": {
+                                "quote": [{"close": [7743.41, None, 7750.25]}]
+                            },
+                        }
+                    ],
+                    "error": None,
+                }
+            }
+        )
+        rows = parse_yahoo_global_chart(
+            payload,
+            symbol="^GSPC",
+            today=date(2026, 9, 28),
+            earliest=date(2026, 9, 1),
+        )
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["metric_key"], "sp500")
+        self.assertEqual(rows[-1]["source_series"], "^GSPC")
+        self.assertEqual(rows[-1]["value"], 7750.25)
 
     def test_rbi_macro_parser_preserves_units_and_selects_nearest_ten_year_security(self):
         fixture = """

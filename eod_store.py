@@ -249,6 +249,31 @@ class EODStore:
                     CREATE INDEX IF NOT EXISTS global_risk_date_idx
                     ON global_risk_observations(observation_date);
 
+                    CREATE TABLE IF NOT EXISTS global_risk_source_observations (
+                        observation_date TEXT NOT NULL,
+                        metric_key TEXT NOT NULL CHECK (metric_key IN (
+                            'sp500', 'us_vix', 'usd_jpy', 'broad_usd', 'brent_crude'
+                        )),
+                        value REAL NOT NULL,
+                        unit TEXT NOT NULL,
+                        source_series TEXT NOT NULL,
+                        source TEXT NOT NULL,
+                        retrieved_at TEXT NOT NULL,
+                        schema_version INTEGER NOT NULL,
+                        PRIMARY KEY (observation_date, metric_key, source_series)
+                    );
+
+                    CREATE INDEX IF NOT EXISTS global_risk_source_date_idx
+                    ON global_risk_source_observations(observation_date, metric_key);
+
+                    INSERT OR IGNORE INTO global_risk_source_observations (
+                        observation_date, metric_key, value, unit, source_series,
+                        source, retrieved_at, schema_version
+                    )
+                    SELECT observation_date, metric_key, value, unit, source_series,
+                           source, retrieved_at, schema_version
+                    FROM global_risk_observations;
+
                     CREATE TABLE IF NOT EXISTS sentiment_factor_snapshots (
                         as_of_date TEXT NOT NULL,
                         model_version TEXT NOT NULL,
@@ -1329,10 +1354,10 @@ class EODStore:
                     existing = connection.execute(
                         """
                         SELECT value, unit, source_series
-                        FROM global_risk_observations
-                        WHERE observation_date = ? AND metric_key = ?
+                        FROM global_risk_source_observations
+                        WHERE observation_date = ? AND metric_key = ? AND source_series = ?
                         """,
-                        (observation_date, metric_key),
+                        (observation_date, metric_key, source_series),
                     ).fetchone()
                     values = (value, unit, source_series)
                     if existing is not None:
@@ -1349,7 +1374,7 @@ class EODStore:
                         continue
                     connection.execute(
                         """
-                        INSERT INTO global_risk_observations (
+                        INSERT INTO global_risk_source_observations (
                             observation_date, metric_key, value, unit, source_series,
                             source, retrieved_at, schema_version
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -1374,10 +1399,20 @@ class EODStore:
                 """
                 SELECT observation_date, metric_key, value, unit, source_series,
                        source, retrieved_at
-                FROM global_risk_observations
-                ORDER BY observation_date, metric_key
+                FROM global_risk_source_observations
+                ORDER BY observation_date, metric_key, source_series
                 """
             ).fetchall()
+        preferred: dict[tuple[str, str], sqlite3.Row] = {}
+        fred_series = {"SP500", "VIXCLS", "DEXJPUS", "DTWEXBGS", "DCOILBRENTEU"}
+        for row in rows:
+            identity = (row["observation_date"], row["metric_key"])
+            current = preferred.get(identity)
+            if current is None or (
+                row["source_series"] in fred_series
+                and current["source_series"] not in fred_series
+            ):
+                preferred[identity] = row
         return [
             {
                 "date": date.fromisoformat(row["observation_date"]),
@@ -1388,7 +1423,7 @@ class EODStore:
                 "source": row["source"],
                 "retrieved_at": row["retrieved_at"],
             }
-            for row in rows
+            for _, row in sorted(preferred.items())
         ]
 
     def append_sentiment_factor_snapshot(

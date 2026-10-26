@@ -265,8 +265,11 @@ research pipeline before the final full-site presentation and operating pass.
     verification tool, recovery drill, release checklist and automated ready/
     degraded/backup-restore tests are included. The live local store passes
     `PRAGMA quick_check(1)` and the health endpoint reports ready.
-25. `terminal-interface-revamp-v24` — **in progress; shared all-pages foundation
-    complete, Dashboard and Market Sentiment composition complete**.
+25. `terminal-interface-revamp-v24` — **complete; shared all-pages foundation,
+    page composition and cross-workspace accessibility pass complete**. Dashboard, Market Sentiment, Seasonality, Historical Regimes,
+    F&O, Screener, Earnings Analysis, Events Calendar, Stock Data YTD, Backtests
+    and Alpha Research
+    composition complete**.
     Implement the approved PG-terminal visual system across the final site
     after production behaviour is stable. Rebuild
     the information hierarchy around compact command/status bars, dense
@@ -301,12 +304,82 @@ research pipeline before the final full-site presentation and operating pass.
     keyboard focus and the grid-backed workspace canvas. Functional page tabs,
     loaders, calculations, element identities and missing-data states remain in
     place. This completes the broad page-creation pass; resume with page-specific
-    information hierarchy and visual cleanup, beginning with Seasonality
-    Analysis.
-    The command field is intentionally non-interactive during the page migration;
-    at the end of v24 it must either become a real cross-workspace search/command
-    palette or be removed. Seasonality Analysis is the first page-specific
-    cleanup pass.
+    information hierarchy and visual cleanup. Seasonality Analysis now leads
+    with a concise calendar-evidence story and evidence-quality block, renders
+    the twelve month observations as a direction-coloured seasonal map, keeps
+    weekday and turn-of-month comparisons visible, and leaves the detailed
+    chronological validation audits collapsed. Existing selectors, local-history
+    loaders, calculations, missing-data states and research-only language remain
+    unchanged. Historical Regimes now leads with a recent bull/bear/correction
+    cycle tape and an interactive selected-episode narrative that answers the
+    four frozen story questions beside its quantitative evidence. The full
+    17-episode library and detailed validation layers remain accessible as
+    collapsed records rather than a continuous wall of prose. Existing atlas
+    loaders, selectors, evidence identities, lower-frequency contracts and
+    research-only boundaries are unchanged. F&O now leads with a graphical
+    four-quadrant price/open-interest map, identifies the largest classified
+    positioning state and ranks the largest price and open-interest moves from
+    the latest comparable contracts. Coverage, noise-floor and rollover context
+    stay visible, while the sortable contract table remains a collapsed evidence
+    audit. Existing futures loaders, filters, sort controls, IDs and descriptive-
+    only boundary are unchanged. Screener now leads with a graphical participation
+    board for positive returns, Nifty outperformance and 50/200-session trend
+    breadth, followed by the strongest and weakest 20-session excess observations.
+    Search, readiness filters, evidence filters, sorting and refresh behaviour are
+    unchanged, and the complete 210-security factor table remains a collapsed
+    evidence audit. Earnings Analysis now leads with comparable-quarter coverage,
+    reported revenue/profit/EPS breadth and the strongest/weakest revenue-growth
+    observations. The page explicitly withholds consensus surprise because no
+    estimate dataset exists; import provenance, reporting-basis and sector filters,
+    search, refresh behaviour and the issuer filing links are unchanged. The full
+    issuer-level results table remains a collapsed evidence audit. Events Calendar
+    now leads with the next verified catalyst, its countdown and timing caveat, a
+    filter-aware six-event horizon tape and visible central-bank/inflation/growth
+    density. Region and event-type filters update the composition layer as well as
+    the audit table; official links, reviewed-source rules and the no-impact-scoring
+    boundary are unchanged. The calendar and source-readiness tables remain
+    collapsed evidence audits. Stock Data YTD now leads with filter-aware positive/
+    negative calendar-year breadth, 20/200-session trend confirmation and the
+    strongest/weakest visible observations. Year, direction, sector and search
+    controls retain their existing behaviour; the full current-constituent ranking
+    remains a collapsed evidence audit, survivorship bias stays explicit and no data
+    is substituted when Kite is disconnected. Backtests now leads with a compact
+    validation-verdict board showing decision-support admission, point-in-time
+    evidence readiness, held-out stability and the strongest eligible held-out
+    observation. Valid negative results remain explicit: zero survivors and zero
+    approvals render as blocked research rather than an empty state. The research
+    contract, evidence-family audit, trait comparisons, seasonality family, queue,
+    registry and guardrails remain available below without changing their loaders,
+    calculations or admission rules. Alpha Research now exposes its seven-stage
+    evidence chain from validated data through ranked research-card publication.
+    Each stage is visibly operational, developing or blocked; the first material
+    blocker is highlighted and downstream ranks and cards remain explicitly
+    withheld. The existing story, official-file import controls, factor and
+    validation contracts, portfolio/catalyst overlays, publication gates and all
+    technical audits remain unchanged inside the expandable audit. Every page has
+    now received its first composition pass. Portfolio Analysis includes the
+    owner-supplied editable browser-local holdings ledger and maps its analysis to
+    Dashboard. The final consistency pass adds skip navigation, current-page
+    semantics and a keyboard-accessible terminal command palette. `Ctrl/Cmd+K`
+    searches and opens every workspace, executes reviewed terminal functions,
+    opens the portfolio ledger and routes free-text security queries into the
+    Screener. The former decorative command field is no longer shipped as inert UI.
+26. `operations-guide-v25` — **complete**. Rewrote the operator runbook against
+    the final terminal navigation and interaction model. It now documents all 12
+    workspaces, `Ctrl/Cmd+K`, light/dark and accessibility behaviour, Kite's
+    in-memory credential boundary, the 15-stage EOD sequence and truthful final
+    states, FRED/Yahoo completed-session provenance, browser-local portfolio
+    editing and Dashboard mapping, evidence boundaries, verified backup/recovery,
+    troubleshooting and final-delivery checks. The README now routes operators to
+    this guide and no longer describes the early seasonality-only data foundation.
+27. `final-release-audit-v26` — **complete; release ready pending owner commit**.
+    Reviewed the complete intentional change set, reran all 228 automated tests,
+    passed `git diff --check`, verified the 127 MB WAL database with 18 tables and
+    `PRAGMA quick_check(1)`, and confirmed `/api/health` is ready without provider
+    requests. All 12 workspaces render in both themes; command navigation, security
+    handoff, portfolio persistence and Dashboard mapping were exercised in the live
+    browser. The audit corrected stale health metadata from the completed v24
+    milestone to `release-ready`. No commit is created until explicitly requested.
 
 ### Final UI revamp direction — approved concept set
 

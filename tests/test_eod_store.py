@@ -446,6 +446,38 @@ class EODStoreTest(unittest.TestCase):
         with self.assertRaises(GlobalRiskConflictError):
             self.store.append_global_risk_observations(changed, source="FRED")
 
+    def test_global_risk_sources_coexist_and_fred_is_preferred(self):
+        yahoo = [
+            {
+                "date": date(2026, 9, 25),
+                "metric_key": "sp500",
+                "value": 7740.0,
+                "unit": "Index",
+                "source_series": "^GSPC",
+            }
+        ]
+        fred = [
+            {
+                "date": date(2026, 9, 25),
+                "metric_key": "sp500",
+                "value": 7743.41,
+                "unit": "Index",
+                "source_series": "SP500",
+            }
+        ]
+        self.assertEqual(
+            self.store.append_global_risk_observations(yahoo, source="Yahoo Finance"),
+            {"inserted": 1, "duplicates": 0},
+        )
+        self.assertEqual(
+            self.store.append_global_risk_observations(fred, source="FRED"),
+            {"inserted": 1, "duplicates": 0},
+        )
+        loaded = self.store.load_global_risk_observations()
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(loaded[0]["value"], 7743.41)
+        self.assertEqual(loaded[0]["source_series"], "SP500")
+
     def test_sentiment_factor_snapshots_are_versioned_and_revision_preserving(self):
         evidence = {
             "as_of_date": "2026-09-25",

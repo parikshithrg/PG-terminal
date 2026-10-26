@@ -136,6 +136,15 @@ FRED_GLOBAL_SERIES = {
     "DTWEXBGS": ("broad_usd", "Index Jan 2006=100", "Broad U.S. dollar index"),
     "DCOILBRENTEU": ("brent_crude", "USD per barrel", "Brent crude spot"),
 }
+YAHOO_FINANCE_CHART_URL = "https://query2.finance.yahoo.com/v8/finance/chart"
+YAHOO_GLOBAL_SOURCE = "Yahoo Finance completed daily chart fallback"
+YAHOO_GLOBAL_SERIES = {
+    "^GSPC": ("sp500", "Index", "S&P 500"),
+    "^VIX": ("us_vix", "Index", "CBOE VIX"),
+    "JPY=X": ("usd_jpy", "JPY per USD", "USD/JPY"),
+    "DX-Y.NYB": ("broad_usd", "Index", "U.S. Dollar Index proxy"),
+    "BZ=F": ("brent_crude", "USD per barrel", "Brent crude futures proxy"),
+}
 SENTIMENT_EVIDENCE_MODEL_VERSION = "market-sentiment-evidence-v1"
 REGIME_RULE_VERSION = "market-regime-candidate-v1"
 HISTORICAL_REGIME_CONTRACT_VERSION = "historical-regimes-v25"
@@ -1583,6 +1592,7 @@ MAX_REQUEST_BYTES = 16 * 1024
 MAX_RESPONSE_BYTES = 64 * 1024
 NSDL_MAX_RESPONSE_BYTES = 512 * 1024
 FRED_MAX_RESPONSE_BYTES = 512 * 1024
+YAHOO_MAX_RESPONSE_BYTES = 256 * 1024
 RBI_MAX_RESPONSE_BYTES = 1024 * 1024
 MAX_HISTORICAL_RESPONSE_BYTES = 512 * 1024
 MAX_INSTRUMENT_BYTES = 8 * 1024 * 1024
@@ -6188,6 +6198,76 @@ def parse_fred_global_zip(
     return collected
 
 
+def parse_yahoo_global_chart(
+    payload: str, *, symbol: str, today: date, earliest: date
+) -> list[dict[str, object]]:
+    if symbol not in YAHOO_GLOBAL_SERIES or not isinstance(payload, str):
+        raise ValueError("invalid_yahoo_global_response")
+    try:
+        document = json.loads(payload)
+        chart = document["chart"]
+        results = chart["result"]
+        if chart.get("error") is not None or not isinstance(results, list) or len(results) != 1:
+            raise ValueError("invalid_yahoo_global_response")
+        result = results[0]
+        meta = result["meta"]
+        if meta.get("symbol") != symbol or meta.get("dataGranularity") != "1d":
+            raise ValueError("invalid_yahoo_global_response")
+        timestamps = result["timestamp"]
+        closes = result["indicators"]["quote"][0]["close"]
+    except (KeyError, TypeError, json.JSONDecodeError) as error:
+        raise ValueError("invalid_yahoo_global_response") from error
+    if (
+        not isinstance(timestamps, list)
+        or not isinstance(closes, list)
+        or len(timestamps) != len(closes)
+    ):
+        raise ValueError("invalid_yahoo_global_response")
+    metric_key, unit, _label = YAHOO_GLOBAL_SERIES[symbol]
+    rows: list[dict[str, object]] = []
+    seen: set[date] = set()
+    for raw_timestamp, raw_close in zip(timestamps, closes):
+        if raw_close is None:
+            continue
+        if (
+            not isinstance(raw_timestamp, int)
+            or not isinstance(raw_close, (int, float))
+            or isinstance(raw_close, bool)
+        ):
+            raise ValueError("invalid_yahoo_global_response")
+        try:
+            observation_date = datetime.fromtimestamp(raw_timestamp, timezone.utc).date()
+        except (OverflowError, OSError, ValueError) as error:
+            raise ValueError("invalid_yahoo_global_response") from error
+        value = float(raw_close)
+        if observation_date < earliest:
+            continue
+        if observation_date == today:
+            # Yahoo's chart can expose a still-forming current session. PG-terminal
+            # admits completed daily observations only.
+            continue
+        if (
+            observation_date > today
+            or observation_date in seen
+            or not math.isfinite(value)
+            or value <= 0
+        ):
+            raise ValueError("invalid_yahoo_global_response")
+        seen.add(observation_date)
+        rows.append(
+            {
+                "date": observation_date,
+                "metric_key": metric_key,
+                "value": value,
+                "unit": unit,
+                "source_series": symbol,
+            }
+        )
+    if not rows:
+        raise ValueError("invalid_yahoo_global_response")
+    return rows
+
+
 def calculate_global_risk_summary(rows: list[dict[str, object]]) -> dict[str, object]:
     series_specs = {
         metric_key: {"series_id": series_id, "label": label}
@@ -6216,9 +6296,12 @@ def calculate_global_risk_summary(rows: list[dict[str, object]]) -> dict[str, ob
     for key, values in grouped.items():
         ordered = sorted(values, key=lambda item: item["date"])
         latest = ordered[-1]
+        source_series = str(latest.get("source_series", series_specs[key]["series_id"]))
+        yahoo_spec = YAHOO_GLOBAL_SERIES.get(source_series)
         metrics[key] = {
-            "label": series_specs[key]["label"],
-            "source_series": series_specs[key]["series_id"],
+            "label": yahoo_spec[2] if yahoo_spec is not None else series_specs[key]["label"],
+            "source_series": source_series,
+            "source": latest.get("source", FRED_GLOBAL_SOURCE),
             "level": round(float(latest["value"]), 4),
             "unit": latest["unit"],
             "as_of_date": latest["date"].isoformat(),
@@ -6248,11 +6331,18 @@ def calculate_global_risk_summary(rows: list[dict[str, object]]) -> dict[str, ob
         1,
     )
     latest_dates = [date.fromisoformat(metric["as_of_date"]) for metric in metrics.values()]
+    sources = sorted(
+        {
+            str(item.get("source", FRED_GLOBAL_SOURCE))
+            for values in grouped.values()
+            for item in values
+        }
+    )
     return {
         "available": True,
         "band": "unranked",
         "reason": "Global EOD context is visible; regime thresholds are not yet validated.",
-        "source": FRED_GLOBAL_SOURCE,
+        "source": " + ".join(sources),
         "as_of_date": max(latest_dates).isoformat(),
         "oldest_component_date": min(latest_dates).isoformat(),
         "metrics": metrics,
@@ -13140,7 +13230,7 @@ def build_production_readiness_contract() -> dict[str, object]:
             "earnings-template.csv",
         ],
         "release_boundary": "local_research_workspace_no_recommendations_or_execution",
-        "next_milestone": "terminal-interface-revamp-v24",
+        "next_milestone": "release-ready",
     }
 
 
@@ -21630,6 +21720,8 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         }
         metadata_backfill = {
             "eligible_instruments": 0,
+            "new_sessions": 0,
+            "duplicate_sessions": 0,
             "matched_sessions": 0,
             "volume_backfilled": 0,
             "already_complete": 0,
@@ -21675,6 +21767,24 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 (row["date"], float(row["close"])) for row in parsed_candles
             ]
             if symbol in locally_stored_stocks:
+                coverage = store.coverage(kind="stock", display_name=symbol)
+                new_candles = candles_after_last_stored_session(
+                    parsed_candles, coverage["last_session"]
+                )
+                try:
+                    append_result = store.append_candles(
+                        kind="stock",
+                        display_name=symbol,
+                        provider_token=token,
+                        candles=new_candles,
+                        retrieved_at=datetime.now(timezone.utc).isoformat(),
+                        adjustment_status="provider_reported_adjusted",
+                        adjustment_source_url=KITE_ADJUSTMENT_PROVENANCE_URL,
+                    )
+                except CandleConflictError as error:
+                    raise ValueError(str(error)) from error
+                metadata_backfill["new_sessions"] += int(append_result["inserted"])
+                metadata_backfill["duplicate_sessions"] += int(append_result["duplicates"])
                 backfill = store.backfill_candle_metadata(
                     kind="stock",
                     display_name=symbol,
@@ -21989,14 +22099,11 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             with _SESSION_LOCK:
                 index_tokens = dict(_ACTIVE_SEASONALITY_INDEX_TOKENS)
             equity_tokens = self._current_equity_tokens(api_key, access_token)
-            if any(name not in index_tokens for name in SEASONALITY_INDICES):
-                raise ValueError("instrument_not_available")
-            if any(symbol not in equity_tokens for symbol in symbols):
-                raise ValueError("instrument_not_available")
 
             month_index = selected_month - 1
             index_averages: dict[str, tuple[float, int]] = {}
             stock_averages: dict[str, tuple[float, int]] = {}
+            unavailable_instruments: list[dict[str, str]] = []
             total_requests = 0
             history_start = historical_lookback_start(now.date())
             store = _get_eod_store()
@@ -22065,14 +22172,57 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                     return None
                 return float(average), count
 
+            def collect(
+                kind: str,
+                instrument: str,
+                token: str,
+                destination: dict[str, tuple[float, int]],
+            ) -> None:
+                try:
+                    value = evaluate(kind, instrument, token)
+                except ValueError as error:
+                    reason = str(error)
+                    if reason in {"access_token_invalid_or_expired", "authentication_failed"}:
+                        raise
+                    unavailable_instruments.append(
+                        {"kind": kind, "instrument": instrument, "reason": reason}
+                    )
+                    return
+                if value is None:
+                    unavailable_instruments.append(
+                        {
+                            "kind": kind,
+                            "instrument": instrument,
+                            "reason": "insufficient_completed_history",
+                        }
+                    )
+                    return
+                destination[instrument] = value
+
             for instrument in SEASONALITY_INDICES:
-                value = evaluate("index", instrument, index_tokens[instrument])
-                if value is not None:
-                    index_averages[instrument] = value
+                token = index_tokens.get(instrument)
+                if token is None:
+                    unavailable_instruments.append(
+                        {
+                            "kind": "index",
+                            "instrument": instrument,
+                            "reason": "instrument_not_available",
+                        }
+                    )
+                    continue
+                collect("index", instrument, token, index_averages)
             for symbol in symbols:
-                value = evaluate("stock", symbol, equity_tokens[symbol])
-                if value is not None:
-                    stock_averages[symbol] = value
+                token = equity_tokens.get(symbol)
+                if token is None:
+                    unavailable_instruments.append(
+                        {
+                            "kind": "stock",
+                            "instrument": symbol,
+                            "reason": "instrument_not_available",
+                        }
+                    )
+                    continue
+                collect("stock", symbol, token, stock_averages)
 
             index_rank = rank_historical_month_averages(index_averages)
             stock_rank = rank_historical_month_averages(stock_averages)
@@ -22090,6 +22240,8 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 "stocks_requested": len(symbols),
                 "indices_without_history": len(SEASONALITY_INDICES) - int(index_rank["evaluated"]),
                 "stocks_without_history": len(symbols) - int(stock_rank["evaluated"]),
+                "sync_status": "partial" if unavailable_instruments else "complete",
+                "unavailable_instruments": unavailable_instruments,
                 "historical_requests": total_requests,
                 "price_history_requested_through": price_history_through.isoformat(),
                 "return_definition": "mean close-to-close return for the selected calendar month across completed years",
@@ -22248,18 +22400,102 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             method="GET",
         )
         zip_payload, reason = self._request_fred_export(request)
-        if reason is not None:
+        fred_failure = reason
+        if fred_failure is None:
+            try:
+                rows = parse_fred_global_zip(zip_payload or b"", today=today, earliest=earliest)
+            except ValueError:
+                fred_failure = "invalid_fred_global_response"
+            else:
+                try:
+                    store = _get_eod_store()
+                    write_result = store.append_global_risk_observations(
+                        rows,
+                        source=FRED_GLOBAL_SOURCE,
+                        retrieved_at=datetime.now(timezone.utc).isoformat(),
+                    )
+                    summary = calculate_global_risk_summary(store.load_global_risk_observations())
+                except GlobalRiskConflictError:
+                    self._send_json(
+                        HTTPStatus.CONFLICT,
+                        {"ok": False, "reason": "stored_global_risk_conflict"},
+                    )
+                    return
+                self._send_json(
+                    HTTPStatus.OK,
+                    {
+                        "ok": True,
+                        **summary,
+                        "write_result": write_result,
+                        "provider": "fred",
+                    },
+                )
+                return
+
+        yahoo_rows: list[dict[str, object]] = []
+        yahoo_failures: list[str] = []
+        period1 = int(datetime.combine(earliest, datetime.min.time(), tzinfo=timezone.utc).timestamp())
+        period2 = int(
+            datetime.combine(today + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc).timestamp()
+        )
+        yahoo_requests: dict[str, urllib.request.Request] = {}
+        for symbol in YAHOO_GLOBAL_SERIES:
+            query = urllib.parse.urlencode(
+                {
+                    "period1": period1,
+                    "period2": period2,
+                    "interval": "1d",
+                    "events": "history",
+                    "includePrePost": "false",
+                }
+            )
+            encoded_symbol = urllib.parse.quote(symbol, safe="")
+            yahoo_requests[symbol] = urllib.request.Request(
+                f"{YAHOO_FINANCE_CHART_URL}/{encoded_symbol}?{query}",
+                headers={
+                    "Accept": "application/json",
+                    "User-Agent": NIFTY_INDICES_PUBLIC_USER_AGENT,
+                },
+                method="GET",
+            )
+        with ThreadPoolExecutor(max_workers=len(yahoo_requests)) as executor:
+            futures = {
+                executor.submit(self._request_yahoo_chart, request): symbol
+                for symbol, request in yahoo_requests.items()
+            }
+            for future in as_completed(futures):
+                symbol = futures[future]
+                try:
+                    chart_payload, chart_reason = future.result()
+                    if chart_reason is not None:
+                        yahoo_failures.append(symbol)
+                        continue
+                    yahoo_rows.extend(
+                        parse_yahoo_global_chart(
+                            chart_payload or "",
+                            symbol=symbol,
+                            today=today,
+                            earliest=earliest,
+                        )
+                    )
+                except (ValueError, OSError):
+                    yahoo_failures.append(symbol)
+        if yahoo_failures:
             self._send_json(
                 HTTPStatus.BAD_GATEWAY,
-                {"ok": False, "reason": "global_risk_source_unavailable"},
+                {
+                    "ok": False,
+                    "reason": "global_risk_sources_unavailable",
+                    "fred_reason": fred_failure or "unknown",
+                    "yahoo_unavailable_symbols": yahoo_failures,
+                },
             )
             return
         try:
-            rows = parse_fred_global_zip(zip_payload or b"", today=today, earliest=earliest)
             store = _get_eod_store()
             write_result = store.append_global_risk_observations(
-                rows,
-                source=FRED_GLOBAL_SOURCE,
+                yahoo_rows,
+                source=YAHOO_GLOBAL_SOURCE,
                 retrieved_at=datetime.now(timezone.utc).isoformat(),
             )
             summary = calculate_global_risk_summary(store.load_global_risk_observations())
@@ -22272,10 +22508,19 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         except ValueError:
             self._send_json(
                 HTTPStatus.BAD_GATEWAY,
-                {"ok": False, "reason": "invalid_fred_global_response"},
+                {"ok": False, "reason": "invalid_yahoo_global_response"},
             )
             return
-        self._send_json(HTTPStatus.OK, {"ok": True, **summary, "write_result": write_result})
+        self._send_json(
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                **summary,
+                "write_result": write_result,
+                "provider": "yahoo_fallback",
+                "fred_reason": fred_failure or "unknown",
+            },
+        )
 
     def _send_futures_eod_refresh(self, payload: dict[str, object]) -> None:
         raw_symbols = payload.get("symbols")
@@ -22795,9 +23040,9 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
     ) -> tuple[bytes | None, str | None]:
         """Fetch the fixed public FRED export, allowing its standard HTTPS redirect handling."""
         last_error: BaseException | None = None
-        for attempt in range(3):
+        for attempt in range(2):
             try:
-                with urllib.request.urlopen(request, timeout=30) as response:
+                with urllib.request.urlopen(request, timeout=12) as response:
                     final_host = (urllib.parse.urlsplit(response.geturl()).hostname or "").lower()
                     if final_host != "fred.stlouisfed.org" or response.status != HTTPStatus.OK:
                         return None, "invalid_provider_response"
@@ -22809,9 +23054,34 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 return None, self._classify_provider_error(error, exchange=False)
             except (urllib.error.URLError, socket.timeout, TimeoutError, OSError) as error:
                 last_error = error
-                if attempt < 2:
+                if attempt < 1:
                     time.sleep(0.5 * (attempt + 1))
         return None, classify_network_error(last_error or OSError("fred_request_failed"))
+
+    def _request_yahoo_chart(
+        self, request: urllib.request.Request
+    ) -> tuple[str | None, str | None]:
+        """Fetch one bounded Yahoo Finance daily chart response for EOD fallback use."""
+        last_error: BaseException | None = None
+        for attempt in range(2):
+            try:
+                with urllib.request.urlopen(request, timeout=12) as response:
+                    final_host = (urllib.parse.urlsplit(response.geturl()).hostname or "").lower()
+                    if final_host != "query2.finance.yahoo.com" or response.status != HTTPStatus.OK:
+                        return None, "invalid_provider_response"
+                    body = response.read(YAHOO_MAX_RESPONSE_BYTES + 1)
+                    if len(body) > YAHOO_MAX_RESPONSE_BYTES:
+                        return None, "provider_response_too_large"
+                    return body.decode("utf-8"), None
+            except urllib.error.HTTPError as error:
+                return None, self._classify_provider_error(error, exchange=False)
+            except (urllib.error.URLError, socket.timeout, TimeoutError, OSError) as error:
+                last_error = error
+                if attempt < 1:
+                    time.sleep(0.5 * (attempt + 1))
+            except UnicodeDecodeError:
+                return None, "invalid_provider_response"
+        return None, classify_network_error(last_error or OSError("yahoo_request_failed"))
 
     @staticmethod
     def _classify_provider_error(error: urllib.error.HTTPError, *, exchange: bool) -> str:
