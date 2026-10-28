@@ -47,6 +47,7 @@ from eod_store import (
     InstitutionalFlowConflictError,
     MacroSnapshotConflictError,
 )
+from summary_cache import EvidenceResponseCache, local_evidence_fingerprint
 
 
 TOKEN_URL = "https://api.kite.trade/session/token"
@@ -1687,6 +1688,7 @@ _BREADTH_BUILD_LOCK = threading.Lock()
 _HISTORICAL_MONTH_LEADERS_LOCK = threading.Lock()
 _REGIME_VALIDATION_LOCK = threading.Lock()
 _CROSS_INDEX_VALIDATION_LOCK = threading.Lock()
+_DASHBOARD_RESPONSE_CACHE = EvidenceResponseCache(max_entries=8)
 _EOD_STORE: EODStore | None = None
 
 
@@ -13258,6 +13260,10 @@ def build_production_readiness_contract() -> dict[str, object]:
             "styles.css",
             "reference-universes.js",
             "earnings-template.csv",
+            "vendor/echarts.min.js",
+            "js/pg-api.js",
+            "js/pg-charts.js",
+            "js/pg-dashboard.js",
         ],
         "release_boundary": "local_research_workspace_no_recommendations_or_execution",
         "next_milestone": "release-ready",
@@ -13629,6 +13635,39 @@ def build_dashboard_market_story(
             "Sector relative strength is an equal-weight stock observation, not an official sector-index return.",
             "Portfolio sensitivity is calculated in the browser only after a holdings upload.",
         ],
+    }
+
+
+def build_dashboard_overview(
+    *,
+    market_story: dict[str, object],
+    sentiment_summary: dict[str, object],
+    fno_summary: dict[str, object],
+    screener_summary: dict[str, object],
+    seasonality_summary: dict[str, object],
+    events_summary: dict[str, object],
+) -> dict[str, object]:
+    """Package one internally consistent Dashboard read model."""
+    components = {
+        "market_story": market_story,
+        "sentiment": sentiment_summary,
+        "fno": fno_summary,
+        "screener": screener_summary,
+        "seasonality": seasonality_summary,
+        "events": events_summary,
+    }
+    if any(payload.get("ok") is not True for payload in components.values()):
+        raise ValueError("dashboard_overview_unavailable")
+    as_of_dates = [
+        str(payload.get("as_of_date"))
+        for payload in components.values()
+        if payload.get("as_of_date")
+    ]
+    return {
+        "ok": True,
+        "contract_version": "dashboard-overview-v1",
+        "as_of_date": max(as_of_dates) if as_of_dates else None,
+        **components,
     }
 
 
@@ -19953,6 +19992,9 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 report,
             )
             return
+        if path == "/api/performance":
+            self._send_performance_status()
+            return
         if path == "/api/kite/status":
             with _SESSION_LOCK:
                 connected = bool(_ACTIVE_KITE_SESSION)
@@ -19988,6 +20030,9 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             return
         if path == "/api/dashboard/market-story":
             self._send_dashboard_market_story()
+            return
+        if path == "/api/dashboard/overview":
+            self._send_dashboard_overview()
             return
         if path == "/api/seasonality/local":
             self._send_local_seasonality(urllib.parse.urlsplit(self.path).query)
@@ -20048,6 +20093,28 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             self._send_json(HTTPStatus.OK, payload)
         except ValueError as error:
             self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"ok": False, "reason": str(error)})
+
+    def _send_performance_status(self) -> None:
+        self._send_json(
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                "contract_version": "modular-performance-architecture-v29",
+                "frontend": {
+                    "shared_api_client": True,
+                    "chart_runtime": "echarts-5.6.0-local",
+                    "dashboard_orchestrator": "pg-dashboard-v1",
+                    "concurrent_overview_requests_are_coalesced": True,
+                },
+                "backend": {
+                    "database": "sqlite-wal",
+                    "dashboard_overview": "dashboard-overview-v1",
+                    "cache_identity": "business-date-plus-database-and-wal",
+                    "cache": _DASHBOARD_RESPONSE_CACHE.stats(),
+                },
+                "boundary": "local_read_models_only_no_provider_requests",
+            },
+        )
 
     def _send_dashboard_market_sentiment_summary(self) -> None:
         try:
@@ -20111,56 +20178,138 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 {"ok": False, "reason": str(error)},
             )
 
+    def _calculate_dashboard_overview_payload(
+        self,
+        *,
+        store: EODStore,
+        business_date: date,
+        nifty500_context: dict[str, object] | None,
+    ) -> dict[str, object]:
+        sentiment_summary = build_dashboard_market_sentiment_summary(
+            self._calculate_sentiment_payload(),
+            self._calculate_cross_index_validation_payload(),
+        )
+        screener_summary = build_dashboard_screener_summary(
+            self._calculate_local_screener_payload()
+        )
+        futures_rows = store.load_futures_eod_snapshots()
+        fno_summary = build_dashboard_fno_summary(
+            calculate_futures_oi_summary(futures_rows),
+            stored_history_sessions=len(
+                {
+                    item["date"]
+                    for item in futures_rows
+                    if isinstance(item.get("date"), date)
+                }
+            ),
+        )
+        nifty50_seasonality = self._calculate_local_seasonality_payload(
+            kind="index",
+            instrument="Nifty 50",
+        )
+        seasonality_summaries: dict[str, dict[str, object]] = {
+            "Nifty 50": build_dashboard_seasonality_summary(nifty50_seasonality)
+        }
+        for instrument in SEASONALITY_INDICES:
+            if instrument == "Nifty 50":
+                continue
+            try:
+                seasonality_summaries[instrument] = build_dashboard_seasonality_summary(
+                    self._calculate_local_seasonality_payload(
+                        kind="index",
+                        instrument=instrument,
+                    )
+                )
+            except ValueError:
+                continue
+        seasonality_summary = build_dashboard_seasonality_universe_summary(
+            seasonality_summaries
+        )
+        events_summary = build_macro_events_calendar(today=business_date)
+        market_story = build_dashboard_market_story(
+            sentiment_summary,
+            screener_summary,
+            fno_summary,
+            self._calculate_regime_validation_payload(
+                target_index="Nifty 50",
+                benchmark_index=None,
+            ),
+            nifty50_seasonality,
+            events_summary,
+            nifty500_context,
+        )
+        return build_dashboard_overview(
+            market_story=market_story,
+            sentiment_summary=sentiment_summary,
+            fno_summary=fno_summary,
+            screener_summary=screener_summary,
+            seasonality_summary=seasonality_summary,
+            events_summary=events_summary,
+        )
+
+    def _get_cached_dashboard_overview(
+        self,
+    ) -> tuple[dict[str, object], str, float]:
+        with _SESSION_LOCK:
+            cached_breadth = _BREADTH_CACHE.get("payload")
+            breadth_identity = _BREADTH_CACHE.get("created_at")
+        nifty500_context = (
+            cached_breadth.get("market_context")
+            if isinstance(cached_breadth, dict) else None
+        )
+        store = _get_eod_store()
+        if not isinstance(nifty500_context, dict):
+            stored_context = store.load_latest_workspace_snapshot(
+                "nifty500-market-context"
+            )
+            nifty500_context = (
+                stored_context.get("payload")
+                if isinstance(stored_context, dict) else None
+            )
+        business_date = datetime.now(INDIA_TIMEZONE).date()
+        fingerprint = local_evidence_fingerprint(
+            store.path,
+            business_date=business_date.isoformat(),
+            extra=breadth_identity,
+        )
+        return _DASHBOARD_RESPONSE_CACHE.get_or_build(
+            "overview",
+            fingerprint,
+            lambda: self._calculate_dashboard_overview_payload(
+                store=store,
+                business_date=business_date,
+                nifty500_context=nifty500_context,
+            ),
+        )
+
+    def _send_dashboard_overview(self) -> None:
+        try:
+            payload, cache_state, elapsed_ms = self._get_cached_dashboard_overview()
+            self._send_json(
+                HTTPStatus.OK,
+                payload,
+                headers={
+                    "X-PG-Cache": cache_state,
+                    "Server-Timing": f'dashboard;dur={elapsed_ms:.2f};desc="{cache_state}"',
+                },
+            )
+        except ValueError as error:
+            self._send_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"ok": False, "reason": str(error)},
+            )
+
     def _send_dashboard_market_story(self) -> None:
         try:
-            with _SESSION_LOCK:
-                cached_breadth = _BREADTH_CACHE.get("payload")
-            nifty500_context = (
-                cached_breadth.get("market_context")
-                if isinstance(cached_breadth, dict) else None
+            overview, cache_state, elapsed_ms = self._get_cached_dashboard_overview()
+            self._send_json(
+                HTTPStatus.OK,
+                overview["market_story"],
+                headers={
+                    "X-PG-Cache": cache_state,
+                    "Server-Timing": f'dashboard;dur={elapsed_ms:.2f};desc="{cache_state}"',
+                },
             )
-            if not isinstance(nifty500_context, dict):
-                stored_context = _get_eod_store().load_latest_workspace_snapshot(
-                    "nifty500-market-context"
-                )
-                nifty500_context = (
-                    stored_context.get("payload")
-                    if isinstance(stored_context, dict) else None
-                )
-            futures_rows = _get_eod_store().load_futures_eod_snapshots()
-            futures_summary = build_dashboard_fno_summary(
-                calculate_futures_oi_summary(futures_rows),
-                stored_history_sessions=len(
-                    {
-                        item["date"]
-                        for item in futures_rows
-                        if isinstance(item.get("date"), date)
-                    }
-                ),
-            )
-            payload = build_dashboard_market_story(
-                build_dashboard_market_sentiment_summary(
-                    self._calculate_sentiment_payload(),
-                    self._calculate_cross_index_validation_payload(),
-                ),
-                build_dashboard_screener_summary(
-                    self._calculate_local_screener_payload()
-                ),
-                futures_summary,
-                self._calculate_regime_validation_payload(
-                    target_index="Nifty 50",
-                    benchmark_index=None,
-                ),
-                self._calculate_local_seasonality_payload(
-                    kind="index",
-                    instrument="Nifty 50",
-                ),
-                build_macro_events_calendar(
-                    today=datetime.now(INDIA_TIMEZONE).date()
-                ),
-                nifty500_context,
-            )
-            self._send_json(HTTPStatus.OK, payload)
         except ValueError as error:
             self._send_json(
                 HTTPStatus.SERVICE_UNAVAILABLE,
@@ -24042,12 +24191,19 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         with _SESSION_LOCK:
             _KITE_DIAGNOSTICS["last_error"] = reason
 
-    def _send_json(self, status: HTTPStatus, payload: dict[str, object]) -> None:
+    def _send_json(
+        self,
+        status: HTTPStatus,
+        payload: dict[str, object],
+        headers: dict[str, str] | None = None,
+    ) -> None:
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
 

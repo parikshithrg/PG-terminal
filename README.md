@@ -26,3 +26,16 @@ The proposed architecture and validation plan for the next page is recorded in
 All pages load `dist/styles.css` after page-specific styles. It contains the
 shared terminal shell, dual themes, compact Calibri typography, accessibility
 states and workspace composition rules.
+
+## Application architecture
+
+PG-terminal remains a buildless HTML/CSS/JavaScript application backed by a
+local Python service and SQLite/WAL evidence store. Shared browser concerns now
+live in focused modules under `dist/js/`: the JSON API client, ECharts runtime
+adapter and Dashboard overview orchestrator. Apache ECharts is pinned and served
+locally from `dist/vendor`, so analytical charts do not require a CDN.
+
+The Dashboard uses one `dashboard-overview-v1` read model rather than repeating
+six overlapping calculations. Its bounded in-process cache is invalidated by
+the business date or durable SQLite database/WAL changes. `/api/performance`
+reports cache hits, misses and build time without contacting a provider.

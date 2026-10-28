@@ -1724,7 +1724,7 @@
       .mutual-fund-position-row { grid-template-columns: minmax(110px, 1fr) 1fr auto; }
     }
   </style>
-  <link rel="stylesheet" href="styles.css?v=terminal-interface-v24-expense-import-19">
+  <link rel="stylesheet" href="styles.css?v=modular-architecture-v29-1">
 </head>
 <body data-active-page="dashboard">
   <a class="skip-link" href="#mainContent">Skip to main content</a>
@@ -1817,36 +1817,13 @@
       <div class="content">
         <div id="dashboardView">
           <div class="page-tabs" aria-label="Dashboard views">
-          <div class="page-tab active">Overview</div>
+          <div class="page-tab active">Executive EOD brief</div>
           </div>
 
           <div class="heading-row">
-            <h1>Dashboard</h1>
+            <h1>CEO EOD Market Note</h1>
             <div class="as-of" id="dashboardAsOf">Connect Kite for current index data</div>
           </div>
-
-        <section class="summary-grid terminal-market-strip" aria-label="Market summary">
-          <article class="summary-card">
-            <div class="summary-label">NIFTY 50</div>
-            <div class="summary-value" id="nifty50Value">—</div>
-            <div class="summary-meta" id="nifty50Meta">Not loaded</div>
-          </article>
-          <article class="summary-card">
-            <div class="summary-label">NIFTY BANK</div>
-            <div class="summary-value" id="niftyBankValue">—</div>
-            <div class="summary-meta" id="niftyBankMeta">Not loaded</div>
-          </article>
-          <article class="summary-card">
-            <div class="summary-label">NIFTY IT</div>
-            <div class="summary-value" id="niftyItValue">—</div>
-            <div class="summary-meta" id="niftyItMeta">Not loaded</div>
-          </article>
-          <article class="summary-card">
-            <div class="summary-label">NIFTY ENERGY</div>
-            <div class="summary-value" id="niftyEnergyValue">—</div>
-            <div class="summary-meta" id="niftyEnergyMeta">Not loaded</div>
-          </article>
-        </section>
 
         <section class="market-story tone-mixed" id="dashboardMarketStory" aria-labelledby="dashboardMarketStoryTitle" aria-live="polite">
           <div class="market-story-hero">
@@ -1868,6 +1845,29 @@
             </div>
           </div>
 
+          <section class="summary-grid terminal-market-strip" aria-label="Key market moves">
+            <article class="summary-card">
+              <div class="summary-label">NIFTY 50</div>
+              <div class="summary-value" id="nifty50Value">—</div>
+              <div class="summary-meta" id="nifty50Meta">Not loaded</div>
+            </article>
+            <article class="summary-card">
+              <div class="summary-label">NIFTY BANK</div>
+              <div class="summary-value" id="niftyBankValue">—</div>
+              <div class="summary-meta" id="niftyBankMeta">Not loaded</div>
+            </article>
+            <article class="summary-card">
+              <div class="summary-label">NIFTY IT</div>
+              <div class="summary-value" id="niftyItValue">—</div>
+              <div class="summary-meta" id="niftyItMeta">Not loaded</div>
+            </article>
+            <article class="summary-card">
+              <div class="summary-label">NIFTY ENERGY</div>
+              <div class="summary-value" id="niftyEnergyValue">—</div>
+              <div class="summary-meta" id="niftyEnergyMeta">Not loaded</div>
+            </article>
+          </section>
+
           <div class="story-signal-grid" id="dashboardStorySignals" aria-label="Connected market signals">
             <article class="story-signal"><div class="story-signal-head"><span class="story-signal-label">Loading</span><i class="story-signal-dot"></i></div><strong>—</strong><p>Waiting for local evidence.</p><div class="story-signal-track"><div class="story-signal-fill"></div></div></article>
           </div>
@@ -1876,6 +1876,7 @@
             <article class="market-story-panel">
               <h3>What similar regimes showed</h3>
               <p class="market-story-panel-copy" id="dashboardStoryHistoryNote">Trailing-only historical outcomes are loading.</p>
+              <div class="dashboard-analogue-chart" id="dashboardAnalogueChart" role="img" aria-label="Historical analogue mean returns and positive-observation probabilities" hidden></div>
               <div class="story-horizon-grid" id="dashboardStoryHorizons"></div>
             </article>
             <article class="market-story-panel">
@@ -1929,8 +1930,8 @@
           <div class="workspace-summary-card">
             <div class="workspace-summary-head">
               <div>
-                <div class="workspace-summary-kicker">Personal performance story · current uploaded holdings</div>
-                <h2 class="workspace-summary-headline" id="dashboardPortfolioTitle">Portfolio</h2>
+                <div class="workspace-summary-kicker">Bank balance-sheet lens · current uploaded holdings</div>
+                <h2 class="workspace-summary-headline" id="dashboardPortfolioTitle">Portfolio impact</h2>
               </div>
               <span class="workspace-summary-status unavailable" id="dashboardPortfolioStatus">Upload required</span>
             </div>
@@ -4486,30 +4487,62 @@
           </section>
         </section>
 
-        <section id="expenseTrackerView" hidden aria-labelledby="expenseTrackerTitle">
+        <section id="expenseTrackerView" hidden aria-label="Expense Tracker">
+          <div class="expense-draft-source" hidden>
           <div class="page-tabs" aria-label="Expense Tracker views">
-            <div class="page-tab active">Monthly ledger</div>
+            <div class="page-tab active">Expense overview</div>
           </div>
 
-          <div class="analysis-intro">
+          <div class="analysis-intro expense-hero">
             <div>
               <h1 id="expenseTrackerTitle">Expense Tracker</h1>
-              <p class="analysis-caption">A separate personal monthly ledger · stored only in this browser</p>
+              <p class="analysis-caption">See the pattern first, then review or edit the underlying ledger.</p>
             </div>
-            <span class="analysis-status expense-local-status">LOCAL ONLY</span>
+            <div class="expense-hero-controls">
+              <label class="expense-month-control" for="expenseMonthSelect"><span>ANALYSIS MONTH</span><input id="expenseMonthSelect" type="month"></label>
+              <span class="analysis-status expense-local-status">LOCAL ONLY</span>
+            </div>
           </div>
 
           <section class="summary-grid expense-summary-grid" aria-label="Selected month expense summary">
-            <article class="summary-card"><div class="summary-value" id="expenseTotalValue">₹0</div><div class="summary-meta">Month spending</div></article>
-            <article class="summary-card"><div class="summary-value" id="expenseEntryCount">0</div><div class="summary-meta">Entries</div></article>
-            <article class="summary-card"><div class="summary-value" id="expenseTopCategory">—</div><div class="summary-meta">Largest category</div></article>
-            <article class="summary-card"><div class="summary-value" id="expenseAverageValue">₹0</div><div class="summary-meta">Average expense</div></article>
+            <article class="summary-card expense-summary-card spend"><span class="expense-card-index">01</span><div class="summary-meta">Month spending</div><div class="summary-value" id="expenseTotalValue">₹0</div><small id="expenseSpendChange">No prior-month comparison</small></article>
+            <article class="summary-card expense-summary-card entries"><span class="expense-card-index">02</span><div class="summary-meta">Recorded entries</div><div class="summary-value" id="expenseEntryCount">0</div><small id="expenseEntryContext">No entries in this month</small></article>
+            <article class="summary-card expense-summary-card category"><span class="expense-card-index">03</span><div class="summary-meta">Largest category</div><div class="summary-value" id="expenseTopCategory">—</div><small id="expenseTopCategoryShare">No category mix yet</small></article>
+            <article class="summary-card expense-summary-card average"><span class="expense-card-index">04</span><div class="summary-meta">Average entry</div><div class="summary-value" id="expenseAverageValue">₹0</div><small id="expenseAverageContext">Across the selected month</small></article>
+          </section>
+
+          <section class="expense-visual-board" aria-label="Expense analysis dashboard">
+            <article class="analysis-section expense-chart-panel expense-trend-panel">
+              <div class="terminal-section-head">
+                <div><span class="terminal-kicker">12-MONTH FLOW</span><h2>Spending trend</h2></div>
+                <span class="terminal-context" id="expenseTrendStatus">Awaiting expenses</span>
+              </div>
+              <div class="expense-trend-chart" id="expenseTrendChart" role="img" aria-label="Monthly spending for the twelve months ending with the selected month"></div>
+              <p class="expense-chart-caption" id="expenseTrendInsight">Import historical expenses to reveal the monthly pattern.</p>
+            </article>
+
+            <article class="analysis-section expense-chart-panel expense-mix-panel">
+              <div class="terminal-section-head">
+                <div><span class="terminal-kicker">CATEGORY MIX</span><h2>Where the month went</h2></div>
+                <span class="terminal-context" id="expenseCategoryStatus">No entries</span>
+              </div>
+              <div class="expense-mix-layout">
+                <div class="expense-donut" id="expenseDonutChart" role="img" aria-label="Category allocation for the selected month"><div><strong>₹0</strong><span>selected month</span></div></div>
+                <div class="expense-category-grid" id="expenseCategoryGrid"><div class="expense-empty">Add an expense to build the category view.</div></div>
+              </div>
+            </article>
+
+            <div class="expense-insight-strip">
+              <article><span>RECORDED YEAR</span><strong id="expenseYearTotalValue">₹0</strong><small id="expenseYearTotalMeta">No annual history</small></article>
+              <article><span>PEAK MONTH</span><strong id="expensePeakMonthValue">—</strong><small id="expensePeakMonthMeta">No monthly history</small></article>
+              <article><span>TOP-CATEGORY SHARE</span><strong id="expenseConcentrationValue">—</strong><small id="expenseConcentrationMeta">No concentration reading</small></article>
+            </div>
           </section>
 
           <section class="analysis-section expense-entry-section">
             <div class="terminal-section-head">
-              <div><span class="terminal-kicker">MONTHLY INPUT</span><h2>Add an expense</h2></div>
-              <label class="expense-month-control" for="expenseMonthSelect"><span>VIEW MONTH</span><input id="expenseMonthSelect" type="month"></label>
+              <div><span class="terminal-kicker">UPDATE THE LEDGER</span><h2>Add or import expenses</h2></div>
+              <span class="terminal-context">Saved automatically in this browser</span>
             </div>
             <div class="expense-import-strip">
               <div><span class="terminal-kicker">HISTORICAL IMPORT</span><strong>Populate multiple months from CSV, XLSX or ODS</strong><small>Date and Amount are required. Category, Description and Payment are detected when present.</small></div>
@@ -4528,7 +4561,7 @@
               <label><span>Amount (₹)</span><input id="expenseAmountInput" type="number" min="0.01" step="0.01" inputmode="decimal" required></label>
               <button class="panel-button primary" type="submit">Add expense</button>
             </form>
-            <p class="analysis-note">This ledger is independent from portfolio and market data. Entries remain in this browser's local storage and are not sent to the server.</p>
+            <p class="analysis-note">The ledger is independent from portfolio and market data. Entries remain in this browser's local storage; uploaded files are parsed locally by PG-terminal and are not retained.</p>
           </section>
 
           <section class="analysis-section expense-ledger-section">
@@ -4543,11 +4576,7 @@
               </table>
             </div>
           </section>
-
-          <section class="analysis-section expense-category-section">
-            <div class="terminal-section-head"><div><span class="terminal-kicker">CATEGORY MIX</span><h2>Where the month went</h2></div><span class="terminal-context" id="expenseCategoryStatus">No entries</span></div>
-            <div class="expense-category-grid" id="expenseCategoryGrid"><div class="expense-empty">Add an expense to build the category view.</div></div>
-          </section>
+          </div>
         </section>
 
         <section id="emptyView" hidden aria-live="polite">
@@ -4560,6 +4589,10 @@
   <div class="notice" id="notice" role="status" aria-live="polite"></div>
 
   <script src="reference-universes.js"></script>
+  <script src="vendor/echarts.min.js"></script>
+  <script src="js/pg-api.js"></script>
+  <script src="js/pg-charts.js"></script>
+  <script src="js/pg-dashboard.js"></script>
   <script>
     const body = document.body;
     const themeToggle = document.getElementById('themeToggle');
@@ -5009,6 +5042,19 @@
       }
     }
 
+    function offsetExpenseMonth(monthKey, offset) {
+      const [year, month] = String(monthKey || '').split('-').map(Number);
+      if (!year || !month) return '';
+      const date = new Date(Date.UTC(year, month - 1 + offset, 1));
+      return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+    }
+
+    function expenseMonthName(monthKey, format = 'short') {
+      if (!monthKey) return '—';
+      return new Intl.DateTimeFormat('en-IN', { month: format, year: format === 'long' ? 'numeric' : undefined, timeZone: 'UTC' })
+        .format(new Date(`${monthKey}-01T00:00:00Z`));
+    }
+
     function renderExpenseTracker() {
       const rows = selectedExpenseRows().sort((left, right) => String(right.date || '').localeCompare(String(left.date || '')));
       const total = rows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
@@ -5018,12 +5064,39 @@
         return totals;
       }, {});
       const categories = Object.entries(categoryTotals).sort((left, right) => right[1] - left[1]);
+      const selectedMonth = expenseMonthSelect.value;
+      const previousMonth = offsetExpenseMonth(selectedMonth, -1);
+      const previousTotal = expenseRows.filter((row) => String(row.date || '').slice(0, 7) === previousMonth)
+        .reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+      const selectedYear = selectedMonth.slice(0, 4);
+      const yearRows = expenseRows.filter((row) => String(row.date || '').slice(0, 4) === selectedYear);
+      const yearTotal = yearRows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+      const monthTotals = expenseRows.reduce((totals, row) => {
+        const monthKey = String(row.date || '').slice(0, 7);
+        if (/^\d{4}-\d{2}$/.test(monthKey)) totals[monthKey] = (totals[monthKey] || 0) + (Number(row.amount) || 0);
+        return totals;
+      }, {});
+      const yearMonths = Object.entries(monthTotals).filter(([monthKey]) => monthKey.startsWith(selectedYear)).sort((left, right) => left[0].localeCompare(right[0]));
+      const peakMonth = yearMonths.reduce((peak, item) => !peak || item[1] > peak[1] ? item : peak, null);
+      const topShare = total && categories.length ? categories[0][1] / total * 100 : 0;
       document.getElementById('expenseTotalValue').textContent = formatExpenseCurrency(total);
       document.getElementById('expenseEntryCount').textContent = rows.length.toLocaleString('en-IN');
       document.getElementById('expenseTopCategory').textContent = categories.length ? categories[0][0] : '—';
       document.getElementById('expenseAverageValue').textContent = formatExpenseCurrency(rows.length ? total / rows.length : 0);
-      document.getElementById('expenseLedgerTitle').textContent = expenseMonthSelect.value
-        ? `Expenses · ${new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${expenseMonthSelect.value}-01T00:00:00Z`))}`
+      const spendChange = document.getElementById('expenseSpendChange');
+      spendChange.classList.remove('positive', 'negative');
+      if (previousTotal > 0) {
+        const change = (total - previousTotal) / previousTotal * 100;
+        spendChange.textContent = `${Math.abs(change).toFixed(1)}% ${change <= 0 ? 'below' : 'above'} ${expenseMonthName(previousMonth)}`;
+        spendChange.classList.add(change <= 0 ? 'positive' : 'negative');
+      } else {
+        spendChange.textContent = total ? `No spending recorded in ${expenseMonthName(previousMonth)}` : 'No prior-month comparison';
+      }
+      document.getElementById('expenseEntryContext').textContent = rows.length ? `Across ${categories.length} categor${categories.length === 1 ? 'y' : 'ies'}` : 'No entries in this month';
+      document.getElementById('expenseTopCategoryShare').textContent = categories.length ? `${topShare.toFixed(1)}% of selected-month spending` : 'No category mix yet';
+      document.getElementById('expenseAverageContext').textContent = rows.length ? `Across ${rows.length.toLocaleString('en-IN')} recorded line${rows.length === 1 ? '' : 's'}` : 'Across the selected month';
+      document.getElementById('expenseLedgerTitle').textContent = selectedMonth
+        ? `Expenses · ${expenseMonthName(selectedMonth, 'long')}`
         : 'Expenses';
       expenseLedgerBody.innerHTML = rows.length
         ? rows.map((row) => `<tr data-expense-id="${escapeHtml(String(row.id))}">
@@ -5035,13 +5108,49 @@
             <td><button class="expense-remove-button" data-remove-expense="${escapeHtml(String(row.id))}" type="button">Remove</button></td>
           </tr>`).join('')
         : '<tr><td colspan="6">No expenses recorded for this month.</td></tr>';
+      const trendMonths = Array.from({ length: 12 }, (_unused, index) => offsetExpenseMonth(selectedMonth, index - 11));
+      const trendMaximum = Math.max(...trendMonths.map((monthKey) => monthTotals[monthKey] || 0), 0);
+      const populatedTrend = trendMonths.filter((monthKey) => (monthTotals[monthKey] || 0) > 0);
+      const trendAverage = populatedTrend.length ? populatedTrend.reduce((sum, monthKey) => sum + monthTotals[monthKey], 0) / populatedTrend.length : 0;
+      document.getElementById('expenseTrendStatus').textContent = `${expenseMonthName(trendMonths[0])}–${expenseMonthName(selectedMonth)} · ${populatedTrend.length} recorded`;
+      document.getElementById('expenseTrendChart').innerHTML = trendMonths.map((monthKey) => {
+        const amount = monthTotals[monthKey] || 0;
+        const height = amount && trendMaximum ? Math.max(5, amount / trendMaximum * 100) : 2;
+        return `<div class="expense-trend-column${monthKey === selectedMonth ? ' active' : ''}" title="${escapeHtml(expenseMonthName(monthKey, 'long'))}: ${escapeHtml(formatExpenseCurrency(amount))}"><div class="expense-trend-bar-wrap"><i class="expense-trend-bar" style="height:${height.toFixed(1)}%"></i></div><span class="expense-trend-label">${escapeHtml(expenseMonthName(monthKey))}</span></div>`;
+      }).join('');
+      const versusAverage = trendAverage ? (total - trendAverage) / trendAverage * 100 : 0;
+      document.getElementById('expenseTrendInsight').innerHTML = rows.length && populatedTrend.length
+        ? `<strong>${escapeHtml(expenseMonthName(selectedMonth, 'long'))}</strong> is ${Math.abs(versusAverage).toFixed(1)}% ${versusAverage <= 0 ? 'below' : 'above'} the average of the ${populatedTrend.length} recorded month${populatedTrend.length === 1 ? '' : 's'} in this view.`
+        : populatedTrend.length
+          ? `No entries are recorded in <strong>${escapeHtml(expenseMonthName(selectedMonth, 'long'))}</strong>. The chart keeps ${populatedTrend.length} earlier recorded month${populatedTrend.length === 1 ? '' : 's'} visible for context.`
+          : 'Import historical expenses to reveal the monthly pattern.';
+
+      const categoryColors = ['#6d5bd0', '#13a8c7', '#d69200', '#1a9b63', '#d34865', '#4177d7'];
+      const categoryDisplay = categories.slice(0, 5);
+      if (categories.length > 5) categoryDisplay.push(['Other categories', categories.slice(5).reduce((sum, item) => sum + item[1], 0)]);
+      let categoryCursor = 0;
+      const donutStops = categoryDisplay.map(([_category, amount], index) => {
+        const start = categoryCursor;
+        categoryCursor += total ? amount / total * 100 : 0;
+        return `${categoryColors[index]} ${start.toFixed(2)}% ${categoryCursor.toFixed(2)}%`;
+      });
+      const donut = document.getElementById('expenseDonutChart');
+      donut.style.background = total ? `conic-gradient(${donutStops.join(',')})` : 'conic-gradient(var(--terminal-line-soft) 0 100%)';
+      donut.setAttribute('aria-label', total ? `${categories.length} expense categories totalling ${formatExpenseCurrency(total)}` : 'No category allocation for the selected month');
+      donut.innerHTML = `<div><strong>${escapeHtml(formatExpenseCurrency(total))}</strong><span>selected month</span></div>`;
       document.getElementById('expenseCategoryStatus').textContent = rows.length ? `${categories.length} categories · ${formatExpenseCurrency(total)}` : 'No entries';
-      document.getElementById('expenseCategoryGrid').innerHTML = categories.length
-        ? categories.map(([category, amount]) => {
+      document.getElementById('expenseCategoryGrid').innerHTML = categoryDisplay.length
+        ? categoryDisplay.map(([category, amount], index) => {
             const share = total ? amount / total * 100 : 0;
-            return `<article class="expense-category-card"><header><span>${escapeHtml(category)}</span><strong>${formatExpenseCurrency(amount)}</strong></header><div class="expense-category-bar"><i style="width:${Math.min(100, share).toFixed(2)}%"></i></div><small>${share.toFixed(1)}% of the selected month</small></article>`;
+            return `<article class="expense-category-card" style="--expense-category-color:${categoryColors[index]}"><i class="expense-category-swatch"></i><header><span>${escapeHtml(category)}</span><small>${share.toFixed(1)}% of month</small></header><strong>${escapeHtml(formatExpenseCurrency(amount))}</strong></article>`;
           }).join('')
         : '<div class="expense-empty">Add an expense to build the category view.</div>';
+      document.getElementById('expenseYearTotalValue').textContent = formatExpenseCurrency(yearTotal);
+      document.getElementById('expenseYearTotalMeta').textContent = yearRows.length ? `${yearMonths.length} recorded month${yearMonths.length === 1 ? '' : 's'} · ${yearRows.length.toLocaleString('en-IN')} entries` : `No entries recorded in ${selectedYear}`;
+      document.getElementById('expensePeakMonthValue').textContent = peakMonth ? expenseMonthName(peakMonth[0]) : '—';
+      document.getElementById('expensePeakMonthMeta').textContent = peakMonth ? `${formatExpenseCurrency(peakMonth[1])} was the year's highest month` : 'No monthly history';
+      document.getElementById('expenseConcentrationValue').textContent = categories.length ? `${topShare.toFixed(1)}%` : '—';
+      document.getElementById('expenseConcentrationMeta').textContent = categories.length ? `${categories[0][0]} is the largest expense category` : 'No concentration reading';
       exportExpensesButton.disabled = !rows.length;
       clearExpenseMonthButton.disabled = !rows.length;
     }
@@ -5146,6 +5255,7 @@
         try { localStorage.setItem('pg-terminal-theme', currentTheme()); } catch (_error) { /* Storage may be disabled. */ }
       }
       updateThemeControl();
+      window.dispatchEvent(new CustomEvent('pgterminal:themechange', { detail: { theme: currentTheme() } }));
       if (institutionalFlowSeries.length) window.requestAnimationFrame(drawInstitutionalFlowCharts);
       if (priceStrengthSeries.length) window.requestAnimationFrame(drawPriceStrengthChart);
     }
@@ -5904,6 +6014,12 @@
       const analogue = result.historical_analogue || {};
       document.getElementById('dashboardStoryHistoryNote').textContent = `${analogue.label || regime.label || 'Current regime'} · ${Number(analogue.sessions_observed || 0).toLocaleString('en-IN')} historical sessions. Forward windows overlap and are descriptive, not forecasts.`;
       const horizons = Array.isArray(analogue.horizons) ? analogue.horizons : [];
+      window.PGTerminalCharts?.register('dashboard-analogue', () => {
+        window.PGTerminalCharts.renderAnalogueChart(
+          document.getElementById('dashboardAnalogueChart'),
+          horizons,
+        );
+      });
       document.getElementById('dashboardStoryHorizons').innerHTML = horizons.length
         ? horizons.map((row) => {
           const meanReturn = Number(row.mean_return_pct || 0);
@@ -5976,9 +6092,8 @@
       refreshDashboardStoryButton.disabled = true;
       refreshDashboardStoryButton.textContent = 'Refreshing…';
       try {
-        const response = await fetch('/api/dashboard/market-story', { cache: 'no-store' });
-        const result = await response.json();
-        if (!response.ok || result.ok !== true) throw new Error(result.reason || 'market_story_unavailable');
+        const result = await window.PGTerminalApi.getJSON('/api/dashboard/market-story');
+        if (result.ok !== true) throw new Error(result.reason || 'market_story_unavailable');
         renderDashboardMarketStory(result);
         if (showSuccess) showNotice(`Market story refreshed through ${formatDisplayDate(result.as_of_date)}.`);
         return true;
@@ -5995,28 +6110,34 @@
       }
     }
 
-    let dashboardWorkspaceLoadPromise = null;
+    function applyDashboardOverview(result) {
+      renderDashboardMarketStory(result.market_story);
+      renderDashboardMarketSentimentSummary(result.sentiment);
+      renderDashboardFnoSummary(result.fno);
+      renderDashboardScreenerSummary(result.screener);
+      dashboardSeasonalityRows = Array.isArray(result.seasonality?.indices)
+        ? result.seasonality.indices
+        : [];
+      dashboardSeasonalityUniverse = result.seasonality?.universe || {};
+      updateSeasonalityIndexReadiness(dashboardSeasonalityRows, dashboardSeasonalityUniverse);
+      renderSelectedDashboardSeasonality();
+      renderDashboardEventsSummary(result.events);
+    }
 
     function loadDashboardWorkspace() {
-      if (dashboardWorkspaceLoadPromise) return dashboardWorkspaceLoadPromise;
-      const task = (async () => {
-        // The connected story is the page's primary evidence. Load it before
-        // the secondary cards so concurrent SQLite summaries cannot delay the
-        // first meaningful visual state.
-        await loadDashboardMarketStory(false);
-        await Promise.allSettled([
-          loadDashboardMarketSentimentSummary(false),
-          loadDashboardFnoSummary(false),
-          loadDashboardScreenerSummary(false),
-          loadDashboardSeasonalitySummary(false),
-          loadDashboardEventsSummary(false),
-        ]);
-      })();
-      dashboardWorkspaceLoadPromise = task;
-      task.finally(() => {
-        if (dashboardWorkspaceLoadPromise === task) dashboardWorkspaceLoadPromise = null;
+      return window.PGTerminalDashboard.loadOverview({
+        apply: applyDashboardOverview,
+        fallback: async () => {
+          await loadDashboardMarketStory(false);
+          await Promise.allSettled([
+            loadDashboardMarketSentimentSummary(false),
+            loadDashboardFnoSummary(false),
+            loadDashboardScreenerSummary(false),
+            loadDashboardSeasonalitySummary(false),
+            loadDashboardEventsSummary(false),
+          ]);
+        },
       });
-      return task;
     }
 
     function renderDashboardMarketSentimentSummary(result) {

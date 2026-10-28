@@ -31,6 +31,7 @@ from server import (
     calculate_regime_walk_forward_validation,
     build_dashboard_market_sentiment_summary,
     build_dashboard_market_story,
+    build_dashboard_overview,
     build_dashboard_fno_summary,
     build_dashboard_screener_summary,
     build_alpha_research_foundation,
@@ -217,7 +218,9 @@ class AlphaResearchFoundationTest(unittest.TestCase):
             static_root = root / "dist"
             static_root.mkdir()
             for name in build_production_readiness_contract()["required_static_assets"]:
-                (static_root / name).write_text("ready", encoding="utf-8")
+                asset_path = static_root / name
+                asset_path.parent.mkdir(parents=True, exist_ok=True)
+                asset_path.write_text("ready", encoding="utf-8")
 
             result = build_production_health_report(store, static_root)
 
@@ -3307,6 +3310,22 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
             "Nifty FMCG",
         )
         self.assertIn("narrow", result["headline"])
+
+    def test_dashboard_overview_keeps_one_consistent_component_contract(self):
+        component = {"ok": True, "as_of_date": "2026-10-28"}
+        result = build_dashboard_overview(
+            market_story={**component, "headline": "Market story"},
+            sentiment_summary={**component, "status": "watch_only"},
+            fno_summary={**component, "status": "history_building"},
+            screener_summary={**component, "status": "partial_history"},
+            seasonality_summary={**component, "indices": []},
+            events_summary={**component, "events": []},
+        )
+
+        self.assertEqual(result["contract_version"], "dashboard-overview-v1")
+        self.assertEqual(result["as_of_date"], "2026-10-28")
+        self.assertEqual(result["market_story"]["headline"], "Market story")
+        self.assertEqual(result["seasonality"]["indices"], [])
 
     def test_news_events_foundation_keeps_unsourced_live_items_empty(self):
         result = build_news_events_workspace(

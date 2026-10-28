@@ -400,6 +400,43 @@ research pipeline before the final full-site presentation and operating pass.
     only storage and avoid duplicating the source data. Fine-tune categories,
     aggregation rules, labels and chart selection against the owner's real ledger
     before treating the page as complete.
+30. `modular-performance-architecture-v29` — **complete; reusable improvement
+    mechanism operational**. Retain the buildless HTML/CSS/JavaScript interface and
+    original PG-terminal design system, strengthen the Python/SQLite service
+    boundary, split reusable browser infrastructure into focused modules and use
+    locally served Apache ECharts for earned analytical visualizations. The first
+    slice adds a shared timeout-aware JSON API client, a theme-responsive chart
+    runtime, a pinned offline ECharts 5.6.0 asset and a live historical-analogue
+    chart on the CEO Dashboard without replacing its accessible numerical
+    evidence cards. Production health now treats these modules as required static
+    assets. The second slice profiles the primary Dashboard story at roughly 6.4
+    seconds per uncached request and adds a bounded thread-safe server read-model
+    cache. Its identity includes the current business date plus SQLite database,
+    and WAL file size/mtime, so any durable stored evidence change rebuilds
+    the story rather than serving stale analysis. Responses disclose hit/miss and
+    server duration through headers, and tests cover reuse and invalidation.
+    Live verification reduced an unchanged repeat request to approximately 1.5
+    milliseconds end-to-end (`X-PG-Cache: hit`), while the cold path remains
+    fully calculated and visibly reports `miss`.
+    The third slice adds `dashboard-overview-v1`: one server-composed, cached
+    read model for the market story, sentiment, F&O, screener, all-index
+    seasonality and events. Dashboard startup now makes one internally consistent
+    request instead of calculating six overlapping endpoints; the individual
+    endpoints remain available for focused refresh controls and as a fallback.
+    Live verification measured the consolidated cold build at 11.2 seconds and
+    the unchanged warm overview at approximately 1.7 milliseconds.
+    The final foundation slice moves Dashboard request orchestration into a
+    dedicated module, coalesces concurrent overview loads and exposes a local
+    `/api/performance` diagnostic contract with cache entries, hits, misses, hit
+    rate and total build time. The mechanism is now complete: subsequent page
+    migrations can reuse the API client, chart adapter, orchestrator pattern,
+    evidence fingerprint and bounded read-model cache without another underlying
+    architecture change. Page-by-page extraction from the monolithic inline
+    script and profiling of remaining EOD calculations are implementation work,
+    not blockers for this mechanism. No React/Vue rewrite is planned: the
+    migration must preserve all IDs, local-only privacy boundaries, missing-data
+    states and research-safety gates while reducing page coupling and repeated
+    calculations.
 
 ### Final UI revamp direction — approved concept set
 
