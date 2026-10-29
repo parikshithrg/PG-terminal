@@ -7,6 +7,7 @@ import hashlib
 import json
 import re
 import sqlite3
+from collections import defaultdict
 from contextlib import closing
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -760,6 +761,41 @@ class EODStore:
             }
             for row in rows
         ]
+
+    def load_candle_histories(self, *, kind: str) -> dict[str, list[dict[str, object]]]:
+        """Load every validated candle series for one locally stored universe.
+
+        Backtests use one ordered query instead of opening a connection for each
+        instrument.  The returned shape deliberately matches ``load_candles``
+        for the price fields used by research calculations.
+        """
+        if kind not in {"index", "stock"}:
+            raise ValueError("invalid_instrument_identity")
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                """
+                SELECT i.display_name, c.session_date, c.open, c.high, c.low,
+                       c.close, c.volume
+                FROM instruments i
+                JOIN candles c ON c.instrument_id = i.instrument_id
+                WHERE i.kind = ? AND c.validation_status = 'validated'
+                ORDER BY i.display_name, c.session_date
+                """,
+                (kind,),
+            ).fetchall()
+        histories: dict[str, list[dict[str, object]]] = defaultdict(list)
+        for row in rows:
+            histories[str(row["display_name"])].append(
+                {
+                    "date": date.fromisoformat(row["session_date"]),
+                    "open": float(row["open"]),
+                    "high": float(row["high"]),
+                    "low": float(row["low"]),
+                    "close": float(row["close"]),
+                    "volume": int(row["volume"]) if row["volume"] is not None else None,
+                }
+            )
+        return dict(histories)
 
     def backfill_candle_metadata(
         self,

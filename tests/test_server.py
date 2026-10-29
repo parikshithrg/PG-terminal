@@ -3,6 +3,7 @@ import socket
 import urllib.error
 import io
 import json
+import math
 import tempfile
 import zipfile
 from datetime import date, datetime, time, timedelta
@@ -70,6 +71,9 @@ from server import (
     build_historical_entry_snapshot_validation,
     build_historical_point_in_time_readiness,
     build_backtests_workspace,
+    build_breadth_reversal_model,
+    build_stock_backtest_results,
+    build_short_term_trade_recommendations,
     build_seasonality_backtest_workspace,
     aggregate_historical_closes,
     apply_recovering_market_state,
@@ -78,8 +82,10 @@ from server import (
     calculate_institutional_flow_summary,
     calculate_confirmed_fpi_summary,
     calculate_macro_context_summary,
+    macro_context_covers_completed_date,
     calculate_futures_oi_summary,
     calculate_global_risk_summary,
+    global_risk_covers_completed_date,
     calculate_xirr,
     calculate_cashflow_matched_benchmark_return,
     calculate_portfolio_risk_metrics,
@@ -112,6 +118,7 @@ from server import (
     parse_rbi_transposed_annual_growth_table,
     parse_rbi_annual_report_growth_table,
     parse_near_month_stock_futures,
+    pending_futures_contracts_for_session,
     parse_nse_announcement_csv,
     parse_earnings_csv,
     parse_expense_file,
@@ -251,10 +258,11 @@ class AlphaResearchFoundationTest(unittest.TestCase):
         )
         self.assertEqual(overlay["contract_version"], "candidate-overlays-v9")
         self.assertEqual(overlay["summary"]["catalyst_gates_ready"], 1)
-        self.assertEqual(overlay["summary"]["candidate_impacts"], 0)
+        self.assertEqual(overlay["summary"]["trade_recommendations"], 0)
         self.assertEqual(overlay["catalyst_gates"][0]["state"], "ready")
         self.assertEqual(overlay["catalyst_gates"][1]["state"], "blocked")
-        self.assertEqual(overlay["portfolio_gates"][0]["state"], "client_runtime_required")
+        self.assertNotIn("portfolio_gates", overlay)
+        self.assertEqual(overlay["overlay_rules"]["portfolio_role"], "not applicable; long-term Portfolio Analysis is a separate workspace")
         self.assertEqual(overlay["outputs"]["ranked_candidates"], [])
 
     def test_candidate_overlay_earnings_gate_uses_frozen_minimum(self):
@@ -272,8 +280,8 @@ class AlphaResearchFoundationTest(unittest.TestCase):
 
         self.assertEqual(result["contract_version"], "auditable-research-cards-v10")
         self.assertEqual(result["status"], "publication_blocked")
-        self.assertEqual(result["summary"]["required_fields"], 8)
-        self.assertEqual(result["summary"]["publication_gates"], 4)
+        self.assertEqual(result["summary"]["required_fields"], 7)
+        self.assertEqual(result["summary"]["publication_gates"], 3)
         self.assertEqual(result["summary"]["gates_ready"], 0)
         self.assertEqual(result["cards"], [])
 
@@ -2502,13 +2510,134 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
             ],
         }
         workspace = build_backtests_workspace(entry_validation)
-        self.assertEqual(workspace["contract_version"], "backtests-v4")
-        self.assertEqual(workspace["summary"]["registered_contracts"], 2)
+        self.assertEqual(workspace["contract_version"], "backtests-v6")
+        self.assertEqual(workspace["summary"]["registered_contracts"], 3)
         self.assertEqual(workspace["summary"]["chronological_tests_completed"], 1)
         self.assertEqual(workspace["summary"]["held_out_tests_passed"], 0)
         self.assertEqual(workspace["registry"][0]["status"], "blocked")
         self.assertFalse(workspace["trait_results"][0]["held_out_gate_passed"])
         self.assertEqual(workspace["validation_split"]["held_out_period"]["from"], "2022-04-01")
+
+    def test_breadth_reversal_model_uses_prior_states_and_reports_walk_forward_scores(self):
+        sessions = [date(2020, 1, 1) + timedelta(days=offset) for offset in range(520)]
+        index_candles = [
+            {"date": session, "close": 100 + (position * 0.04) + (8 * math.sin(position / 17))}
+            for position, session in enumerate(sessions)
+        ]
+        stock_histories = {}
+        for stock_number in range(30):
+            stock_histories[f"STOCK{stock_number}"] = [
+                {
+                    "date": session,
+                    "close": 50
+                    + stock_number
+                    + (position * (0.015 + stock_number / 10000))
+                    + ((5 + stock_number / 10) * math.sin((position + stock_number) / 15)),
+                }
+                for position, session in enumerate(sessions)
+            ]
+        result = build_breadth_reversal_model(
+            stock_histories,
+            index_candles,
+            instrument="Nifty 50",
+        )
+        self.assertEqual(result["status"], "ready")
+        self.assertEqual(result["contract_version"], "breadth-reversal-knn-v1")
+        self.assertEqual(result["current_breadth"]["eligible_200"], 30)
+        self.assertEqual([row["sessions"] for row in result["horizons"]], [5, 20, 60])
+        self.assertGreater(result["horizons"][0]["walk_forward_predictions"], 0)
+        self.assertIsNotNone(result["horizons"][0]["brier_score"])
+        self.assertIn("survivorship", " ".join(result["limitations"]).lower())
+
+    def test_stock_backtest_results_returns_every_selected_stock(self):
+        sessions = [date(2020, 1, 1) + timedelta(days=offset) for offset in range(620)]
+        histories = {
+            f"STOCK{stock_number}": [
+                {
+                    "date": session,
+                    "close": 80
+                    + stock_number
+                    + position * 0.03
+                    + (7 * math.sin((position + stock_number * 3) / 14)),
+                }
+                for position, session in enumerate(sessions)
+            ]
+            for stock_number in range(6)
+        }
+        histories["SHORT"] = [
+            {"date": session, "close": 100 + position}
+            for position, session in enumerate(sessions[:100])
+        ]
+        result = build_stock_backtest_results(
+            histories,
+            universe_label="Test universe",
+            universe_key="test",
+        )
+        self.assertEqual(result["status"], "ready")
+        self.assertEqual(result["summary"]["selected_stocks"], 7)
+        self.assertEqual(result["summary"]["results_returned"], 7)
+        self.assertEqual(result["summary"]["calculation_ready"], 6)
+        self.assertEqual(result["summary"]["insufficient_history"], 1)
+        ready = next(row for row in result["stocks"] if row["symbol"] == "STOCK0")
+        self.assertEqual([row["sessions"] for row in ready["horizons"]], [5, 20, 60])
+        unavailable = next(row for row in result["stocks"] if row["symbol"] == "SHORT")
+        self.assertEqual(unavailable["status"], "insufficient_history")
+
+    def test_stock_backtest_results_blocks_empty_universe(self):
+        result = build_stock_backtest_results(
+            {},
+            universe_label="Empty universe",
+            universe_key="empty",
+        )
+        self.assertEqual(result["status"], "no_eligible_stocks")
+        self.assertEqual(result["summary"]["results_returned"], 0)
+        self.assertEqual(result["stocks"], [])
+
+    def test_short_term_trade_recommendations_are_portfolio_independent(self):
+        stock_results = {
+            "as_of_date": "2026-10-28",
+            "universe_key": "test",
+            "universe_label": "Test universe",
+            "stocks": [
+                {
+                    "symbol": "LONGTEST",
+                    "status": "ready",
+                    "as_of_date": "2026-10-28",
+                    "close": 100.0,
+                    "prior_direction": "down",
+                    "prior_20_session_return_pct": -8.0,
+                    "above_20dma": False,
+                    "above_200dma": False,
+                    "horizons": [
+                        {"sessions": 5, "status": "ready", "probability_pct": 66.0, "observations": 40},
+                        {"sessions": 20, "status": "ready", "probability_pct": 60.0, "observations": 20},
+                        {"sessions": 60, "status": "low_sample", "probability_pct": 70.0, "observations": 4},
+                    ],
+                },
+                {
+                    "symbol": "SHORTTEST",
+                    "status": "ready",
+                    "as_of_date": "2026-10-28",
+                    "close": 200.0,
+                    "prior_direction": "up",
+                    "prior_20_session_return_pct": 9.0,
+                    "above_20dma": True,
+                    "above_200dma": True,
+                    "horizons": [
+                        {"sessions": 5, "status": "ready", "probability_pct": 68.0, "observations": 45},
+                        {"sessions": 20, "status": "ready", "probability_pct": 64.0, "observations": 22},
+                    ],
+                },
+            ],
+        }
+        result = build_short_term_trade_recommendations(stock_results)
+
+        self.assertEqual(result["status"], "recommendations_ready")
+        self.assertEqual(result["summary"]["recommendations"], 2)
+        self.assertEqual(result["summary"]["long"], 1)
+        self.assertEqual(result["summary"]["short"], 1)
+        self.assertIn("Portfolio holdings", result["boundary"])
+        self.assertTrue(all(row["execution"] == "manual_review_only" for row in result["recommendations"]))
 
     def test_historical_point_in_time_readiness_excludes_retrospective_rows(self):
         rows = [
@@ -3986,6 +4115,40 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(contracts[0]["lot_size"], 500)
         self.assertEqual(missing, ["CCC"])
 
+    def test_futures_rollover_uses_last_completed_session_before_close(self):
+        fixture = """instrument_token,tradingsymbol,name,expiry,lot_size,instrument_type,segment,exchange
+101,AAA26OCTFUT,AAA,2026-10-27,500,FUT,NFO-FUT,NFO
+102,AAA26NOVFUT,AAA,2026-11-26,500,FUT,NFO-FUT,NFO
+"""
+        india = ZoneInfo("Asia/Kolkata")
+        completed_through = completed_history_date(
+            datetime(2026, 10, 28, 14, 0, tzinfo=india)
+        )
+        contracts, missing = parse_near_month_stock_futures(
+            fixture, ("AAA",), as_of=completed_through
+        )
+        self.assertEqual(completed_through, date(2026, 10, 27))
+        self.assertEqual(contracts[0]["tradingsymbol"], "AAA26OCTFUT")
+        self.assertEqual(missing, [])
+
+    def test_futures_retry_requests_only_contracts_missing_for_session(self):
+        contracts = [
+            {"underlying": "AAA", "tradingsymbol": "AAA26OCTFUT"},
+            {"underlying": "BBB", "tradingsymbol": "BBB26OCTFUT"},
+        ]
+        stored = [
+            {
+                "contract_key": "NFO:AAA26OCTFUT",
+                "date": date(2026, 10, 27),
+            }
+        ]
+        pending = pending_futures_contracts_for_session(
+            contracts, stored, date(2026, 10, 27)
+        )
+        self.assertEqual(
+            [row["tradingsymbol"] for row in pending], ["BBB26OCTFUT"]
+        )
+
     def test_futures_quote_snapshot_requires_completed_current_session(self):
         contracts = [
             {
@@ -4029,6 +4192,7 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
             "status": "success",
             "data": {
                 "candles": [
+                    ["malformed", 0, 0, 0, 0, 0],
                     ["2026-09-24T00:00:00+0530", 100, 106, 98, 104, 100000, 700000],
                     ["2026-09-25T00:00:00+0530", 104, 109, 103, 108, 120000, 740000],
                     ["2026-09-28T00:00:00+0530", 108, 112, 106, 111, 40000, 760000],
@@ -4556,6 +4720,16 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertIsNotNone(summary["metrics"]["sp500"]["vs_200dma_pct"])
         self.assertEqual(summary["metrics"]["us_vix"]["one_year_percentile"], 100.0)
         self.assertFalse(summary["scoring_enabled"])
+        self.assertTrue(
+            global_risk_covers_completed_date(
+                summary, date(2026, 7, 9)
+            )
+        )
+        self.assertFalse(
+            global_risk_covers_completed_date(
+                summary, date(2026, 7, 10)
+            )
+        )
 
     def test_fred_global_zip_accepts_frequency_grouped_series(self):
         archive_bytes = io.BytesIO()
@@ -4655,6 +4829,12 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertEqual(summary["metrics"]["usd_inr"]["five_session_change"], 5.26)
         self.assertEqual(summary["metrics"]["india_10y_gsec_yield"]["five_session_change"], 500.0)
         self.assertIsNone(summary["metrics"]["usd_inr"]["twenty_session_change"])
+        self.assertTrue(
+            macro_context_covers_completed_date(summary, date(2026, 9, 20))
+        )
+        self.assertFalse(
+            macro_context_covers_completed_date(summary, date(2026, 9, 21))
+        )
 
     def test_index_snapshot_preserves_exact_requested_indices(self):
         targets = [
@@ -6019,6 +6199,18 @@ class KiteHandshakeHelpersTest(unittest.TestCase):
         self.assertIn('startPortfolioProgress(file)', page)
         self.assertIn("finishPortfolioProgress('Analysis ready'", page)
         self.assertNotIn("mutualFundsComparerView", page)
+
+    def test_eod_refresh_uses_consolidated_dashboard_and_keeps_failure_reasons(self):
+        page = (Path(__file__).resolve().parents[1] / "dist" / "index.html").read_text(encoding="utf-8")
+        refresh_start = page.index("async function refreshAllWorkspaceViewsAfterEod()")
+        refresh_end = page.index("async function runEodUpdate()", refresh_start)
+        refresh_source = page[refresh_start:refresh_end]
+
+        self.assertIn("['Dashboard overview', loadDashboardWorkspace()]", refresh_source)
+        self.assertNotIn("loadDashboardMarketStory(false)", refresh_source)
+        self.assertIn("workspace_refresh_incomplete", refresh_source)
+        self.assertIn("EOD_RUN_STATUS_KEY", page)
+        self.assertIn("failedStages.map(formatEodFailure)", page)
 
 
 if __name__ == "__main__":

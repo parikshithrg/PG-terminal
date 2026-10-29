@@ -1724,7 +1724,7 @@
       .mutual-fund-position-row { grid-template-columns: minmax(110px, 1fr) 1fr auto; }
     }
   </style>
-  <link rel="stylesheet" href="styles.css?v=modular-architecture-v29-1">
+  <link rel="stylesheet" href="styles.css?v=alpha-trade-recommendations-v35-1">
 </head>
 <body data-active-page="dashboard">
   <a class="skip-link" href="#mainContent">Skip to main content</a>
@@ -1800,7 +1800,6 @@
           <li><button class="nav-button" data-page="Events Calendar" style="--item-color:#e6980b"><span class="nav-icon"></span><span>Events Calendar</span></button></li>
           <li><button class="nav-button" data-page="Stock Data YTD" style="--item-color:#0c94b7"><span class="nav-icon"></span><span>Stock Data YTD</span></button></li>
           <li><button class="nav-button" data-page="Historical Regimes" style="--item-color:#8b6f47"><span class="nav-icon"></span><span>Historical regimes</span></button></li>
-          <li><button class="nav-button" data-page="Backtests" style="--item-color:#405b78"><span class="nav-icon"></span><span>Backtests</span></button></li>
           <li><button class="nav-button" data-page="Alpha Research" style="--item-color:#0f766e"><span class="nav-icon"></span><span>Alpha Research</span></button></li>
           <li><button class="nav-button" data-page="Expense Tracker" style="--item-color:#6d5bd0"><span class="nav-icon"></span><span>Expense Tracker</span></button></li>
         </ul>
@@ -3995,15 +3994,16 @@
           <div class="analysis-intro">
             <div>
               <h1 id="backtestsTitle">Backtests</h1>
-              <p class="analysis-caption">A controlled research workspace for testing market hypotheses with point-in-time inputs, chronological validation, explicit costs and visible failure states</p>
+              <p class="analysis-caption">Select a stock universe, review its market-reversal probability, then inspect every stock result.</p>
             </div>
             <div class="analysis-status" id="backtestsStatus">Foundation ready · no approved strategies</div>
           </div>
 
           <div class="universe-controls backtests-primary-controls" aria-label="Backtest controls">
             <div class="selector-field">
-              <label for="backtestsIndexSelect">Historical index</label>
+              <label for="backtestsIndexSelect">Stock universe</label>
               <select id="backtestsIndexSelect">
+                <option value="all-fno">All stored F&amp;O equities</option>
                 <option>Nifty 50</option><option>Nifty Auto</option><option>Nifty Bank</option>
                 <option>Nifty Chemicals</option><option>Nifty Consumer Durables</option><option>Nifty Energy</option>
                 <option>Nifty Financial Services</option><option>Nifty FMCG</option><option>Nifty Healthcare</option>
@@ -4015,9 +4015,9 @@
             </div>
             <div class="universe-action-row">
               <button class="panel-button primary" id="loadBacktestsButton" type="button">Run registered tests</button>
-              <span class="universe-action-status" id="backtestsCoverage">Uses the Historical Regimes entry-date information set and chronological split.</span>
+              <span class="universe-action-status" id="backtestsCoverage">Choose a universe to calculate its breadth and stock results.</span>
             </div>
-            <p class="universe-source">The first test is an episode-level classification study. It does not simulate trades or claim an investable return.</p>
+            <p class="universe-source">Every run must return the eligible stocks in the selected universe. Empty universes are blocked.</p>
           </div>
 
           <section class="summary-grid backtests-overview-grid" aria-label="Backtest research summary">
@@ -4062,6 +4062,60 @@
                 <p id="backtestsDecisionStrongestNote">No eligible held-out observation is loaded.</p>
               </article>
             </div>
+          </section>
+
+          <section class="analysis-section backtests-reversal-section" aria-labelledby="backtestsReversalTitle" style="grid-column:1 / -1; width:100%; min-width:0">
+            <div class="backtests-section-heading">
+              <div>
+                <span class="terminal-kicker">Probabilistic breadth study</span>
+                <h2 id="backtestsReversalTitle">Market reversal probability</h2>
+              </div>
+              <span class="backtests-verdict blocked" id="backtestsReversalStatus">Awaiting model</span>
+            </div>
+            <p class="backtests-decision-copy" id="backtestsReversalHeadline">Run the registered tests to compare the present 20DMA and 200DMA breadth state with prior market states.</p>
+            <div class="summary-grid" id="backtestsReversalBreadthGrid">
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Stocks above 20DMA</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Stocks below 20DMA</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Stocks above 200DMA</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Stocks below 200DMA</div></article>
+            </div>
+            <div class="backtests-reversal-horizons" id="backtestsReversalHorizonGrid">
+              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting model</div><h3>No probability estimate loaded</h3><p>The model requires completed local equity and index histories.</p></article>
+            </div>
+            <div class="table-guide" id="backtestsReversalMethod"><strong>Method:</strong> The model is research-only. It does not recommend a position or forecast a target.</div>
+            <h3>Walk-forward calibration</h3>
+            <div class="table-wrap"><table><thead><tr><th>Predicted-probability bucket</th><th>Out-of-sample observations</th><th>Mean predicted</th><th>Observed reversals</th></tr></thead><tbody id="backtestsReversalCalibrationBody"><tr><td colspan="4">No calibration evidence loaded.</td></tr></tbody></table></div>
+            <div class="analysis-note" id="backtestsReversalLimitations">The current stored equity panel is not an effective-dated historical index membership file; survivorship and selection bias must remain visible.</div>
+          </section>
+
+          <section class="analysis-section backtests-stock-section" aria-labelledby="backtestsStockTitle">
+            <div class="backtests-section-heading">
+              <div>
+                <span class="terminal-kicker">Selected-universe stock results</span>
+                <h2 id="backtestsStockTitle">Stocks evaluated by the registered tests</h2>
+              </div>
+              <span class="backtests-verdict blocked" id="backtestsStockStatus">Awaiting universe</span>
+            </div>
+            <p class="backtests-decision-copy" id="backtestsStockNote">Choose a universe and run the registered tests. If no eligible stocks are returned, this report remains unavailable.</p>
+            <div class="summary-grid" id="backtestsStockSummary">
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Stocks selected</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Calculation ready</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Insufficient history</div></article>
+              <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Results returned</div></article>
+            </div>
+            <div class="table-guide" id="backtestsStockMethod"><strong>How to read:</strong> Each probability is calculated from that stock’s own historical states matching its current 20-session direction and above/below 20DMA and 200DMA condition.</div>
+            <div class="table-wrap backtests-stock-table-wrap"><table><thead><tr>
+              <th data-sort-column="0" data-sort-type="text" aria-sort="none"><button class="backtests-sort-button" type="button">Stock <span aria-hidden="true">↕</span></button></th>
+              <th data-sort-column="1" data-sort-type="number" aria-sort="none"><button class="backtests-sort-button" type="button">20-session move <span aria-hidden="true">↕</span></button></th>
+              <th data-sort-column="2" data-sort-type="text" aria-sort="none"><button class="backtests-sort-button" type="button">20DMA <span aria-hidden="true">↕</span></button></th>
+              <th data-sort-column="3" data-sort-type="text" aria-sort="none"><button class="backtests-sort-button" type="button">200DMA <span aria-hidden="true">↕</span></button></th>
+              <th data-sort-column="4" data-sort-type="number" aria-sort="none"><button class="backtests-sort-button" type="button">5-session reversal <span aria-hidden="true">↕</span></button></th>
+              <th data-sort-column="5" data-sort-type="number" aria-sort="none"><button class="backtests-sort-button" type="button">20-session reversal <span aria-hidden="true">↕</span></button></th>
+              <th data-sort-column="6" data-sort-type="number" aria-sort="none"><button class="backtests-sort-button" type="button">60-session reversal <span aria-hidden="true">↕</span></button></th>
+              <th data-sort-column="7" data-sort-type="number" aria-sort="none"><button class="backtests-sort-button" type="button">Current-month history <span aria-hidden="true">↕</span></button></th>
+              <th data-sort-column="8" data-sort-type="text" aria-sort="none"><button class="backtests-sort-button" type="button">Evidence <span aria-hidden="true">↕</span></button></th>
+            </tr></thead><tbody id="backtestsStockBody"><tr><td colspan="9">No selected-universe stock results have been loaded.</td></tr></tbody></table></div>
+            <div class="analysis-note" id="backtestsStockLimitations">A result table is mandatory. Empty stock universes are reported as unavailable rather than replaced by index-only output.</div>
           </section>
 
           <section class="analysis-section backtests-contract-section">
@@ -4146,22 +4200,55 @@
 
         <section id="alphaResearchView" hidden aria-labelledby="alphaResearchTitle">
           <div class="page-tabs" aria-label="Alpha Research views">
-            <div class="page-tab active">Architecture and readiness</div>
+            <div class="page-tab active">Backtests + candidate development + research gates</div>
           </div>
 
           <div class="analysis-intro">
             <div>
               <h1 id="alphaResearchTitle">Alpha Research</h1>
-              <p class="analysis-caption">A regime-gated factor core with catalyst overlays, portfolio-impact checks and chronological validation</p>
+              <p class="analysis-caption">Short-term EOD trade recommendations from stock-universe backtests, regime context and evidence gates. Portfolio investing remains separate.</p>
             </div>
             <div class="analysis-status" id="alphaResearchStatus">Foundation not loaded</div>
           </div>
+
+          <section class="analysis-section alpha-backtest-lab" id="alphaBacktestLab" aria-labelledby="alphaBacktestLabTitle">
+            <div class="section-heading-row alpha-backtest-lab-heading">
+              <div>
+                <div class="story-kicker">BACKTESTS + ALPHA DEVELOPMENT</div>
+                <h2 id="alphaBacktestLabTitle">Build the research candidate universe</h2>
+                <p class="section-note">Choose the stock universe, estimate the market state, evaluate every stock, then pass the strongest historically supported setups into the Alpha Research evidence gates.</p>
+              </div>
+              <div id="alphaBacktestStatusMount"></div>
+            </div>
+            <div class="alpha-backtest-workspace" id="alphaBacktestWorkspaceMount"></div>
+
+            <section class="alpha-development-queue" aria-labelledby="alphaDevelopmentTitle">
+              <div class="backtests-section-heading">
+                <div>
+                  <span class="terminal-kicker">Backtest-derived development queue</span>
+                  <h2 id="alphaDevelopmentTitle">Short-term trade recommendations</h2>
+                </div>
+                <span class="backtests-verdict blocked" id="alphaDevelopmentStatus">Awaiting stock evidence</span>
+              </div>
+              <p class="backtests-decision-copy" id="alphaDevelopmentNote">Run the selected universe. A long or short recommendation requires at least two sample-ready non-overlapping horizons and directional confidence of at least 55%.</p>
+              <div class="summary-grid" id="alphaDevelopmentSummary">
+                <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Stocks evaluated</div></article>
+                <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Sample-qualified</div></article>
+                <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Long recommendations</div></article>
+                <article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">Short recommendations</div></article>
+              </div>
+              <div class="table-wrap alpha-development-table-wrap"><table><thead><tr>
+                <th>Rank</th><th>Stock</th><th>Direction</th><th>Confidence</th><th>Ready horizons</th><th>Review horizon</th><th>Invalidation</th>
+              </tr></thead><tbody id="alphaDevelopmentBody"><tr><td colspan="7">No development candidates have been calculated.</td></tr></tbody></table></div>
+              <div class="analysis-note" id="alphaDevelopmentBoundary">Short-term trade recommendations only. Portfolio holdings and long-term allocation are outside Alpha Research. The site does not place orders.</div>
+            </section>
+          </section>
 
           <section class="summary-grid alpha-overview-grid" aria-label="Alpha Research readiness">
             <article class="summary-card"><div class="summary-value" id="alphaLayersValue">—</div><div class="summary-meta">Architecture layers</div></article>
             <article class="summary-card"><div class="summary-value" id="alphaReadyValue">—</div><div class="summary-meta">Layers ready</div></article>
             <article class="summary-card"><div class="summary-value" id="alphaPartialValue">—</div><div class="summary-meta">Partial or foundation</div></article>
-            <article class="summary-card"><div class="summary-value" id="alphaIdeasValue">0</div><div class="summary-meta">Ranked research ideas</div></article>
+            <article class="summary-card"><div class="summary-value" id="alphaIdeasValue">0</div><div class="summary-meta">Trade recommendations</div></article>
           </section>
 
           <section class="analysis-section alpha-story-section" id="alphaResearchStoryPanel" aria-label="Alpha Research evidence story">
@@ -4216,7 +4303,7 @@
             <div class="alpha-audit-body">
           <section class="analysis-section alpha-policy-section">
             <div class="section-heading-row"><div><div class="story-kicker">THE JOINED ARCHITECTURE</div><h2>Evidence before candidates</h2></div><button class="panel-button" id="refreshAlphaResearchButton" type="button">Refresh readiness</button></div>
-            <p class="section-note">A layer may be useful while still incomplete. Ranked ideas remain blocked until factor evidence, regime compatibility, chronological validation and portfolio impact can be reviewed together.</p>
+            <p class="section-note">A layer may be useful while still incomplete. Trade recommendations use short-term market evidence only; Portfolio Analysis remains a separate long-term investing workspace.</p>
             <div class="historical-fingerprint-grid" id="alphaArchitectureGrid">
               <article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting readiness check</div><h3>No architecture loaded</h3><p>Refresh the page to inspect the current build state.</p></article>
             </div>
@@ -4404,6 +4491,7 @@
               <article class="historical-fingerprint-card unavailable"><div class="historical-step">AWAITING CONTRACT</div><h3>No catalyst gates loaded</h3><p>No event inference is produced.</p></article>
             </div>
             <div class="analysis-note" id="catalystEvidenceNote">Missing expectations, guidance or price history remain explicitly unavailable.</div>
+            <div class="alpha-legacy-portfolio-contract" hidden aria-hidden="true">
             <div class="story-kicker">PORTFOLIO IMPACT V19</div>
             <div class="section-heading-row"><div><h2>Marginal portfolio risk</h2><p class="section-note">Each candidate is funded pro rata from current holdings, then audited for concentration, beta, drawdown and factor-exposure changes.</p></div><div class="analysis-status" id="portfolioImpactStatus">Portfolio evidence pending</div></div>
             <div class="summary-grid" aria-label="Portfolio impact readiness">
@@ -4416,44 +4504,44 @@
               <article class="historical-fingerprint-card unavailable"><div class="historical-step">AWAITING CONTRACT</div><h3>No portfolio-impact gates loaded</h3><p>No marginal risk is inferred.</p></article>
             </div>
             <div class="analysis-note" id="portfolioImpactNote">Transaction history and aligned candidate risk evidence are required.</div>
+            </div>
+            <div class="alpha-legacy-ranking-contract" hidden aria-hidden="true">
             <div class="story-kicker">CANDIDATE RANKING V20</div>
-            <div class="section-heading-row"><div><h2>Whole-candidate admission and ranking</h2><p class="section-note">Candidates are ranked only after every factor, regime, validation, liquidity, catalyst, portfolio-impact and provenance gate passes.</p></div><div class="analysis-status" id="candidateRankingStatus">Candidate evidence pending</div></div>
+            <div class="section-heading-row"><div><h2>Short-term recommendation admission</h2><p class="section-note">Recommendations require factor, regime, validation, liquidity, catalyst and provenance evidence. Portfolio holdings are not part of this decision.</p></div><div class="analysis-status" id="candidateRankingStatus">Recommendation evidence pending</div></div>
             <div class="summary-grid" aria-label="Candidate ranking readiness">
               <article class="summary-card"><div class="summary-value" id="candidateRankingGates">0 / 6</div><div class="summary-meta">Ranking gates ready</div></article>
               <article class="summary-card"><div class="summary-value" id="candidateRankingSupplied">0</div><div class="summary-meta">Candidates supplied</div></article>
               <article class="summary-card"><div class="summary-value" id="candidateRankingAdmitted">0</div><div class="summary-meta">Candidates admitted</div></article>
-              <article class="summary-card"><div class="summary-value" id="candidateRankingRanks">0</div><div class="summary-meta">Research ranks · 0 recommendations</div></article>
+              <article class="summary-card"><div class="summary-value" id="candidateRankingRanks">0</div><div class="summary-meta">Trade recommendations</div></article>
             </div>
             <div class="historical-fingerprint-grid" id="candidateRankingGateGrid">
               <article class="historical-fingerprint-card unavailable"><div class="historical-step">AWAITING CONTRACT</div><h3>No ranking gates loaded</h3><p>No candidate order is inferred.</p></article>
             </div>
             <div class="analysis-note" id="candidateRankingNote">A failed or missing gate rejects the whole candidate.</div>
+            </div>
             <div class="analysis-note" id="fundamentalsBoundaryNote">Raw metrics remain unscored. Composite ranks and candidates are disabled.</div>
           </section>
 
           <section class="analysis-section" id="candidateOverlayPanel">
-            <div class="section-heading-row"><div><div class="story-kicker">CATALYST + PORTFOLIO OVERLAYS V9</div><h2>Context after validation</h2></div><div class="analysis-status" id="candidateOverlayStatus">Upstream evidence required</div></div>
-            <p class="section-note">Catalysts may change timing and portfolio impact may reject or resize an idea, but neither can rescue a failed factor or validation gate.</p>
+            <div class="section-heading-row"><div><div class="story-kicker">SHORT-TERM CATALYST CONTEXT V9</div><h2>Event risk after validation</h2></div><div class="analysis-status" id="candidateOverlayStatus">Upstream evidence required</div></div>
+            <p class="section-note">Reviewed catalysts may change timing or invalidate a short-term setup, but cannot rescue a failed factor or validation gate. Portfolio holdings are not used.</p>
             <div class="summary-grid" aria-label="Candidate overlay readiness">
               <article class="summary-card"><div class="summary-value" id="candidateMacroValue">—</div><div class="summary-meta">Upcoming macro events</div></article>
               <article class="summary-card"><div class="summary-value" id="candidateEarningsValue">0</div><div class="summary-meta">Reviewed earnings records</div></article>
-              <article class="summary-card"><div class="summary-value" id="candidatePortfolioValue">Not loaded</div><div class="summary-meta">Local portfolio</div></article>
-              <article class="summary-card"><div class="summary-value" id="candidateImpactValue">0</div><div class="summary-meta">Candidate impacts calculated</div></article>
+              <article class="summary-card"><div class="summary-value" id="candidatePortfolioValue">Separate</div><div class="summary-meta">Portfolio Analysis</div></article>
+              <article class="summary-card"><div class="summary-value" id="candidateImpactValue">0</div><div class="summary-meta">Trade recommendations reviewed</div></article>
             </div>
             <div class="story-kicker">CATALYST GATES</div>
             <div class="historical-fingerprint-grid" id="candidateCatalystGrid">
               <article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting contract</div><h3>No catalyst gates loaded</h3><p>No event score is produced.</p></article>
             </div>
-            <div class="story-kicker">PORTFOLIO-IMPACT GATES</div>
-            <div class="historical-fingerprint-grid" id="candidatePortfolioGrid">
-              <article class="historical-fingerprint-card unavailable"><div class="historical-step">Awaiting contract</div><h3>No portfolio gates loaded</h3><p>No marginal impact is calculated.</p></article>
-            </div>
-            <div class="analysis-note" id="candidateOverlayNote">No overlay score, candidate impact, recommendation or order is active.</div>
+            <div class="historical-fingerprint-grid" id="candidatePortfolioGrid" hidden aria-hidden="true"></div>
+            <div class="analysis-note" id="candidateOverlayNote">Catalyst context is independent of long-term portfolio analysis.</div>
           </section>
 
           <section class="analysis-section" id="researchCardPanel" aria-label="Research card publication readiness">
-            <div class="section-heading-row"><div><div class="story-kicker">RESEARCH CARD PUBLICATION V21</div><h2>Publish only complete research</h2></div><div class="analysis-status" id="researchCardStatus">Publication blocked</div></div>
-            <p class="section-note">A card is withheld in full unless the candidate, catalyst context, portfolio impact and audit trail are all complete. A research card is not a recommendation or order.</p>
+            <div class="section-heading-row"><div><div class="story-kicker">TRADE RECOMMENDATION PUBLICATION V21</div><h2>Publish only complete recommendations</h2></div><div class="analysis-status" id="researchCardStatus">Publication blocked</div></div>
+            <p class="section-note">A recommendation is withheld unless its direction, evidence, horizon, catalyst context, risk boundary, invalidation and audit trail are complete. Portfolio holdings are not a gate.</p>
             <div class="summary-grid" aria-label="Research card contract summary">
               <article class="summary-card"><div class="summary-value" id="researchCardFieldValue">—</div><div class="summary-meta">Required fields</div></article>
               <article class="summary-card"><div class="summary-value" id="researchCardGateValue">—</div><div class="summary-meta">Publication gates</div></article>
@@ -4471,7 +4559,7 @@
             <div class="historical-architecture-grid" id="researchCardsGrid">
               <article class="historical-fingerprint-card unavailable"><div class="historical-step">NO CARD PUBLISHED</div><h3>Upstream evidence is incomplete</h3><p>The absence of a card is an explicit research result.</p></article>
             </div>
-            <div class="analysis-note" id="researchCardNote">No card, recommendation or order is active.</div>
+            <div class="analysis-note" id="researchCardNote">No complete recommendation is active. The site does not place orders.</div>
           </section>
             </div>
           </details>
@@ -4730,6 +4818,14 @@
     const openAlphaAuditButton = document.getElementById('openAlphaAuditButton');
     const alphaNewsCsvInput = document.getElementById('alphaNewsCsvInput');
     const importAlphaNewsButton = document.getElementById('importAlphaNewsButton');
+    const alphaBacktestStatusMount = document.getElementById('alphaBacktestStatusMount');
+    const alphaBacktestWorkspaceMount = document.getElementById('alphaBacktestWorkspaceMount');
+    [
+      document.querySelector('#backtestsView .backtests-primary-controls'),
+      document.querySelector('#backtestsView .backtests-reversal-section'),
+      document.querySelector('#backtestsView .backtests-stock-section'),
+    ].filter(Boolean).forEach((section) => alphaBacktestWorkspaceMount.appendChild(section));
+    alphaBacktestStatusMount.appendChild(backtestsStatus);
     const expenseTrackerView = document.getElementById('expenseTrackerView');
     const expenseMonthSelect = document.getElementById('expenseMonthSelect');
     const expenseEntryForm = document.getElementById('expenseEntryForm');
@@ -4886,8 +4982,7 @@
       { label: 'Events Calendar', detail: 'Reviewed macro catalysts', page: 'Events Calendar', terms: 'events macro rbi fed cpi calendar' },
       { label: 'Stock Data YTD', detail: 'Calendar-year stock performance', page: 'Stock Data YTD', terms: 'stock performance returns year to date ytd' },
       { label: 'Historical Regimes', detail: 'Market episodes and policy cycles', page: 'Historical Regimes', terms: 'history regimes bull bear correction recession rbi' },
-      { label: 'Backtests', detail: 'Chronological validation evidence', page: 'Backtests', terms: 'test validation holdout strategy' },
-      { label: 'Alpha Research', detail: 'Evidence gates and candidate research', page: 'Alpha Research', terms: 'alpha factors candidates ranking research' },
+      { label: 'Alpha Research', detail: 'Backtests, stock candidates and evidence gates', page: 'Alpha Research', terms: 'backtest validation holdout alpha factors stocks candidates ranking research' },
       { label: 'Expense Tracker', detail: 'Private browser-local monthly expense ledger', page: 'Expense Tracker', terms: 'expenses spending budget monthly ledger personal' },
       { label: 'Run EOD update', detail: 'Refresh supported completed-session data', action: 'eod', terms: 'refresh update data sync' },
       { label: 'Kite connection', detail: 'Open broker connection controls', action: 'kite', terms: 'login connect zerodha broker' },
@@ -10006,6 +10101,95 @@
       return `${formatDisplayDate(period.from)} to ${formatDisplayDate(period.to)}`;
     }
 
+    function resetBacktestsStockSort() {
+      document.querySelectorAll('.backtests-stock-table-wrap th[data-sort-column]').forEach((header) => {
+        header.setAttribute('aria-sort', 'none');
+        header.dataset.sortDirection = '';
+        const indicator = header.querySelector('.backtests-sort-button span');
+        if (indicator) indicator.textContent = '↕';
+      });
+    }
+
+    function sortBacktestsStockRows(header) {
+      const body = document.getElementById('backtestsStockBody');
+      const column = Number(header.dataset.sortColumn);
+      const type = header.dataset.sortType || 'text';
+      const rows = Array.from(body.rows).filter((row) => row.cells.length === 9);
+      if (!rows.length || !Number.isInteger(column)) return;
+      const previous = header.dataset.sortDirection;
+      const direction = previous === 'asc'
+        ? 'desc'
+        : previous === 'desc'
+          ? 'asc'
+          : type === 'number' ? 'desc' : 'asc';
+      resetBacktestsStockSort();
+      header.dataset.sortDirection = direction;
+      header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
+      const indicator = header.querySelector('.backtests-sort-button span');
+      if (indicator) indicator.textContent = direction === 'asc' ? '↑' : '↓';
+
+      const valueFor = (row) => {
+        const cell = row.cells[column];
+        if (!cell) return null;
+        if (column === 0) return cell.querySelector('strong')?.textContent.trim() || '';
+        const text = cell.textContent.trim();
+        if (type === 'number') {
+          if (!text || /unavailable/i.test(text)) return null;
+          const value = Number.parseFloat(text.replace(/,/g, ''));
+          return Number.isFinite(value) ? value : null;
+        }
+        return text.toLocaleLowerCase('en-IN');
+      };
+      rows.sort((left, right) => {
+        const leftValue = valueFor(left);
+        const rightValue = valueFor(right);
+        const leftMissing = leftValue === null || leftValue === '';
+        const rightMissing = rightValue === null || rightValue === '';
+        if (leftMissing || rightMissing) {
+          if (leftMissing && rightMissing) return 0;
+          return leftMissing ? 1 : -1;
+        }
+        const comparison = type === 'number'
+          ? Number(leftValue) - Number(rightValue)
+          : String(leftValue).localeCompare(String(rightValue), 'en-IN', { numeric: true });
+        return direction === 'asc' ? comparison : -comparison;
+      });
+      rows.forEach((row) => body.appendChild(row));
+    }
+
+    function renderAlphaDevelopmentQueue(stockResults, tradeResult = {}) {
+      const stockRows = Array.isArray(stockResults?.stocks) ? stockResults.stocks : [];
+      const recommendations = Array.isArray(tradeResult.recommendations) ? tradeResult.recommendations : [];
+      const summary = tradeResult.summary || {};
+      const status = document.getElementById('alphaDevelopmentStatus');
+      status.textContent = recommendations.length ? `${recommendations.length} trade recommendations` : 'No qualified recommendation';
+      status.className = `backtests-verdict ${recommendations.length ? 'ready' : 'blocked'}`;
+      document.getElementById('alphaDevelopmentSummary').innerHTML = `
+        <article class="summary-card"><div class="summary-value">${Number(summary.stocks_evaluated || stockRows.length).toLocaleString('en-IN')}</div><div class="summary-meta">Stocks evaluated</div></article>
+        <article class="summary-card"><div class="summary-value">${Number(summary.evidence_qualified || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Sample-qualified</div></article>
+        <article class="summary-card"><div class="summary-value positive">${Number(summary.long || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Long recommendations</div></article>
+        <article class="summary-card"><div class="summary-value negative">${Number(summary.short || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Short recommendations</div></article>`;
+      document.getElementById('alphaIdeasValue').textContent = Number(summary.recommendations || 0).toLocaleString('en-IN');
+      document.getElementById('alphaDevelopmentNote').textContent = recommendations.length
+        ? `${tradeResult.universe_label || stockResults.universe_label || 'Selected universe'} produced ${recommendations.length} short-term EOD recommendations after the two-horizon sample gate and 55% directional-confidence threshold.`
+        : `${tradeResult.universe_label || stockResults.universe_label || 'The selected universe'} produced no recommendation above the frozen confidence threshold.`;
+      document.getElementById('alphaDevelopmentBody').innerHTML = recommendations.length
+        ? recommendations.slice(0, 40).map((row, index) => {
+            return `<tr>
+              <td><strong>${index + 1}</strong></td>
+              <td><strong>${escapeHtml(row.symbol)}</strong></td>
+              <td class="${row.direction === 'long' ? 'positive' : 'negative'}"><strong>${escapeHtml(String(row.direction || '').toUpperCase())}</strong><br><span class="status">${escapeHtml(row.setup)} setup</span></td>
+              <td><strong>${Number(row.confidence_pct || 0).toFixed(1)}%</strong></td>
+              <td>${(row.ready_horizons || []).join(' / ')} sessions<br><span class="status">${Number(row.matched_observations || 0).toLocaleString('en-IN')} matched observations</span></td>
+              <td>${Number(row.review_horizon_sessions || 0)} sessions<br><span class="status">Reference close ${row.reference_close == null ? '—' : Number(row.reference_close).toLocaleString('en-IN')}</span></td>
+              <td>${escapeHtml(row.invalidation || 'Re-evaluate on the next completed EOD state change.')}</td>
+            </tr>`;
+          }).join('')
+        : '<tr><td colspan="7">No stock currently meets the short-term recommendation rule. This is a valid negative result.</td></tr>';
+      document.getElementById('alphaDevelopmentBoundary').textContent =
+        `${tradeResult.method || 'At least two sample-ready horizons and 55% directional confidence are required.'} Portfolio holdings and long-term allocation are not used. Recommendations are for manual review; this site does not place orders.`;
+    }
+
     function renderBacktests(result) {
       backtestsPayload = result;
       const summary = result.summary || {};
@@ -10021,6 +10205,89 @@
       document.getElementById('backtestsCompletedValue').textContent = Number(summary.chronological_tests_completed || 0).toLocaleString('en-IN');
       document.getElementById('backtestsHeldOutValue').textContent = Number(summary.held_out_tests_passed || 0).toLocaleString('en-IN');
       document.getElementById('backtestsApprovedValue').textContent = Number(summary.approved_for_decision_support || 0).toLocaleString('en-IN');
+      const reversal = result.breadth_reversal || {};
+      const reversalBreadth = reversal.current_breadth || {};
+      const reversalHorizons = Array.isArray(reversal.horizons) ? reversal.horizons : [];
+      const reversalCalibration = Array.isArray(reversal.calibration) ? reversal.calibration : [];
+      const reversalReady = reversal.status === 'ready';
+      const reversalStatus = document.getElementById('backtestsReversalStatus');
+      reversalStatus.textContent = reversalReady ? 'Research estimate ready' : 'Evidence unavailable';
+      reversalStatus.className = `backtests-verdict ${reversalReady ? 'ready' : 'blocked'}`;
+      document.getElementById('backtestsReversalHeadline').textContent = reversalReady
+        ? `${reversal.instrument} was ${signedPercentage(reversal.prior_20_session_return_pct)} over the preceding 20 sessions (${reversal.prior_direction} direction${reversal.prior_move_strength === 'low' ? ', low magnitude' : ''}) as of ${formatDisplayDate(reversal.as_of_date)}. Probabilities below describe an opposite-direction forward return, not a trade signal.`
+        : escapeHtml(reversal.reason || 'Simultaneous breadth and index history is insufficient for a probability estimate.');
+      document.getElementById('backtestsReversalBreadthGrid').innerHTML = reversalReady
+        ? `<article class="summary-card"><div class="summary-value positive">${Number(reversalBreadth.above_20 || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Above 20DMA · ${Number(reversalBreadth.pct_above_20 || 0).toFixed(1)}% of ${Number(reversalBreadth.eligible_20 || 0)}</div></article>
+          <article class="summary-card"><div class="summary-value negative">${Number(reversalBreadth.below_20 || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Below 20DMA</div></article>
+          <article class="summary-card"><div class="summary-value positive">${Number(reversalBreadth.above_200 || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Above 200DMA · ${Number(reversalBreadth.pct_above_200 || 0).toFixed(1)}% of ${Number(reversalBreadth.eligible_200 || 0)}</div></article>
+          <article class="summary-card"><div class="summary-value negative">${Number(reversalBreadth.below_200 || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Below 200DMA</div></article>`
+        : `<article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">20DMA breadth unavailable</div></article><article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">20DMA breadth unavailable</div></article><article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">200DMA breadth unavailable</div></article><article class="summary-card"><div class="summary-value">—</div><div class="summary-meta">200DMA breadth unavailable</div></article>`;
+      document.getElementById('backtestsReversalHorizonGrid').innerHTML = reversalHorizons.length
+        ? reversalHorizons.map((row) => `<article class="historical-fingerprint-card ${row.status === 'ready' ? 'ready' : 'partial'}">
+            <div class="historical-step">${row.status === 'ready' ? 'Modelled' : 'Low sample · exploratory'} · next ${Number(row.sessions)} sessions · ${Number(row.cohort_observations || 0)} nearest states</div>
+            <h3>${row.probability_pct == null ? 'Unavailable' : `${Number(row.probability_pct).toFixed(1)}% ${row.status === 'ready' ? 'reversal probability' : 'exploratory estimate'}`}</h3>
+            <p>${row.interval_low_pct == null ? 'The comparable-state cohort is insufficient.' : `95% observed-rate interval ${Number(row.interval_low_pct).toFixed(1)}–${Number(row.interval_high_pct).toFixed(1)}%. Base rate ${Number(row.base_probability_pct).toFixed(1)}%; difference ${signedPercentage(row.uplift_pct_points, 1)} points.`}</p>
+            <div class="historical-trait-episodes">${Number(row.cohort_reversals || 0)} reversals · ${Number(row.walk_forward_predictions || 0)} walk-forward predictions · Brier ${row.brier_score == null ? '—' : Number(row.brier_score).toFixed(3)}</div>
+            <div class="fingerprint-limitation">${escapeHtml(row.definition)}</div>
+          </article>`).join('')
+        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">No eligible history</div><h3>Probability unavailable</h3><p>The model could not form a comparable historical cohort.</p></article>';
+      document.getElementById('backtestsReversalMethod').innerHTML = `<strong>Method:</strong> ${escapeHtml(reversal.method || 'No model was run.')} Universe: ${escapeHtml((reversal.universe || {}).label || 'unavailable')} · ${Number((reversal.universe || {}).usable || 0).toLocaleString('en-IN')} usable equities.`;
+      document.getElementById('backtestsReversalCalibrationBody').innerHTML = reversalCalibration.length
+        ? reversalCalibration.map((row) => `<tr><td>${escapeHtml(row.bucket)}</td><td>${Number(row.observations || 0).toLocaleString('en-IN')}</td><td>${row.mean_predicted_pct == null ? '—' : `${Number(row.mean_predicted_pct).toFixed(1)}%`}</td><td>${row.observed_reversal_pct == null ? '—' : `${Number(row.observed_reversal_pct).toFixed(1)}%`}</td></tr>`).join('')
+        : '<tr><td colspan="4">No walk-forward calibration observations are available.</td></tr>';
+      document.getElementById('backtestsReversalLimitations').textContent = Array.isArray(reversal.limitations)
+        ? reversal.limitations.join(' ')
+        : 'Breadth reversal evidence remains research-only.';
+      const stockResults = result.stock_results || {};
+      const stockSummary = stockResults.summary || {};
+      const stockRows = Array.isArray(stockResults.stocks) ? stockResults.stocks : [];
+      const stocksReady = stockResults.status === 'ready' && Number(stockSummary.calculation_ready || 0) > 0;
+      const stockStatus = document.getElementById('backtestsStockStatus');
+      stockStatus.textContent = stocksReady
+        ? `${Number(stockSummary.calculation_ready || 0).toLocaleString('en-IN')} stocks ready`
+        : 'No eligible stocks';
+      stockStatus.className = `backtests-verdict ${stocksReady ? 'ready' : 'blocked'}`;
+      document.getElementById('backtestsStockNote').textContent = stocksReady
+        ? `${stockResults.universe_label} · results as of ${formatDisplayDate(stockResults.as_of_date)}. Every selected stock is retained; unavailable rows show their missing-history reason.`
+        : 'No calculation-ready stocks were found in the selected universe. Market-only results are not treated as a usable backtest report.';
+      document.getElementById('backtestsStockSummary').innerHTML = `
+        <article class="summary-card"><div class="summary-value">${Number(stockSummary.selected_stocks || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Stocks selected</div></article>
+        <article class="summary-card"><div class="summary-value ${stocksReady ? 'positive' : 'negative'}">${Number(stockSummary.calculation_ready || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Calculation ready</div></article>
+        <article class="summary-card"><div class="summary-value">${Number(stockSummary.insufficient_history || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Insufficient history</div></article>
+        <article class="summary-card"><div class="summary-value">${Number(stockSummary.results_returned || 0).toLocaleString('en-IN')}</div><div class="summary-meta">Results returned</div></article>`;
+      document.getElementById('backtestsStockMethod').innerHTML = `<strong>How to read:</strong> ${escapeHtml(stockResults.method || 'No stock-level model was run.')} A green evidence state has at least ten matching non-overlapping observations at every displayed horizon; low-sample estimates remain visibly partial.`;
+      const probabilityCell = (row, sessions) => {
+        const horizon = (Array.isArray(row.horizons) ? row.horizons : []).find((item) => Number(item.sessions) === sessions);
+        if (!horizon || horizon.probability_pct == null) return '<span class="status">Unavailable</span>';
+        const sample = Number(horizon.observations || 0);
+        return `<strong>${Number(horizon.probability_pct).toFixed(1)}%</strong><br><span class="status ${horizon.status === 'ready' ? 'positive' : 'negative'}">n=${sample}${horizon.status === 'ready' ? '' : ' · low sample'}</span>`;
+      };
+      document.getElementById('backtestsStockBody').innerHTML = stockRows.length
+        ? stockRows.map((row) => {
+            if (row.status !== 'ready') {
+              return `<tr><td><strong>${escapeHtml(row.symbol)}</strong></td><td colspan="7">${escapeHtml(row.reason || 'Calculation unavailable')}</td><td class="negative">Insufficient history · ${Number(row.sessions || 0).toLocaleString('en-IN')} sessions</td></tr>`;
+            }
+            const month = row.current_month_seasonality || {};
+            const monthLabel = month.average_return_pct == null
+              ? 'Unavailable'
+              : `${signedPercentage(month.average_return_pct)} avg<br><span class="status">${Number(month.positive_rate_pct || 0).toFixed(1)}% positive · n=${Number(month.observations || 0)}</span>`;
+            const allHorizonsReady = (Array.isArray(row.horizons) ? row.horizons : []).every((item) => item.status === 'ready');
+            return `<tr>
+              <td><strong>${escapeHtml(row.symbol)}</strong><br><span class="status">${formatDisplayDate(row.as_of_date)}</span></td>
+              <td class="${Number(row.prior_20_session_return_pct) >= 0 ? 'positive' : 'negative'}">${signedPercentage(row.prior_20_session_return_pct)}</td>
+              <td class="${row.above_20dma ? 'positive' : 'negative'}">${row.above_20dma ? 'Above' : 'Below'}</td>
+              <td class="${row.above_200dma ? 'positive' : 'negative'}">${row.above_200dma ? 'Above' : 'Below'}</td>
+              <td>${probabilityCell(row, 5)}</td><td>${probabilityCell(row, 20)}</td><td>${probabilityCell(row, 60)}</td>
+              <td>${monthLabel}</td>
+              <td class="${allHorizonsReady ? 'positive' : 'negative'}">${allHorizonsReady ? 'Ready' : 'Partial · sample limited'}</td>
+            </tr>`;
+          }).join('')
+        : '<tr><td colspan="9">No stocks were found in the selected universe. This backtest report is unavailable.</td></tr>';
+      resetBacktestsStockSort();
+      document.getElementById('backtestsStockLimitations').textContent = Array.isArray(stockResults.limitations)
+        ? stockResults.limitations.join(' ')
+        : 'No stock-level evidence was returned.';
+      renderAlphaDevelopmentQueue(stockResults, result.trade_recommendations || {});
       document.getElementById('backtestsEvidenceNote').textContent = pointInTime.contract_version
         ? `${pointInTime.admission_reason} This gate is evaluated before any factor/outcome relationship is tested.`
         : 'Point-in-time evidence readiness is unavailable; release-aware factor testing remains blocked.';
@@ -10165,10 +10432,12 @@
       document.getElementById('backtestsContractNote').textContent =
         `${result.contract_version}. Source contract ${result.source_contract_version || 'unavailable'}. ${limitations.join(' ')}`;
       document.getElementById('backtestsCoverage').textContent =
-        `${result.instrument} · ${Number(validation.discovery_outcomes_ready || 0)} discovery and ${Number(validation.held_out_outcomes_ready || 0)} held-out outcomes ready.`;
-      backtestsStatus.textContent = Number(summary.approved_for_decision_support || 0)
-        ? 'Research gate partial · nothing approved'
-        : 'Chronological test ready · decision support blocked';
+        `${stockResults.universe_label || result.instrument} · ${Number(stockSummary.calculation_ready || 0).toLocaleString('en-IN')} stocks calculation-ready · ${Number(validation.discovery_outcomes_ready || 0)} market discovery and ${Number(validation.held_out_outcomes_ready || 0)} held-out outcomes ready.`;
+      backtestsStatus.textContent = !stocksReady
+        ? 'Backtest unavailable · no eligible stocks'
+        : Number(summary.approved_for_decision_support || 0)
+          ? 'Stock results ready · research gate partial'
+          : 'Stock results ready · decision support blocked';
     }
 
     async function loadBacktests(showSuccess = false) {
@@ -10176,7 +10445,7 @@
       loadBacktestsButton.textContent = 'Running test…';
       backtestsStatus.textContent = 'Building outcome-blind validation set…';
       try {
-        const response = await fetch(`/api/backtests?index=${encodeURIComponent(backtestsIndexSelect.value)}`, { cache: 'no-store' });
+        const response = await fetch(`/api/backtests?universe=${encodeURIComponent(backtestsIndexSelect.value)}`, { cache: 'no-store' });
         const result = await response.json();
         if (!response.ok || result.ok !== true) {
           backtestsStatus.textContent = 'Registered test unavailable';
@@ -10184,7 +10453,7 @@
           return false;
         }
         renderBacktests(result);
-        if (showSuccess) showNotice(`${result.instrument} chronological historical-regime test completed.`);
+        if (showSuccess) showNotice(`${result.stock_results && result.stock_results.universe_label || result.instrument} stock backtests completed.`);
         return true;
       } catch (_error) {
         backtestsStatus.textContent = 'The local backtest service is unavailable';
@@ -10278,6 +10547,10 @@
       alphaResearchStatus.textContent = Number(summary.ranked_ideas || 0)
         ? 'Research candidates available'
         : 'Architecture ready · candidate ranking blocked';
+      if (backtestsPayload?.stock_results) renderAlphaDevelopmentQueue(
+        backtestsPayload.stock_results,
+        backtestsPayload.trade_recommendations || {}
+      );
     }
 
     function renderAlphaResearchStory(result) {
@@ -10320,39 +10593,26 @@
     function renderCandidateOverlays(result) {
       const summary = result.summary || {};
       const catalystGates = Array.isArray(result.catalyst_gates) ? result.catalyst_gates : [];
-      const portfolioGates = Array.isArray(result.portfolio_gates) ? result.portfolio_gates : [];
-      const positions = portfolioAnalysis && Array.isArray(portfolioAnalysis.positions) ? portfolioAnalysis.positions : [];
-      const localPortfolioReady = positions.length > 0;
-      const riskReady = Boolean(portfolioAnalysis && portfolioAnalysis.risk_metrics && portfolioAnalysis.risk_metrics.status === 'available');
       document.getElementById('candidateOverlayStatus').textContent = result.status === 'ready'
         ? 'Overlay evidence ready'
         : 'Upstream evidence required';
       document.getElementById('candidateMacroValue').textContent = Number(summary.upcoming_macro_events || 0).toLocaleString('en-IN');
       document.getElementById('candidateEarningsValue').textContent = Number(summary.reviewed_earnings_records || 0).toLocaleString('en-IN');
-      document.getElementById('candidatePortfolioValue').textContent = localPortfolioReady ? `${positions.length} positions` : 'Not loaded';
-      document.getElementById('candidateImpactValue').textContent = Number(summary.candidate_impacts || 0).toLocaleString('en-IN');
-      const gateCards = (gates, portfolio = false) => gates.length
+      document.getElementById('candidatePortfolioValue').textContent = 'Separate';
+      document.getElementById('candidateImpactValue').textContent = Number(summary.trade_recommendations || 0).toLocaleString('en-IN');
+      const gateCards = (gates) => gates.length
         ? gates.map((gate, index) => {
-            let state = gate.state || 'blocked';
-            let detail = gate.detail || '';
-            if (portfolio && gate.key === 'local_holdings') {
-              state = localPortfolioReady ? 'ready' : 'blocked';
-              detail = localPortfolioReady ? `${positions.length} current positions are available in browser memory.` : detail;
-            }
-            if (portfolio && gate.key === 'risk_history') {
-              state = riskReady ? 'ready' : 'blocked';
-              detail = riskReady ? 'Aligned current-holdings beta and drawdown history is available.' : detail;
-            }
+            const state = gate.state || 'blocked';
             return `<article class="historical-fingerprint-card ${state === 'ready' ? 'ready' : 'unavailable'}">
               <div class="historical-step">${String(index + 1).padStart(2, '0')} · ${escapeHtml(String(state).replaceAll('_', ' ').toUpperCase())}</div>
-              <h3>${escapeHtml(gate.title || 'Overlay gate')}</h3><p>${escapeHtml(detail)}</p>
+              <h3>${escapeHtml(gate.title || 'Catalyst gate')}</h3><p>${escapeHtml(gate.detail || '')}</p>
             </article>`;
           }).join('')
-        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">No gates returned</div><h3>Overlay unavailable</h3><p>No score or impact is produced.</p></article>';
+        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">No gates returned</div><h3>Catalyst context unavailable</h3><p>No event context is produced.</p></article>';
       document.getElementById('candidateCatalystGrid').innerHTML = gateCards(catalystGates);
-      document.getElementById('candidatePortfolioGrid').innerHTML = gateCards(portfolioGates, true);
+      document.getElementById('candidatePortfolioGrid').innerHTML = '';
       document.getElementById('candidateOverlayNote').textContent =
-        `${result.contract_version || 'candidate-overlays'} · ${Number(summary.catalyst_gates_ready || 0)} of ${Number(summary.catalyst_gates || 0)} server-side catalyst gates ready · holdings remain browser-local · no overlay score, candidate impact, recommendation or order is active.`;
+        `${result.contract_version || 'candidate-overlays'} · ${Number(summary.catalyst_gates_ready || 0)} of ${Number(summary.catalyst_gates || 0)} catalyst gates ready. Portfolio Analysis is a separate long-term workspace and is not consulted by Alpha Research.`;
     }
 
     function renderResearchCards(result) {
@@ -10361,7 +10621,7 @@
       const gates = Array.isArray(result.publication_gates) ? result.publication_gates : [];
       const cards = Array.isArray(result.cards) ? result.cards : [];
       document.getElementById('researchCardStatus').textContent = ['ready_to_publish', 'completed_research_only'].includes(result.status)
-        ? 'Complete research cards published'
+        ? 'Trade recommendations published'
         : 'Publication blocked';
       document.getElementById('researchCardFieldValue').textContent = Number(summary.required_fields || 0).toLocaleString('en-IN');
       document.getElementById('researchCardGateValue').textContent = Number(summary.publication_gates || 0).toLocaleString('en-IN');
@@ -10374,8 +10634,8 @@
         ? gates.map((gate, index) => `<article class="historical-fingerprint-card ${gate.state === 'ready' ? 'ready' : 'unavailable'}"><div class="historical-step">${String(index + 1).padStart(2, '0')} · ${escapeHtml(String(gate.state || 'blocked').toUpperCase())}</div><h3>${escapeHtml(gate.title || 'Publication gate')}</h3><p>${escapeHtml(gate.detail || '')}</p></article>`).join('')
         : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">No gates</div><h3>Publication unavailable</h3><p>No card can be published.</p></article>';
       document.getElementById('researchCardsGrid').innerHTML = cards.length
-        ? cards.map((card) => `<article class="historical-fingerprint-card ready"><div class="historical-step">RESEARCH CARD</div><h3>${escapeHtml(card.title || card.symbol || 'Validated candidate')}</h3><p>${escapeHtml(card.hypothesis || '')}</p></article>`).join('')
-        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">NO CARD PUBLISHED</div><h3>Upstream evidence is incomplete</h3><p>The absence of a card is an explicit research result; no partial narrative is shown.</p></article>';
+        ? cards.map((card) => `<article class="historical-fingerprint-card ready"><div class="historical-step">TRADE RECOMMENDATION</div><h3>${escapeHtml(card.title || card.symbol || 'Validated setup')}</h3><p>${escapeHtml(card.hypothesis || '')}</p></article>`).join('')
+        : '<article class="historical-fingerprint-card unavailable"><div class="historical-step">NO COMPLETE RECOMMENDATION</div><h3>Upstream evidence is incomplete</h3><p>Partial recommendations remain withheld.</p></article>';
       const rules = Array.isArray(result.publication_rules) ? result.publication_rules : [];
       document.getElementById('researchCardNote').textContent =
         `${result.contract_version || 'auditable-research-cards'} · ${Number(summary.gates_ready || 0)} of ${Number(summary.publication_gates || 0)} publication gates ready · ${rules.join(' ')}`;
@@ -10890,31 +11150,101 @@
 
     async function refreshAllWorkspaceViewsAfterEod() {
       const workspaceTasks = [
-        loadDashboardMarketStory(false),
-        loadDashboardMarketSentimentSummary(false),
-        loadDashboardFnoSummary(false),
-        loadDashboardScreenerSummary(false),
-        loadDashboardSeasonalitySummary(false),
-        loadDashboardEventsSummary(false),
-        loadLocalScreener(false),
-        loadLocalSeasonality(false),
-        loadMacroEventsCalendar(false),
-        loadEarnings(false),
-        loadHistoricalRegimes(false),
-        loadBacktests(false),
+        ['Dashboard overview', loadDashboardWorkspace()],
+        ['Screener', loadLocalScreener(false)],
+        ['Seasonality', loadLocalSeasonality(false)],
+        ['Events calendar', loadMacroEventsCalendar(false)],
+        ['Earnings', loadEarnings(false)],
+        ['Historical regimes', loadHistoricalRegimes(false)],
+        ['Backtests', loadBacktests(false)],
       ];
-      workspaceTasks.push((async () => {
+      workspaceTasks.push(['Regime validation', (async () => {
         const universeUpdated = await loadRegimeValidationUniverse();
         if (!universeUpdated || refreshRegimeValidationButton.disabled) return universeUpdated;
         return loadRegimeValidation(false);
-      })());
+      })()]);
       if (portfolioPreview && Array.isArray(portfolioPreview.rows)) {
-        workspaceTasks.push(analyzePortfolio(false, true));
+        workspaceTasks.push(['Portfolio analysis', analyzePortfolio(false, true)]);
       } else {
         renderDashboardPortfolioSummary(portfolioAnalysis);
       }
-      const results = await Promise.allSettled(workspaceTasks);
-      return results.every((result) => result.status === 'fulfilled' && result.value !== false);
+      const results = await Promise.allSettled(workspaceTasks.map(([, task]) => task));
+      const failed = results.flatMap((result, index) => (
+        result.status !== 'fulfilled' || result.value !== true
+          ? [workspaceTasks[index][0]]
+          : []
+      ));
+      return failed.length
+        ? { ok: false, reason: 'workspace_refresh_incomplete', detail: failed.join(', ') }
+        : { ok: true };
+    }
+
+    const EOD_RUN_STATUS_KEY = 'pg-terminal:last-eod-run-v2';
+
+    function normalizeEodStageResult(value) {
+      if (value === true) return { ok: true, reason: null, detail: null };
+      if (value && typeof value === 'object') {
+        return {
+          ok: value.ok === true,
+          reason: value.reason || (value.ok === true ? null : 'stage_unavailable'),
+          detail: value.detail || null,
+        };
+      }
+      return { ok: false, reason: 'stage_unavailable', detail: null };
+    }
+
+    function formatEodFailure(failure) {
+      const reasonLabels = {
+        rbi_macro_source_unavailable: 'RBI source unavailable',
+        invalid_rbi_macro_response: 'RBI response rejected',
+        stored_macro_snapshot_conflict: 'stored macro conflict',
+        global_risk_sources_unavailable: 'FRED and Yahoo sources unavailable',
+        invalid_fred_global_response: 'FRED response rejected',
+        invalid_yahoo_global_response: 'Yahoo response rejected',
+        stored_global_risk_conflict: 'stored global-risk conflict',
+        futures_contracts_unavailable: 'near-month contracts unavailable',
+        futures_eod_data_unavailable: 'completed futures data unavailable',
+        futures_eod_partial: 'some completed futures contracts remain unavailable',
+        stored_futures_snapshot_conflict: 'stored futures conflict',
+        invalid_nfo_instrument_master: 'NFO instrument master rejected',
+        provider_timeout: 'provider timeout',
+        provider_connection_failed: 'provider connection failed',
+        provider_rejected_request: 'provider rejected request',
+        kite_not_connected: 'Kite not connected',
+        workspace_refresh_incomplete: failure.detail || 'one or more workspace reads failed',
+        stage_unavailable: 'stage returned no usable result',
+      };
+      const reason = reasonLabels[failure.reason] || failure.reason || 'unknown error';
+      return `${failure.stage} (${reason})`;
+    }
+
+    function storeEodRunStatus(record) {
+      try {
+        window.localStorage.setItem(EOD_RUN_STATUS_KEY, JSON.stringify(record));
+      } catch (_error) {
+        // The visible status still remains available for the current browser session.
+      }
+    }
+
+    function restoreEodRunStatus() {
+      let record = null;
+      try {
+        record = JSON.parse(window.localStorage.getItem(EOD_RUN_STATUS_KEY) || 'null');
+      } catch (_error) {
+        return;
+      }
+      if (!record || !['successful', 'partial', 'failed'].includes(record.state)) return;
+      const failures = Array.isArray(record.failures) ? record.failures : [];
+      const unavailableDetail = failures.length
+        ? ` Unavailable: ${failures.map(formatEodFailure).join(', ')}.`
+        : '';
+      eodUpdateButton.classList.toggle('eod-updated', record.state === 'successful');
+      eodUpdateButton.classList.toggle('eod-partial', record.state === 'partial');
+      eodUpdateButton.classList.toggle('eod-failed', record.state === 'failed');
+      eodUpdateLabel.textContent = record.state === 'successful' ? 'EOD updated' : 'EOD update';
+      eodUpdateState.textContent = `${record.state.charAt(0).toUpperCase()}${record.state.slice(1)} · ${Number(record.successfulStages || 0)}/${Number(record.totalStages || 15)}`;
+      eodUpdateButton.title = `${record.state.charAt(0).toUpperCase()}${record.state.slice(1)} EOD completion.${unavailableDetail}`;
+      eodUpdateButton.setAttribute('aria-label', `${record.state.charAt(0).toUpperCase()}${record.state.slice(1)} EOD completion. ${Number(record.successfulStages || 0)} of ${Number(record.totalStages || 15)} stages succeeded.${unavailableDetail}`);
     }
 
     async function runEodUpdate() {
@@ -10943,24 +11273,28 @@
       };
       const runStage = async (stage, operation) => {
         updateProgress(stage);
-        let result = false;
+        let result = { ok: false, reason: 'stage_unavailable', detail: null };
         for (let attempt = 1; attempt <= 2; attempt += 1) {
           try {
-            result = await operation();
-          } catch (_error) {
-            result = false;
+            result = normalizeEodStageResult(await operation());
+          } catch (error) {
+            result = {
+              ok: false,
+              reason: error?.name === 'AbortError' ? 'provider_timeout' : 'stage_exception',
+              detail: error?.message || null,
+            };
           }
-          if (result === true) break;
+          if (result.ok) break;
           if (attempt === 1) {
             retriedStages.push(stage);
             updateProgress(`Retrying ${stage.toLowerCase()} · attempt 2 of 2`);
             await new Promise((resolve) => window.setTimeout(resolve, 250));
           }
         }
-        if (result !== true) failedStages.push(stage);
+        if (!result.ok) failedStages.push({ stage, reason: result.reason, detail: result.detail });
         completedStages += 1;
         updateProgress(`${stage} complete`);
-        return result;
+        return result.ok;
       };
       updateProgress('Starting EOD update');
       showNotice('EOD update started. The first full historical ranking may take several minutes.');
@@ -10995,7 +11329,7 @@
             : '';
           showNotice(`EOD update completed. All market data, workspaces, and the in-memory portfolio story are refreshed.${retrySummary}`);
         } else {
-          const failedSummary = failedStages.join(' · ');
+          const failedSummary = failedStages.map(formatEodFailure).join(' · ');
           showNotice(`EOD update completed with ${failedStages.length} unavailable stage${failedStages.length === 1 ? '' : 's'}: ${failedSummary}.`);
         }
       } catch (_error) {
@@ -11015,10 +11349,17 @@
           eodUpdateLabel.textContent = updateSucceeded ? 'EOD updated' : 'EOD update';
           eodUpdateState.textContent = `${completionState.charAt(0).toUpperCase()}${completionState.slice(1)} · ${successfulStages}/${totalStages}`;
           const unavailableDetail = failedStages.length
-            ? ` Unavailable: ${failedStages.join(', ')}.`
+            ? ` Unavailable: ${failedStages.map(formatEodFailure).join(', ')}.`
             : '';
           eodUpdateButton.title = `${completionState.charAt(0).toUpperCase()}${completionState.slice(1)} EOD completion: ${successfulStages} of ${totalStages} stages succeeded.${unavailableDetail} Run again to refresh all supported market data and workspace summaries.`;
           eodUpdateButton.setAttribute('aria-label', `${completionState.charAt(0).toUpperCase()}${completionState.slice(1)} EOD completion. ${successfulStages} of ${totalStages} stages succeeded.${unavailableDetail} Refresh all supported market data and workspace summaries again.`);
+          storeEodRunStatus({
+            state: completionState,
+            successfulStages,
+            totalStages,
+            failures: failedStages,
+            completedAt: new Date().toISOString(),
+          });
           eodUpdateButton.disabled = !kiteLoginButton.classList.contains('kite-authenticated');
         }, 900);
       }
@@ -11074,9 +11415,11 @@
           body: '{}',
         });
         const result = await response.json();
-        return response.ok && result.ok === true;
-      } catch (_error) {
-        return false;
+        return response.ok && result.ok === true
+          ? { ok: true }
+          : { ok: false, reason: result.reason || `http_${response.status}` };
+      } catch (error) {
+        return { ok: false, reason: error?.name === 'AbortError' ? 'provider_timeout' : 'local_api_unavailable' };
       }
     }
 
@@ -11088,9 +11431,11 @@
           body: '{}',
         });
         const result = await response.json();
-        return response.ok && result.ok === true;
-      } catch (_error) {
-        return false;
+        return response.ok && result.ok === true
+          ? { ok: true }
+          : { ok: false, reason: result.reason || `http_${response.status}` };
+      } catch (error) {
+        return { ok: false, reason: error?.name === 'AbortError' ? 'provider_timeout' : 'local_api_unavailable' };
       }
     }
 
@@ -11103,9 +11448,11 @@
           body: JSON.stringify({ symbols }),
         });
         const result = await response.json();
-        return response.ok && result.ok === true;
-      } catch (_error) {
-        return false;
+        return response.ok && result.ok === true
+          ? { ok: true }
+          : { ok: false, reason: result.reason || `http_${response.status}` };
+      } catch (error) {
+        return { ok: false, reason: error?.name === 'AbortError' ? 'provider_timeout' : 'local_api_unavailable' };
       }
     }
 
@@ -11382,11 +11729,14 @@
       const episodes = Array.isArray(historicalRegimesPayload?.episode_stories) ? historicalRegimesPayload.episode_stories : [];
       renderHistoricalFeaturedEpisode(episodes, Number(event.target.value));
     });
+    document.querySelectorAll('.backtests-stock-table-wrap th[data-sort-column]').forEach((header) => {
+      header.querySelector('.backtests-sort-button')?.addEventListener('click', () => sortBacktestsStockRows(header));
+    });
     loadBacktestsButton.addEventListener('click', () => loadBacktests(true));
     backtestsIndexSelect.addEventListener('change', () => loadBacktests(false));
     refreshAlphaResearchButton.addEventListener('click', async () => {
-      await Promise.all([loadAlphaResearch(false), loadFactorResearch(false), loadFundamentalsFoundation(false)]);
-      showNotice('Architecture and factor-input readiness refreshed.');
+      await Promise.all([loadBacktests(false), loadAlphaResearch(false), loadFactorResearch(false), loadFundamentalsFoundation(false)]);
+      showNotice('Stock backtests, candidate queue, architecture and factor-input readiness refreshed.');
     });
     openAlphaEarningsButton.addEventListener('click', () => {
       terminalNavigate('Earnings Analysis');
@@ -11656,6 +12006,10 @@
           details.open = true;
           details.classList.add('workspace-evidence-primary');
         }
+        if (tableWrap.classList.contains('backtests-stock-table-wrap')) {
+          details.open = true;
+          details.classList.add('workspace-evidence-primary');
+        }
         const summary = document.createElement('summary');
         summary.textContent = `Evidence audit · ${heading}`;
         tableWrap.parentNode.insertBefore(details, tableWrap);
@@ -11781,6 +12135,7 @@
         } else if (isBacktests && !backtestsPayload) {
           loadBacktests(false);
         } else if (isAlphaResearch) {
+          if (!backtestsPayload) loadBacktests(false);
           if (!alphaResearchPayload) loadAlphaResearch(false);
           if (!factorResearchPayload) loadFactorResearch(false);
           loadFundamentalsFoundation(false);
@@ -11841,6 +12196,7 @@
 
     updateThemeControl();
     initializeExpenseTracker();
+    restoreEodRunStatus();
     restoreKiteStatus();
     renderDashboardPortfolioSummary(null);
     renderDashboardStoryPortfolio(null, null);

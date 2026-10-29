@@ -152,7 +152,7 @@ HISTORICAL_REGIME_CONTRACT_VERSION = "historical-regimes-v25"
 HISTORICAL_FINGERPRINT_CONTRACT_VERSION = "historical-episode-fingerprint-v1"
 HISTORICAL_ENTRY_VALIDATION_CONTRACT_VERSION = "historical-entry-validation-v1"
 HISTORICAL_POINT_IN_TIME_CONTRACT_VERSION = "historical-point-in-time-readiness-v1"
-BACKTESTS_CONTRACT_VERSION = "backtests-v4"
+BACKTESTS_CONTRACT_VERSION = "backtests-v6"
 SEASONALITY_BACKTEST_CONTRACT_VERSION = "seasonality-all-indices-backtest-v1"
 ALPHA_RESEARCH_CONTRACT_VERSION = "alpha-research-foundation-v1"
 FACTOR_RESEARCH_CONTRACT_VERSION = "factor-research-foundation-v1"
@@ -1915,6 +1915,24 @@ def parse_near_month_stock_futures(
     return selected, missing
 
 
+def pending_futures_contracts_for_session(
+    contracts: list[dict[str, object]],
+    stored_snapshots: list[dict[str, object]],
+    session_date: date,
+) -> list[dict[str, object]]:
+    """Return only contracts without an admitted snapshot for the EOD session."""
+    stored_keys = {
+        str(row.get("contract_key"))
+        for row in stored_snapshots
+        if row.get("date") == session_date and isinstance(row.get("contract_key"), str)
+    }
+    return [
+        contract
+        for contract in contracts
+        if f"NFO:{contract['tradingsymbol']}" not in stored_keys
+    ]
+
+
 def normalize_futures_eod_quotes(
     provider_payload: dict[str, object],
     contracts: list[dict[str, object]],
@@ -2002,11 +2020,11 @@ def parse_futures_daily_snapshot(
     parsed: list[dict[str, object]] = []
     for candle in candles:
         if not isinstance(candle, list) or len(candle) < 7 or not isinstance(candle[0], str):
-            raise ValueError("invalid_futures_history_response")
+            continue
         try:
             session_date = datetime.fromisoformat(candle[0].replace("Z", "+00:00")).date()
-        except ValueError as error:
-            raise ValueError("invalid_futures_history_response") from error
+        except ValueError:
+            continue
         if session_date > completed_through:
             continue
         raw_prices = candle[1:5]
@@ -2029,10 +2047,10 @@ def parse_futures_daily_snapshot(
             or float(open_interest) != int(open_interest)
             or int(open_interest) < 0
         ):
-            raise ValueError("invalid_futures_history_response")
+            continue
         open_price, high, low, close = (float(value) for value in raw_prices)
         if high < max(open_price, low, close) or low > min(open_price, high, close):
-            raise ValueError("invalid_futures_history_response")
+            continue
         parsed.append(
             {
                 "contract_key": f"NFO:{contract['tradingsymbol']}",
@@ -5884,11 +5902,518 @@ def build_seasonality_backtest_workspace(
     }
 
 
+def _wilson_interval(successes: int, observations: int) -> tuple[float | None, float | None]:
+    if observations <= 0:
+        return None, None
+    probability = successes / observations
+    z = 1.959963984540054
+    denominator = 1 + (z * z / observations)
+    centre = (probability + (z * z / (2 * observations))) / denominator
+    margin = (
+        z
+        * math.sqrt(
+            (probability * (1 - probability) / observations)
+            + (z * z / (4 * observations * observations))
+        )
+        / denominator
+    )
+    return round(max(0.0, centre - margin) * 100, 2), round(min(1.0, centre + margin) * 100, 2)
+
+
+def build_breadth_reversal_model(
+    stock_histories: dict[str, list[dict[str, object]]],
+    index_candles: list[dict[str, object]],
+    *,
+    instrument: str,
+    horizons: tuple[int, ...] = (5, 20, 60),
+) -> dict[str, object]:
+    """Estimate an empirical reversal probability from point-in-time breadth.
+
+    Each signal date uses only closes available on that date.  A reversal is a
+    forward return opposite to the selected index's preceding 20-session move.
+    Nearest historical breadth states are Beta-smoothed; a chronological
+    expanding-window diagnostic reports Brier loss without fitting on the
+    observation being scored.
+    """
+    breadth_by_date: dict[date, dict[str, int]] = defaultdict(
+        lambda: {"eligible_20": 0, "above_20": 0, "eligible_200": 0, "above_200": 0}
+    )
+    usable_series = 0
+    for rows in stock_histories.values():
+        ordered = sorted(
+            (
+                (row.get("date"), float(row.get("close") or 0))
+                for row in rows
+                if isinstance(row.get("date"), date) and float(row.get("close") or 0) > 0
+            ),
+            key=lambda item: item[0],
+        )
+        if len(ordered) < 200:
+            continue
+        usable_series += 1
+        rolling_20 = 0.0
+        rolling_200 = 0.0
+        closes: deque[float] = deque()
+        for session_date, close in ordered:
+            closes.append(close)
+            rolling_20 += close
+            rolling_200 += close
+            if len(closes) > 20:
+                rolling_20 -= closes[-21]
+            if len(closes) > 200:
+                rolling_200 -= closes[-201]
+            if len(closes) >= 20:
+                breadth_by_date[session_date]["eligible_20"] += 1
+                breadth_by_date[session_date]["above_20"] += int(close > rolling_20 / 20)
+            if len(closes) >= 200:
+                breadth_by_date[session_date]["eligible_200"] += 1
+                breadth_by_date[session_date]["above_200"] += int(close > rolling_200 / 200)
+            if len(closes) > 200:
+                oldest = closes.popleft()
+                # rolling_200 retains the most recent 200 values after the next
+                # append/subtraction cycle; rolling_20 is managed independently.
+                _ = oldest
+
+    index_rows = sorted(
+        (
+            (row.get("date"), float(row.get("close") or 0))
+            for row in index_candles
+            if isinstance(row.get("date"), date) and float(row.get("close") or 0) > 0
+        ),
+        key=lambda item: item[0],
+    )
+    if usable_series < 20 or len(index_rows) < 260:
+        return {
+            "status": "insufficient_history",
+            "reason": "At least 20 equities with 200 sessions and one index cycle are required.",
+            "universe": {"stored": len(stock_histories), "usable": usable_series},
+            "horizons": [],
+        }
+
+    maximum_200_coverage = max(
+        (row["eligible_200"] for row in breadth_by_date.values()), default=0
+    )
+    minimum_coverage = max(20, math.ceil(maximum_200_coverage * 0.7))
+
+    def breadth_state(session_date: date) -> dict[str, float | int] | None:
+        row = breadth_by_date.get(session_date)
+        if not row or row["eligible_20"] < minimum_coverage or row["eligible_200"] < minimum_coverage:
+            return None
+        return {
+            **row,
+            "pct_above_20": row["above_20"] / row["eligible_20"] * 100,
+            "pct_above_200": row["above_200"] / row["eligible_200"] * 100,
+        }
+
+    current_index = next(
+        (
+            position
+            for position in range(len(index_rows) - 1, 19, -1)
+            if breadth_state(index_rows[position][0]) is not None
+        ),
+        None,
+    )
+    if current_index is None:
+        return {
+            "status": "insufficient_history",
+            "reason": "No index session has sufficient simultaneous 20DMA and 200DMA breadth coverage.",
+            "universe": {"stored": len(stock_histories), "usable": usable_series},
+            "horizons": [],
+        }
+
+    current_date, current_close = index_rows[current_index]
+    current_breadth = breadth_state(current_date) or {}
+    current_return = (current_close / index_rows[current_index - 20][1] - 1) * 100
+    current_direction = "up" if current_return >= 0 else "down"
+
+    def distance(left: dict[str, object], right_20: float, right_200: float) -> float:
+        return math.sqrt(
+            (float(left["pct_above_20"]) - right_20) ** 2
+            + (float(left["pct_above_200"]) - right_200) ** 2
+        )
+
+    horizon_results: list[dict[str, object]] = []
+    combined_calibration: dict[str, dict[str, float | int]] = {
+        "0–25%": {"count": 0, "predicted": 0.0, "actual": 0},
+        "25–50%": {"count": 0, "predicted": 0.0, "actual": 0},
+        "50–75%": {"count": 0, "predicted": 0.0, "actual": 0},
+        "75–100%": {"count": 0, "predicted": 0.0, "actual": 0},
+    }
+
+    for horizon in horizons:
+        observations: list[dict[str, object]] = []
+        for position in range(20, len(index_rows) - horizon):
+            state = breadth_state(index_rows[position][0])
+            if state is None:
+                continue
+            prior_return = (index_rows[position][1] / index_rows[position - 20][1] - 1) * 100
+            direction = "up" if prior_return >= 0 else "down"
+            forward_return = (index_rows[position + horizon][1] / index_rows[position][1] - 1) * 100
+            reversal = int(forward_return < 0 if direction == "up" else forward_return > 0)
+            observations.append(
+                {
+                    "date": index_rows[position][0],
+                    "direction": direction,
+                    "prior_return_pct": prior_return,
+                    "forward_return_pct": forward_return,
+                    "reversal": reversal,
+                    "pct_above_20": state["pct_above_20"],
+                    "pct_above_200": state["pct_above_200"],
+                }
+            )
+
+        non_overlapping = observations[::max(1, horizon)]
+        same_direction = [row for row in non_overlapping if row["direction"] == current_direction]
+        cohort_size = min(60, len(same_direction))
+        neighbours = sorted(
+            same_direction,
+            key=lambda row: distance(
+                row,
+                float(current_breadth["pct_above_20"]),
+                float(current_breadth["pct_above_200"]),
+            ),
+        )[:cohort_size]
+        reversals = sum(int(row["reversal"]) for row in neighbours)
+        probability = (reversals + 1) / (cohort_size + 2) if cohort_size else None
+        base_reversals = sum(int(row["reversal"]) for row in same_direction)
+        base_probability = (base_reversals + 1) / (len(same_direction) + 2) if same_direction else None
+        interval_low, interval_high = _wilson_interval(reversals, cohort_size)
+
+        # Expanding-window, non-overlapping diagnostic. Each scored observation
+        # only consults prior observations whose forward outcome was already knowable.
+        walk_forward = non_overlapping
+        scored: list[tuple[float, int]] = []
+        for test_position, test in enumerate(walk_forward):
+            training = [
+                row
+                for row in walk_forward[:test_position]
+                if row["direction"] == test["direction"]
+            ]
+            if len(training) < 20:
+                continue
+            k = min(40, len(training))
+            nearest = sorted(
+                training,
+                key=lambda row: distance(
+                    row, float(test["pct_above_20"]), float(test["pct_above_200"])
+                ),
+            )[:k]
+            predicted = (sum(int(row["reversal"]) for row in nearest) + 1) / (k + 2)
+            actual = int(test["reversal"])
+            scored.append((predicted, actual))
+            label = "0–25%" if predicted < 0.25 else "25–50%" if predicted < 0.5 else "50–75%" if predicted < 0.75 else "75–100%"
+            combined_calibration[label]["count"] += 1
+            combined_calibration[label]["predicted"] += predicted
+            combined_calibration[label]["actual"] += actual
+        brier = sum((predicted - actual) ** 2 for predicted, actual in scored) / len(scored) if scored else None
+        horizon_results.append(
+            {
+                "sessions": horizon,
+                "status": "ready" if probability is not None and cohort_size >= 20 else "insufficient_cohort",
+                "probability_pct": round(probability * 100, 2) if probability is not None else None,
+                "base_probability_pct": round(base_probability * 100, 2) if base_probability is not None else None,
+                "uplift_pct_points": round((probability - base_probability) * 100, 2) if probability is not None and base_probability is not None else None,
+                "interval_low_pct": interval_low,
+                "interval_high_pct": interval_high,
+                "cohort_observations": cohort_size,
+                "cohort_reversals": reversals,
+                "historical_observations": len(observations),
+                "walk_forward_predictions": len(scored),
+                "brier_score": round(brier, 4) if brier is not None else None,
+                "definition": f"A {horizon}-session return opposite to the index's preceding 20-session direction.",
+            }
+        )
+
+    calibration = []
+    for label, row in combined_calibration.items():
+        count = int(row["count"])
+        calibration.append(
+            {
+                "bucket": label,
+                "observations": count,
+                "mean_predicted_pct": round(float(row["predicted"]) / count * 100, 2) if count else None,
+                "observed_reversal_pct": round(int(row["actual"]) / count * 100, 2) if count else None,
+            }
+        )
+
+    return {
+        "status": "ready",
+        "contract_version": "breadth-reversal-knn-v1",
+        "instrument": instrument,
+        "as_of_date": current_date.isoformat(),
+        "prior_20_session_return_pct": round(current_return, 2),
+        "prior_direction": current_direction,
+        "prior_move_strength": "low" if abs(current_return) < 0.5 else "material",
+        "universe": {
+            "label": "Locally stored liquid-equity universe",
+            "stored": len(stock_histories),
+            "usable": usable_series,
+            "minimum_daily_coverage": minimum_coverage,
+        },
+        "current_breadth": {
+            "above_20": int(current_breadth["above_20"]),
+            "below_20": int(current_breadth["eligible_20"]) - int(current_breadth["above_20"]),
+            "eligible_20": int(current_breadth["eligible_20"]),
+            "pct_above_20": round(float(current_breadth["pct_above_20"]), 2),
+            "above_200": int(current_breadth["above_200"]),
+            "below_200": int(current_breadth["eligible_200"]) - int(current_breadth["above_200"]),
+            "eligible_200": int(current_breadth["eligible_200"]),
+            "pct_above_200": round(float(current_breadth["pct_above_200"]), 2),
+        },
+        "horizons": horizon_results,
+        "calibration": calibration,
+        "method": "Beta-smoothed empirical probability from the 60 nearest prior breadth states with the same 20-session index direction; walk-forward scores use expanding, non-overlapping samples.",
+        "limitations": [
+            "The equity universe is the current locally stored liquid-stock panel, not an effective-dated historical index membership panel; survivorship and selection bias remain.",
+            "Moving averages use completed daily closes and do not model intraday execution, costs or slippage.",
+            "Nearest-state observations and horizons are descriptive; confidence intervals do not remove serial dependence or model-selection risk.",
+            "Probabilities are research diagnostics, not forecasts, targets or trade instructions.",
+        ],
+    }
+
+
+def build_stock_backtest_results(
+    stock_histories: dict[str, list[dict[str, object]]],
+    *,
+    universe_label: str,
+    universe_key: str,
+    horizons: tuple[int, ...] = (5, 20, 60),
+) -> dict[str, object]:
+    """Return stock-level breadth reversal and month-seasonality evidence.
+
+    Results are deliberately exhaustive for the selected local universe.  A
+    stock is never silently dropped: short histories appear with an explicit
+    unavailable state, while calculation-ready rows retain their sample sizes.
+    """
+    results: list[dict[str, object]] = []
+    latest_dates: list[date] = []
+    ready_count = 0
+    current_month = datetime.now(INDIA_TIMEZONE).month
+
+    for symbol in sorted(stock_histories):
+        rows = sorted(
+            (
+                (row.get("date"), float(row.get("close") or 0))
+                for row in stock_histories[symbol]
+                if isinstance(row.get("date"), date) and float(row.get("close") or 0) > 0
+            ),
+            key=lambda item: item[0],
+        )
+        if rows:
+            latest_dates.append(rows[-1][0])
+        if len(rows) < 260:
+            results.append(
+                {
+                    "symbol": symbol,
+                    "status": "insufficient_history",
+                    "sessions": len(rows),
+                    "as_of_date": rows[-1][0].isoformat() if rows else None,
+                    "reason": "At least 260 completed sessions are required.",
+                    "horizons": [],
+                }
+            )
+            continue
+
+        dates = [item[0] for item in rows]
+        closes = [item[1] for item in rows]
+        prefix = [0.0]
+        for close in closes:
+            prefix.append(prefix[-1] + close)
+
+        def average_at(position: int, window: int) -> float:
+            return (prefix[position + 1] - prefix[position + 1 - window]) / window
+
+        last = len(closes) - 1
+        current_return = (closes[last] / closes[last - 20] - 1) * 100
+        current_direction = "up" if current_return >= 0 else "down"
+        above_20 = closes[last] > average_at(last, 20)
+        above_200 = closes[last] > average_at(last, 200)
+        horizon_rows: list[dict[str, object]] = []
+        for horizon in horizons:
+            matches: list[int] = []
+            for position in range(199, len(closes) - horizon, max(1, horizon)):
+                prior_return = (closes[position] / closes[position - 20] - 1) * 100
+                direction = "up" if prior_return >= 0 else "down"
+                if (
+                    direction != current_direction
+                    or (closes[position] > average_at(position, 20)) != above_20
+                    or (closes[position] > average_at(position, 200)) != above_200
+                ):
+                    continue
+                forward_return = (closes[position + horizon] / closes[position] - 1) * 100
+                matches.append(int(forward_return < 0 if direction == "up" else forward_return > 0))
+            reversals = sum(matches)
+            probability = (reversals + 1) / (len(matches) + 2) if matches else None
+            interval_low, interval_high = _wilson_interval(reversals, len(matches))
+            horizon_rows.append(
+                {
+                    "sessions": horizon,
+                    "status": "ready" if len(matches) >= 10 else "low_sample",
+                    "probability_pct": round(probability * 100, 2) if probability is not None else None,
+                    "observations": len(matches),
+                    "reversals": reversals,
+                    "interval_low_pct": interval_low,
+                    "interval_high_pct": interval_high,
+                }
+            )
+
+        month_ends: dict[tuple[int, int], float] = {}
+        for session_date, close in rows:
+            month_ends[(session_date.year, session_date.month)] = close
+        month_returns: list[float] = []
+        for year in sorted({item[0] for item in month_ends}):
+            key = (year, current_month)
+            previous_key = (year - 1, 12) if current_month == 1 else (year, current_month - 1)
+            if key in month_ends and previous_key in month_ends and year < dates[-1].year:
+                month_returns.append((month_ends[key] / month_ends[previous_key] - 1) * 100)
+
+        ready_count += 1
+        results.append(
+            {
+                "symbol": symbol,
+                "status": "ready",
+                "sessions": len(rows),
+                "as_of_date": dates[-1].isoformat(),
+                "close": round(closes[-1], 2),
+                "prior_20_session_return_pct": round(current_return, 2),
+                "prior_direction": current_direction,
+                "above_20dma": above_20,
+                "above_200dma": above_200,
+                "horizons": horizon_rows,
+                "current_month_seasonality": {
+                    "month": current_month,
+                    "observations": len(month_returns),
+                    "average_return_pct": round(sum(month_returns) / len(month_returns), 2) if month_returns else None,
+                    "positive_rate_pct": round(100 * sum(value > 0 for value in month_returns) / len(month_returns), 1) if month_returns else None,
+                },
+            }
+        )
+
+    return {
+        "status": "ready" if ready_count else "no_eligible_stocks",
+        "contract_version": "stock-backtest-results-v1",
+        "universe_key": universe_key,
+        "universe_label": universe_label,
+        "as_of_date": max(latest_dates).isoformat() if latest_dates else None,
+        "summary": {
+            "selected_stocks": len(stock_histories),
+            "results_returned": len(results),
+            "calculation_ready": ready_count,
+            "insufficient_history": len(results) - ready_count,
+        },
+        "stocks": results,
+        "method": "Each stock is evaluated against its own completed-close history. Reversal cohorts match the current 20-session direction and current above/below 20DMA and 200DMA state, sampled at non-overlapping horizon intervals.",
+        "limitations": [
+            "The selected universe is based on the current locally stored F&O panel and current constituent snapshot, not effective-dated historical membership.",
+            "Stock probabilities are descriptive Beta-smoothed frequencies; low-sample rows remain marked and are not forecasts.",
+            "Current-month seasonality uses completed prior years only and is not corrected here for multiple testing across stocks.",
+            "No transaction costs, liquidity path, corporate-action uncertainty or execution rule is simulated.",
+        ],
+    }
+
+
+def build_short_term_trade_recommendations(
+    stock_results: dict[str, object],
+    *,
+    minimum_confidence_pct: float = 55.0,
+) -> dict[str, object]:
+    """Convert sample-ready stock paths into short-term directional recommendations.
+
+    This contract is deliberately independent of Portfolio Analysis.  It uses
+    completed EOD prices only, emits no position size or execution action, and
+    requires at least two non-overlapping, sample-ready horizons per stock.
+    """
+    stock_rows = stock_results.get("stocks")
+    stock_rows = stock_rows if isinstance(stock_rows, list) else []
+    horizon_weights = {5: 0.5, 20: 0.3, 60: 0.2}
+    recommendations: list[dict[str, object]] = []
+    evaluated = 0
+    evidence_qualified = 0
+    for row in stock_rows:
+        if not isinstance(row, dict) or row.get("status") != "ready":
+            continue
+        evaluated += 1
+        horizons = row.get("horizons")
+        ready_horizons = [
+            horizon
+            for horizon in (horizons if isinstance(horizons, list) else [])
+            if isinstance(horizon, dict)
+            and horizon.get("status") == "ready"
+            and horizon.get("probability_pct") is not None
+            and int(horizon.get("sessions") or 0) in horizon_weights
+        ]
+        if len(ready_horizons) < 2:
+            continue
+        evidence_qualified += 1
+        total_weight = sum(horizon_weights[int(item["sessions"])] for item in ready_horizons)
+        reversal_probability = sum(
+            float(item["probability_pct"]) * horizon_weights[int(item["sessions"])]
+            for item in ready_horizons
+        ) / total_weight
+        prior_direction = str(row.get("prior_direction") or "")
+        long_probability = reversal_probability if prior_direction == "down" else 100 - reversal_probability
+        short_probability = 100 - long_probability
+        direction = "long" if long_probability >= short_probability else "short"
+        confidence = max(long_probability, short_probability)
+        if confidence < minimum_confidence_pct:
+            continue
+        preferred = next(
+            (item for item in ready_horizons if int(item["sessions"]) == 20),
+            ready_horizons[0],
+        )
+        setup = (
+            "reversal"
+            if (direction == "long" and prior_direction == "down")
+            or (direction == "short" and prior_direction == "up")
+            else "continuation"
+        )
+        recommendations.append(
+            {
+                "symbol": str(row.get("symbol") or ""),
+                "as_of_date": row.get("as_of_date"),
+                "direction": direction,
+                "setup": setup,
+                "confidence_pct": round(confidence, 2),
+                "reference_close": row.get("close"),
+                "review_horizon_sessions": int(preferred["sessions"]),
+                "ready_horizons": [int(item["sessions"]) for item in ready_horizons],
+                "matched_observations": sum(int(item.get("observations") or 0) for item in ready_horizons),
+                "prior_20_session_return_pct": row.get("prior_20_session_return_pct"),
+                "above_20dma": row.get("above_20dma"),
+                "above_200dma": row.get("above_200dma"),
+                "invalidation": "Re-evaluate when the 20-session direction or the 20DMA/200DMA state changes at a completed EOD close.",
+                "execution": "manual_review_only",
+            }
+        )
+    recommendations.sort(
+        key=lambda row: (-float(row["confidence_pct"]), str(row["symbol"]))
+    )
+    return {
+        "status": "recommendations_ready" if recommendations else "no_qualified_recommendations",
+        "contract_version": "short-term-trade-recommendations-v1",
+        "as_of_date": stock_results.get("as_of_date"),
+        "universe_key": stock_results.get("universe_key"),
+        "universe_label": stock_results.get("universe_label"),
+        "summary": {
+            "stocks_evaluated": evaluated,
+            "evidence_qualified": evidence_qualified,
+            "recommendations": len(recommendations),
+            "long": sum(row["direction"] == "long" for row in recommendations),
+            "short": sum(row["direction"] == "short" for row in recommendations),
+        },
+        "recommendations": recommendations,
+        "method": "At least two sample-ready 5/20/60-session reversal estimates are combined with fixed 50/30/20 weights. Direction is the historically more frequent positive or negative path; recommendations below 55% are withheld.",
+        "boundary": "Short-term EOD trade recommendations only. Portfolio holdings, long-term allocation and order placement are outside this contract.",
+    }
+
+
 def build_backtests_workspace(
     entry_validation: dict[str, object],
     *,
     seasonality_backtest: dict[str, object] | None = None,
     point_in_time_readiness: dict[str, object] | None = None,
+    breadth_reversal: dict[str, object] | None = None,
+    stock_results: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Register the first auditable, research-only chronological test.
 
@@ -5990,6 +6515,29 @@ def build_backtests_workspace(
     seasonality_contract = seasonality_payload.get("registry_contract") if seasonality_payload else None
     if isinstance(seasonality_contract, dict):
         registry.append(seasonality_contract)
+    breadth_payload = breadth_reversal if isinstance(breadth_reversal, dict) else {}
+    breadth_horizons = (
+        breadth_payload.get("horizons")
+        if isinstance(breadth_payload.get("horizons"), list)
+        else []
+    )
+    breadth_ready = breadth_payload.get("status") in {"ready", "neutral_prior_move"}
+    registry.append(
+        {
+            "test_id": "market-breadth-reversal-probability-v1",
+            "name": "Market-breadth reversal probability",
+            "hypothesis_version": "breadth-reversal-knn-v1",
+            "hypothesis": "The share of locally stored equities above their 20DMA and 200DMA may condition the probability that an index's recent 20-session direction reverses.",
+            "universe": str((breadth_payload.get("universe") or {}).get("label") or "Locally stored equities"),
+            "discovery_period": {"from": None, "to": breadth_payload.get("as_of_date")},
+            "held_out_period": {"from": None, "to": breadth_payload.get("as_of_date")},
+            "discovery_episodes": sum(int(row.get("historical_observations") or 0) for row in breadth_horizons if isinstance(row, dict)),
+            "held_out_episodes": sum(int(row.get("walk_forward_predictions") or 0) for row in breadth_horizons if isinstance(row, dict)),
+            "costs_included": "Not applicable — probability study; no trade path or execution assumption",
+            "status": "research_gate_partial" if breadth_ready else "blocked",
+            "status_label": "Research-only · walk-forward diagnostic available" if breadth_ready else "Blocked · breadth history insufficient",
+        }
+    )
     evidence_payload = point_in_time_readiness if isinstance(point_in_time_readiness, dict) else {}
     evidence_summary = evidence_payload.get("summary") if isinstance(evidence_payload.get("summary"), dict) else {}
     evidence_categories = evidence_payload.get("categories") if isinstance(evidence_payload.get("categories"), list) else []
@@ -6015,6 +6563,11 @@ def build_backtests_workspace(
     )
     seasonality_completed = int(bool(seasonality_summary.get("indices_tested")))
     seasonality_survived = int(seasonality_summary.get("survived") or 0)
+    normalized_stock_results = stock_results if isinstance(stock_results, dict) else {
+        "status": "no_eligible_stocks",
+        "summary": {"selected_stocks": 0, "results_returned": 0, "calculation_ready": 0, "insufficient_history": 0},
+        "stocks": [],
+    }
     return {
         "ok": True,
         "contract_version": BACKTESTS_CONTRACT_VERSION,
@@ -6022,7 +6575,7 @@ def build_backtests_workspace(
         "instrument": instrument,
         "summary": {
             "registered_contracts": len(registry),
-            "chronological_tests_completed": int(test_completed) + seasonality_completed,
+            "chronological_tests_completed": int(test_completed) + seasonality_completed + int(breadth_ready),
             "held_out_tests_passed": admitted_traits + seasonality_survived,
             "approved_for_decision_support": 0,
             "direction_consistent_traits": direction_matches,
@@ -6037,6 +6590,9 @@ def build_backtests_workspace(
         "registry": registry,
         "trait_results": trait_rows,
         "seasonality": seasonality_payload,
+        "breadth_reversal": breadth_payload,
+        "stock_results": normalized_stock_results,
+        "trade_recommendations": build_short_term_trade_recommendations(normalized_stock_results),
         "point_in_time_readiness": {
             **evidence_payload,
             "summary": evidence_summary,
@@ -6050,6 +6606,7 @@ def build_backtests_workspace(
             "Direction consistency alone is not statistical significance and does not correct for multiple testing.",
             "Transaction costs are not applicable because no trade path is simulated.",
             "Failed and unmatched traits remain visible rather than being removed after outcomes are known.",
+            "The breadth-reversal study uses the locally stored equity panel and therefore retains survivorship and universe-selection bias.",
         ],
     }
 
@@ -6109,6 +6666,27 @@ def calculate_macro_context_summary(rows: list[dict[str, object]]) -> dict[str, 
         "source": RBI_MACRO_SOURCE,
         "metrics": metrics,
     }
+
+
+def macro_context_covers_completed_date(
+    summary: dict[str, object], completed_through: date
+) -> bool:
+    """Return whether every stored macro component covers the completed session.
+
+    RBI/FBIL observations are immutable once admitted to the local EOD store.  A
+    second refresh on the same day can expose intraday changes under the same
+    observation date, which must not turn an already-complete EOD run into a
+    conflict.  The oldest component date is the conservative coverage boundary.
+    """
+    if summary.get("available") is not True:
+        return False
+    raw_date = summary.get("oldest_component_date")
+    if not isinstance(raw_date, str):
+        return False
+    try:
+        return date.fromisoformat(raw_date) >= completed_through
+    except ValueError:
+        return False
 
 
 def parse_fred_global_csv(
@@ -6350,6 +6928,21 @@ def calculate_global_risk_summary(rows: list[dict[str, object]]) -> dict[str, ob
         "metrics": metrics,
         "scoring_enabled": False,
     }
+
+
+def global_risk_covers_completed_date(
+    summary: dict[str, object], completed_through: date
+) -> bool:
+    """Return whether every admitted global series covers the completed session."""
+    if summary.get("available") is not True:
+        return False
+    raw_date = summary.get("oldest_component_date")
+    if not isinstance(raw_date, str):
+        return False
+    try:
+        return date.fromisoformat(raw_date) >= completed_through
+    except ValueError:
+        return False
 
 
 def calculate_candidate_regime(evidence: dict[str, object]) -> dict[str, object]:
@@ -12335,7 +12928,7 @@ def build_candidate_overlay_contract(
     macro_event_count: int,
     reviewed_news_count: int,
 ) -> dict[str, object]:
-    """Expose catalyst and portfolio-impact gates without scoring candidates."""
+    """Expose short-term catalyst gates without any portfolio dependency."""
     minimum_earnings_records = 20
     catalyst_gates = [
         {
@@ -12363,63 +12956,33 @@ def build_candidate_overlay_contract(
             "detail": "Mapping remains disabled until a candidate passes composite chronological validation.",
         },
     ]
-    portfolio_gates = [
-        {
-            "key": "local_holdings",
-            "title": "Current local holdings",
-            "state": "client_runtime_required",
-            "detail": "Holdings remain browser-memory-only and must be uploaded in the current session.",
-        },
-        {
-            "key": "transaction_history",
-            "title": "Transaction-based portfolio history",
-            "state": "blocked",
-            "detail": "Actual dated purchases, sales, dividends and cash flows are not yet available.",
-        },
-        {
-            "key": "risk_history",
-            "title": "Portfolio beta and drawdown history",
-            "state": "client_runtime_required",
-            "detail": "Requires sufficient aligned daily history for the current uploaded holdings.",
-        },
-        {
-            "key": "marginal_impact",
-            "title": "Marginal candidate impact",
-            "state": "blocked",
-            "detail": "Concentration, beta and drawdown deltas cannot be calculated before a validated candidate exists.",
-        },
-    ]
     catalyst_ready = sum(gate["state"] == "ready" for gate in catalyst_gates)
     return {
         "ok": True,
         "contract_version": CANDIDATE_OVERLAY_CONTRACT_VERSION,
-        "status": "blocked_until_validated_candidates_and_portfolio_evidence",
+        "status": "blocked_until_validated_candidates_and_catalyst_evidence",
         "summary": {
             "upcoming_macro_events": macro_event_count,
             "reviewed_earnings_records": earnings_record_count,
             "reviewed_news_records": reviewed_news_count,
             "catalyst_gates_ready": catalyst_ready,
             "catalyst_gates": len(catalyst_gates),
-            "candidate_impacts": 0,
+            "trade_recommendations": 0,
         },
         "catalyst_gates": catalyst_gates,
-        "portfolio_gates": portfolio_gates,
         "overlay_rules": {
             "catalyst_role": "context and timing overlay only; never rescues a failed factor or validation gate",
-            "portfolio_role": "reject or resize research candidates that worsen concentration, beta or drawdown beyond disclosed limits",
-            "holdings_storage": "browser memory only",
-            "candidate_promotion": "disabled",
+            "portfolio_role": "not applicable; long-term Portfolio Analysis is a separate workspace",
+            "candidate_promotion": "enabled only after short-term evidence gates pass",
         },
         "outputs": {
             "catalyst_scores": [],
-            "portfolio_impacts": [],
             "ranked_candidates": [],
         },
         "limitations": [
             "A scheduled event is not a directional forecast.",
             "Missing earnings or news evidence is unavailable, not neutral.",
-            "Current-holdings risk history is not transaction-based performance.",
-            "No recommendation, position size or order is produced.",
+            "Portfolio holdings and long-term allocation are outside Alpha Research.",
         ],
     }
 
@@ -12461,14 +13024,9 @@ def build_research_card_contract(
             "requirement": "Expected review window stated in completed trading sessions, not an open-ended target.",
         },
         {
-            "key": "risk_budget",
-            "title": "Risk budget",
-            "requirement": "Maximum research exposure constrained by regime, liquidity and portfolio risk limits.",
-        },
-        {
-            "key": "portfolio_impact",
-            "title": "Portfolio impact",
-            "requirement": "Marginal concentration, beta and drawdown effect against the current local portfolio.",
+            "key": "risk_boundary",
+            "title": "Risk boundary",
+            "requirement": "Direction, review horizon and observable invalidation are explicit; position sizing remains outside the recommendation.",
         },
         {
             "key": "invalidation",
@@ -12488,12 +13046,6 @@ def build_research_card_contract(
             "title": "Catalyst context reviewed",
             "state": "blocked",
             "detail": "A candidate-specific catalyst review has not been produced.",
-        },
-        {
-            "key": "portfolio_impact",
-            "title": "Portfolio impact calculated",
-            "state": "blocked",
-            "detail": "No candidate-specific concentration, beta or drawdown delta exists.",
         },
         {
             "key": "complete_audit",
@@ -12517,10 +13069,11 @@ def build_research_card_contract(
         "publication_gates": gates,
         "cards": [],
         "publication_rules": [
-            "A card is a research artefact, not a recommendation or order.",
+            "A complete card is a short-term trade recommendation for manual review.",
             "Every numeric claim carries an as-of date, source identity and calculation contract.",
             "Unavailable evidence remains visible and cannot be replaced by narrative confidence.",
             "Any failed publication gate withholds the entire card rather than only the missing field.",
+            "The site does not place, route or manage orders.",
         ],
     }
 
@@ -13080,13 +13633,6 @@ def build_alpha_research_foundation(
             "next_gate": "Add permitted release timestamps, expectations, surprise and post-event drift evidence.",
         },
         {
-            "key": "portfolio_impact",
-            "title": "Portfolio impact gate",
-            "state": "foundation",
-            "summary": "The v19 engine calculates pro-rata-funded security and sector concentration, beta, drawdown and factor-exposure deltas.",
-            "next_gate": "Supply complete browser-local transactions, 252 aligned sessions and validated candidate evidence.",
-        },
-        {
             "key": "validation",
             "title": "Chronological validation",
             "state": "partial",
@@ -13095,10 +13641,10 @@ def build_alpha_research_foundation(
         },
         {
             "key": "decision",
-            "title": "Ranked research cards",
+            "title": "Short-term trade recommendations",
             "state": "blocked",
-            "summary": "The v20 ranking and v21 whole-card publication contracts are implemented, but no candidate passes the live upstream evidence chain.",
-            "next_gate": "Populate admitted ranks and complete eight-field drafts; partial cards remain withheld.",
+            "summary": "The recommendation contract is implemented, but no candidate has yet passed the live factor, regime, liquidity, catalyst and chronological-validation chain.",
+            "next_gate": "Admit the backtest-derived candidate rows and publish only complete direction, horizon, evidence and invalidation records.",
         },
     ]
     candidate_overlays = build_candidate_overlay_contract(
@@ -13141,7 +13687,7 @@ def build_alpha_research_foundation(
         "ok": True,
         "contract_version": ALPHA_RESEARCH_CONTRACT_VERSION,
         "status": "foundation_ready_no_ranked_ideas",
-        "architecture": "regime_gated_factor_core_with_catalyst_overlay_and_portfolio_impact",
+        "architecture": "short_term_trade_recommendations_from_regime_factor_backtest_and_catalyst_evidence",
         "layers": layers,
         "summary": {
             "layers": len(layers),
@@ -13165,7 +13711,7 @@ def build_alpha_research_foundation(
                 "translate Dashboard, Market Sentiment, Seasonality and Historical Regimes first",
                 "extend the compact terminal grid to the remaining workspaces",
                 "preserve keyboard access, responsive reading and expandable evidence audits",
-                "retain provenance, missing-data states and the no-recommendation boundary",
+                "retain provenance, missing-data states and manual-review-only recommendation boundaries",
             ],
         },
         "site_story_ux": build_full_site_story_ux_contract(),
@@ -13176,10 +13722,11 @@ def build_alpha_research_foundation(
         "catalyst_workflow": catalyst_workflow,
         "point_in_time_universe": point_in_time_universe,
         "limitations": [
-            "The page reports build readiness, not investment opportunities.",
+            "The page produces short-term trade recommendations only after the stated evidence gates pass.",
             "Descriptive relative strength is not validated alpha.",
             "A current regime label cannot activate a playbook until its validation gate passes.",
-            "Portfolio holdings remain local and browser-memory-only.",
+            "Portfolio holdings, long-term allocation and portfolio impact are outside Alpha Research.",
+            "The site does not place, route or manage orders.",
         ],
     }
 
@@ -20945,16 +21492,36 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
     def _send_backtests(self, query: str) -> None:
         try:
             parameters = urllib.parse.parse_qs(query, keep_blank_values=True)
-            instrument = parameters.get("index", ["Nifty 50"])[0]
-            if instrument not in SEASONALITY_INDICES:
+            universe_key = parameters.get("universe", ["Nifty 50"])[0]
+            if universe_key != "all-fno" and universe_key not in SEASONALITY_INDICES:
                 self._send_json(
                     HTTPStatus.BAD_REQUEST,
                     {"ok": False, "reason": "invalid_backtest_selection"},
                 )
                 return
+            instrument = "Nifty 50" if universe_key == "all-fno" else universe_key
             store = _get_eod_store()
+            all_stock_histories = store.load_candle_histories(kind="stock")
+            if universe_key == "all-fno":
+                selected_stock_histories = all_stock_histories
+                universe_label = "All locally stored NSE F&O equities"
+            else:
+                constituent_snapshot = load_index_constituent_snapshot()
+                index_constituents = (
+                    constituent_snapshot.get("indices", {})
+                    if isinstance(constituent_snapshot, dict)
+                    else {}
+                )
+                selected_symbols = index_constituents.get(universe_key, []) if isinstance(index_constituents, dict) else []
+                selected_stock_histories = {
+                    symbol: all_stock_histories[symbol]
+                    for symbol in selected_symbols
+                    if symbol in all_stock_histories
+                }
+                universe_label = f"{universe_key} constituents in the locally stored NSE F&O universe"
+            index_candles = store.load_candles(kind="index", display_name=instrument)
             historical_workspace = build_historical_regime_workspace(
-                store.load_candles(kind="index", display_name=instrument),
+                index_candles,
                 instrument=instrument,
                 official_history_rows=store.load_historical_series_observations(),
                 global_risk_rows=store.load_global_risk_observations(),
@@ -20972,6 +21539,16 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                     historical_workspace["entry_snapshot_validation"],
                     seasonality_backtest=seasonality_backtest,
                     point_in_time_readiness=historical_workspace["point_in_time_readiness"],
+                    breadth_reversal=build_breadth_reversal_model(
+                        selected_stock_histories,
+                        index_candles,
+                        instrument=instrument,
+                    ),
+                    stock_results=build_stock_backtest_results(
+                        selected_stock_histories,
+                        universe_label=universe_label,
+                        universe_key=universe_key,
+                    ),
                 ),
             )
         except ValueError as error:
@@ -22950,6 +23527,25 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         self._send_json(HTTPStatus.OK, {"ok": True, **summary, "write_result": write_result})
 
     def _send_macro_context_refresh(self) -> None:
+        now = datetime.now(INDIA_TIMEZONE)
+        completed_through = completed_history_date(now)
+        while completed_through.weekday() >= 5:
+            completed_through -= timedelta(days=1)
+        store = _get_eod_store()
+        stored_summary = calculate_macro_context_summary(store.load_macro_snapshots())
+        if macro_context_covers_completed_date(stored_summary, completed_through):
+            self._send_json(
+                HTTPStatus.OK,
+                {
+                    "ok": True,
+                    **stored_summary,
+                    "write_result": {"inserted": 0, "duplicates": 0},
+                    "completed_through": completed_through.isoformat(),
+                    "retrieval_mode": "current_local_eod_reused",
+                    "provider_requested": False,
+                },
+            )
+            return
         request = urllib.request.Request(
             RBI_HOME_URL,
             headers={
@@ -22967,7 +23563,6 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             return
         try:
             rows = parse_rbi_macro_snapshot(text_payload or "")
-            store = _get_eod_store()
             write_result = store.append_macro_snapshots(
                 rows,
                 source=RBI_MACRO_SOURCE,
@@ -22989,7 +23584,27 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         self._send_json(HTTPStatus.OK, {"ok": True, **summary, "write_result": write_result})
 
     def _send_global_risk_refresh(self) -> None:
-        today = datetime.now(INDIA_TIMEZONE).date()
+        now = datetime.now(INDIA_TIMEZONE)
+        today = now.date()
+        completed_through = completed_history_date(now)
+        while completed_through.weekday() >= 5:
+            completed_through -= timedelta(days=1)
+        store = _get_eod_store()
+        stored_summary = calculate_global_risk_summary(store.load_global_risk_observations())
+        if global_risk_covers_completed_date(stored_summary, completed_through):
+            self._send_json(
+                HTTPStatus.OK,
+                {
+                    "ok": True,
+                    **stored_summary,
+                    "write_result": {"inserted": 0, "duplicates": 0},
+                    "provider": "local_eod",
+                    "completed_through": completed_through.isoformat(),
+                    "retrieval_mode": "current_local_eod_reused",
+                    "provider_requested": False,
+                },
+            )
+            return
         earliest = today - timedelta(days=460)
         query = urllib.parse.urlencode(
             {"id": ",".join(FRED_GLOBAL_SERIES), "cosd": earliest.isoformat()}
@@ -23011,7 +23626,6 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 fred_failure = "invalid_fred_global_response"
             else:
                 try:
-                    store = _get_eod_store()
                     write_result = store.append_global_risk_observations(
                         rows,
                         source=FRED_GLOBAL_SOURCE,
@@ -23173,7 +23787,7 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             return
         try:
             contracts, inventory_missing = parse_near_month_stock_futures(
-                csv_payload or "", symbols, as_of=now.date()
+                csv_payload or "", symbols, as_of=completed_through
             )
         except ValueError as error:
             self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": str(error)})
@@ -23181,10 +23795,33 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
         if not contracts:
             self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": "futures_contracts_unavailable"})
             return
+        store = _get_eod_store()
+        stored_snapshots = store.load_futures_eod_snapshots()
+        pending_contracts = pending_futures_contracts_for_session(
+            contracts, stored_snapshots, completed_through
+        )
+        if not pending_contracts:
+            summary = calculate_futures_oi_summary(stored_snapshots)
+            self._send_json(
+                HTTPStatus.OK,
+                {
+                    "ok": True,
+                    **summary,
+                    "requested_count": len(symbols),
+                    "contract_count": len(contracts),
+                    "snapshot_count": len(contracts),
+                    "inventory_missing": inventory_missing,
+                    "quote_missing": [],
+                    "retrieval_mode": "current_local_eod_reused",
+                    "completed_through": completed_through.isoformat(),
+                    "write_result": {"inserted": 0, "duplicates": 0},
+                },
+            )
+            return
         try:
             if now.time().replace(tzinfo=None) >= datetime_time(15, 40):
                 quote_query = urllib.parse.urlencode(
-                    [("i", f"NFO:{contract['tradingsymbol']}") for contract in contracts]
+                    [("i", f"NFO:{contract['tradingsymbol']}") for contract in pending_contracts]
                 )
                 quote_request = urllib.request.Request(
                     f"{FULL_QUOTE_URL}?{quote_query}",
@@ -23202,14 +23839,14 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 if reason is not None:
                     raise ValueError(reason)
                 snapshots, quote_missing = normalize_futures_eod_quotes(
-                    provider_payload or {}, contracts, now=now
+                    provider_payload or {}, pending_contracts, now=now
                 )
                 retrieval_mode = "post_close_bulk_quote"
             else:
                 snapshots = []
                 quote_missing = []
                 history_start = completed_through - timedelta(days=10)
-                for index, contract in enumerate(contracts):
+                for index, contract in enumerate(pending_contracts):
                     if index:
                         time.sleep(HISTORICAL_REQUEST_INTERVAL_SECONDS)
                     history_query = urllib.parse.urlencode(
@@ -23240,24 +23877,35 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                             raise ValueError(reason)
                         quote_missing.append(str(contract["underlying"]))
                         continue
-                    snapshot = parse_futures_daily_snapshot(
-                        history_payload or {}, contract, completed_through=completed_through
-                    )
+                    try:
+                        snapshot = parse_futures_daily_snapshot(
+                            history_payload or {}, contract, completed_through=completed_through
+                        )
+                    except ValueError:
+                        quote_missing.append(str(contract["underlying"]))
+                        continue
                     if snapshot is None:
                         quote_missing.append(str(contract["underlying"]))
                     else:
                         snapshots.append(snapshot)
                 retrieval_mode = "latest_completed_history"
-            if not snapshots:
+            if not snapshots and len(pending_contracts) == len(contracts):
                 raise ValueError("futures_eod_data_unavailable")
-            store = _get_eod_store()
-            write_result = store.append_futures_eod_snapshots(
-                contracts,
-                snapshots,
-                source=KITE_FUTURES_SOURCE,
-                retrieved_at=datetime.now(timezone.utc).isoformat(),
+            write_result = (
+                store.append_futures_eod_snapshots(
+                    contracts,
+                    snapshots,
+                    source=KITE_FUTURES_SOURCE,
+                    retrieved_at=datetime.now(timezone.utc).isoformat(),
+                )
+                if snapshots
+                else {"inserted": 0, "duplicates": 0}
             )
-            summary = calculate_futures_oi_summary(store.load_futures_eod_snapshots())
+            stored_after = store.load_futures_eod_snapshots()
+            remaining_contracts = pending_futures_contracts_for_session(
+                contracts, stored_after, completed_through
+            )
+            summary = calculate_futures_oi_summary(stored_after)
         except FuturesSnapshotConflictError:
             self._send_json(
                 HTTPStatus.CONFLICT,
@@ -23270,20 +23918,26 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 self._clear_session()
             self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "reason": reason})
             return
+        response_payload = {
+            "ok": not remaining_contracts,
+            **summary,
+            "requested_count": len(symbols),
+            "contract_count": len(contracts),
+            "snapshot_count": len(contracts) - len(remaining_contracts),
+            "inventory_missing": inventory_missing,
+            "quote_missing": sorted({
+                *quote_missing,
+                *(str(contract["underlying"]) for contract in remaining_contracts),
+            }),
+            "retrieval_mode": retrieval_mode,
+            "completed_through": completed_through.isoformat(),
+            "write_result": write_result,
+        }
+        if remaining_contracts:
+            response_payload["reason"] = "futures_eod_partial"
         self._send_json(
-            HTTPStatus.OK,
-            {
-                "ok": True,
-                **summary,
-                "requested_count": len(symbols),
-                "contract_count": len(contracts),
-                "snapshot_count": len(snapshots),
-                "inventory_missing": inventory_missing,
-                "quote_missing": quote_missing,
-                "retrieval_mode": retrieval_mode,
-                "completed_through": completed_through.isoformat(),
-                "write_result": write_result,
-            },
+            HTTPStatus.OK if not remaining_contracts else HTTPStatus.PARTIAL_CONTENT,
+            response_payload,
         )
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler name

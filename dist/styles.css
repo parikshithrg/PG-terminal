@@ -1647,9 +1647,28 @@ body[data-active-page="backtests"] #backtestsView {
 
 body[data-active-page="backtests"] #backtestsView[hidden] { display: none; }
 
+/* The Backtests page is intentionally a three-step working surface.  The
+   research audit remains calculated in the DOM contract but is not presented
+   here; it belongs in technical documentation, not the daily workflow. */
+body[data-active-page="backtests"] #backtestsView > :is(
+  .page-tabs, .workspace-story-brief, .backtests-overview-grid,
+  .backtests-decision-section, .backtests-contract-section,
+  .backtests-evidence-section, .backtests-traits-section,
+  .backtests-seasonality-section, .backtests-queue-section,
+  .backtests-registry-section, .backtests-guardrails-section
+) {
+  display: none !important;
+}
+
+#backtestsView > :is(.backtests-reversal-section, .backtests-stock-section) {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+}
+
 body[data-active-page="backtests"] #backtestsView > :is(
   .page-tabs, .analysis-intro, .workspace-story-brief, .backtests-primary-controls, .backtests-overview-grid,
-  .backtests-decision-section, .backtests-contract-section, .backtests-evidence-section,
+  .backtests-decision-section, .backtests-reversal-section, .backtests-stock-section, .backtests-contract-section, .backtests-evidence-section,
   .backtests-traits-section, .backtests-seasonality-section, .backtests-queue-section,
   .backtests-registry-section, .backtests-guardrails-section
 ) {
@@ -1814,7 +1833,7 @@ body[data-active-page="backtests"] .backtests-decision-card p {
 }
 
 body[data-active-page="backtests"] :is(
-  .backtests-contract-section, .backtests-evidence-section, .backtests-traits-section,
+  .backtests-reversal-section, .backtests-stock-section, .backtests-contract-section, .backtests-evidence-section, .backtests-traits-section,
   .backtests-seasonality-section, .backtests-queue-section, .backtests-registry-section,
   .backtests-guardrails-section
 ) {
@@ -1824,7 +1843,7 @@ body[data-active-page="backtests"] :is(
 }
 
 body[data-active-page="backtests"] :is(
-  .backtests-contract-section, .backtests-evidence-section, .backtests-traits-section,
+  .backtests-reversal-section, .backtests-stock-section, .backtests-contract-section, .backtests-evidence-section, .backtests-traits-section,
   .backtests-seasonality-section, .backtests-queue-section, .backtests-registry-section,
   .backtests-guardrails-section
 ) > h2 {
@@ -1832,6 +1851,102 @@ body[data-active-page="backtests"] :is(
   color: var(--terminal-orange);
   font-size: 11px;
   text-transform: uppercase;
+}
+
+body[data-active-page="backtests"] .backtests-reversal-section {
+  border: 1px solid var(--terminal-line);
+  border-top: 2px solid var(--terminal-cyan);
+}
+
+body[data-active-page="backtests"] .backtests-stock-section {
+  border: 1px solid var(--terminal-line);
+  border-top: 2px solid var(--terminal-orange);
+}
+
+body[data-active-page="backtests"] .backtests-stock-section .summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 9px 0;
+  border: 1px solid var(--terminal-line);
+}
+
+body[data-active-page="backtests"] .backtests-stock-section .summary-card {
+  min-height: 66px;
+  border: 0;
+  border-right: 1px solid var(--terminal-line-soft);
+  border-radius: 0;
+  background: var(--terminal-panel-2);
+}
+
+body[data-active-page="backtests"] .backtests-stock-table-wrap {
+  max-height: 560px;
+  overflow: auto;
+}
+
+body[data-active-page="backtests"] .backtests-stock-table-wrap thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--terminal-panel-2);
+}
+
+body[data-active-page="backtests"] .backtests-sort-button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+body[data-active-page="backtests"] .backtests-sort-button span {
+  color: var(--terminal-muted);
+  font-size: 10px;
+}
+
+body[data-active-page="backtests"] .backtests-stock-table-wrap th[aria-sort="ascending"],
+body[data-active-page="backtests"] .backtests-stock-table-wrap th[aria-sort="descending"] {
+  color: var(--terminal-orange);
+  box-shadow: inset 0 -2px 0 var(--terminal-orange);
+}
+
+body[data-active-page="backtests"] .backtests-sort-button:focus-visible {
+  outline: 1px solid var(--terminal-cyan);
+  outline-offset: 3px;
+}
+
+body[data-active-page="backtests"] .backtests-reversal-section .summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 9px 0;
+  border: 1px solid var(--terminal-line);
+}
+
+body[data-active-page="backtests"] .backtests-reversal-section .summary-card {
+  min-height: 70px;
+  border: 0;
+  border-right: 1px solid var(--terminal-line-soft);
+  border-radius: 0;
+  background: var(--terminal-panel-2);
+}
+
+body[data-active-page="backtests"] .backtests-reversal-horizons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 8px 0;
+}
+
+body[data-active-page="backtests"] .backtests-reversal-horizons .historical-fingerprint-card h3 {
+  font-size: 18px;
 }
 
 body[data-active-page="backtests"] :is(.historical-architecture-grid, .historical-fingerprint-grid) {
@@ -1874,7 +1989,10 @@ body[data-active-page="backtests"] .backtests-guardrails-section {
 
 @media (max-width: 900px) {
   body[data-active-page="backtests"] .backtests-decision-grid,
-  body[data-active-page="backtests"] .backtests-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body[data-active-page="backtests"] .backtests-overview-grid,
+  body[data-active-page="backtests"] .backtests-reversal-section .summary-grid,
+  body[data-active-page="backtests"] .backtests-stock-section .summary-grid,
+  body[data-active-page="backtests"] .backtests-reversal-horizons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   body[data-active-page="backtests"] .backtests-overview-grid .summary-card:nth-child(2) { border-right: 0; }
   body[data-active-page="backtests"] .backtests-contract-section .historical-architecture-grid,
   body[data-active-page="backtests"] .backtests-queue-section .historical-fingerprint-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1884,6 +2002,9 @@ body[data-active-page="backtests"] .backtests-guardrails-section {
   body[data-active-page="backtests"] .backtests-primary-controls,
   body[data-active-page="backtests"] .backtests-decision-grid,
   body[data-active-page="backtests"] .backtests-overview-grid,
+  body[data-active-page="backtests"] .backtests-reversal-section .summary-grid,
+  body[data-active-page="backtests"] .backtests-stock-section .summary-grid,
+  body[data-active-page="backtests"] .backtests-reversal-horizons,
   body[data-active-page="backtests"] .backtests-contract-section .historical-architecture-grid,
   body[data-active-page="backtests"] .backtests-queue-section .historical-fingerprint-grid { grid-template-columns: 1fr; }
   body[data-active-page="backtests"] .backtests-primary-controls .universe-source { grid-column: auto; }
@@ -1901,12 +2022,183 @@ body[data-active-page="alpha-research"] #alphaResearchView {
 body[data-active-page="alpha-research"] #alphaResearchView[hidden] { display: none; }
 
 body[data-active-page="alpha-research"] #alphaResearchView > :is(
-  .page-tabs, .analysis-intro, .alpha-overview-grid, .alpha-story-section,
+  .page-tabs, .analysis-intro, .alpha-backtest-lab, .alpha-overview-grid, .alpha-story-section,
   .alpha-pipeline-section, .alpha-audit-details, .alpha-policy-section,
   .alpha-boundary-section
 ) {
   grid-column: 1 / -1;
   margin: 0;
+}
+
+body[data-active-page="alpha-research"] .alpha-backtest-lab {
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--terminal-line);
+  border-top: 2px solid var(--terminal-cyan);
+  border-radius: 0;
+  background: var(--terminal-panel);
+}
+
+body[data-active-page="alpha-research"] .alpha-backtest-lab-heading {
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+body[data-active-page="alpha-research"] .alpha-backtest-lab-heading h2 {
+  margin: 3px 0 0;
+  color: var(--terminal-text-strong);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+body[data-active-page="alpha-research"] .alpha-backtest-lab-heading .section-note {
+  max-width: 820px;
+  margin: 4px 0 0;
+}
+
+body[data-active-page="alpha-research"] .alpha-backtest-workspace {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+body[data-active-page="alpha-research"] .alpha-backtest-workspace > * {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+}
+
+body[data-active-page="alpha-research"] .backtests-primary-controls {
+  display: grid;
+  grid-template-columns: minmax(190px, .55fr) minmax(360px, 1.45fr);
+  gap: 8px 12px;
+  padding: 9px 11px;
+  border: 1px solid var(--terminal-line-soft);
+  border-radius: 0;
+  background: var(--terminal-panel-2);
+}
+
+body[data-active-page="alpha-research"] .backtests-primary-controls .universe-source {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding-top: 7px;
+  border-top: 1px solid var(--terminal-line-soft);
+}
+
+body[data-active-page="alpha-research"] :is(.backtests-reversal-section, .backtests-stock-section, .alpha-development-queue) {
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--terminal-line);
+  border-radius: 0;
+  background: var(--terminal-panel);
+}
+
+body[data-active-page="alpha-research"] .backtests-reversal-section { border-top: 2px solid var(--terminal-cyan); }
+body[data-active-page="alpha-research"] :is(.backtests-stock-section, .alpha-development-queue) { border-top: 2px solid var(--terminal-orange); }
+
+body[data-active-page="alpha-research"] .backtests-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 5px;
+}
+
+body[data-active-page="alpha-research"] .terminal-kicker {
+  color: var(--terminal-orange);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+body[data-active-page="alpha-research"] .backtests-section-heading h2 {
+  margin: 3px 0 0;
+  color: var(--terminal-text-strong);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+body[data-active-page="alpha-research"] .backtests-verdict {
+  padding: 4px 7px;
+  border: 1px solid currentColor;
+  color: var(--terminal-text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+body[data-active-page="alpha-research"] .backtests-verdict.blocked { color: var(--terminal-red); }
+body[data-active-page="alpha-research"] .backtests-verdict.ready { color: var(--terminal-green); }
+body[data-active-page="alpha-research"] .backtests-decision-copy { margin: 0 0 10px; color: var(--terminal-text-muted); }
+
+body[data-active-page="alpha-research"] :is(.backtests-reversal-section, .backtests-stock-section, .alpha-development-queue) .summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 9px 0;
+  border: 1px solid var(--terminal-line);
+}
+
+body[data-active-page="alpha-research"] :is(.backtests-reversal-section, .backtests-stock-section, .alpha-development-queue) .summary-card {
+  min-height: 66px;
+  border: 0;
+  border-right: 1px solid var(--terminal-line-soft);
+  border-radius: 0;
+  background: var(--terminal-panel-2);
+}
+
+body[data-active-page="alpha-research"] .backtests-reversal-horizons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 8px 0;
+}
+
+body[data-active-page="alpha-research"] .backtests-reversal-horizons .historical-fingerprint-card h3 { font-size: 18px; }
+body[data-active-page="alpha-research"] .backtests-stock-table-wrap { max-height: 560px; overflow: auto; }
+body[data-active-page="alpha-research"] .alpha-development-table-wrap { max-height: 430px; overflow: auto; }
+body[data-active-page="alpha-research"] :is(.backtests-stock-table-wrap, .alpha-development-table-wrap) thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--terminal-panel-2);
+}
+
+body[data-active-page="alpha-research"] .backtests-sort-button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+body[data-active-page="alpha-research"] .backtests-stock-table-wrap th[aria-sort="ascending"],
+body[data-active-page="alpha-research"] .backtests-stock-table-wrap th[aria-sort="descending"] {
+  color: var(--terminal-orange);
+  box-shadow: inset 0 -2px 0 var(--terminal-orange);
+}
+
+body[data-active-page="alpha-research"] .alpha-development-queue { margin-top: 8px; }
+
+@media (max-width: 900px) {
+  body[data-active-page="alpha-research"] :is(.backtests-reversal-section, .backtests-stock-section, .alpha-development-queue) .summary-grid,
+  body[data-active-page="alpha-research"] .backtests-reversal-horizons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 600px) {
+  body[data-active-page="alpha-research"] .backtests-primary-controls,
+  body[data-active-page="alpha-research"] :is(.backtests-reversal-section, .backtests-stock-section, .alpha-development-queue) .summary-grid,
+  body[data-active-page="alpha-research"] .backtests-reversal-horizons { grid-template-columns: 1fr; }
+  body[data-active-page="alpha-research"] .backtests-primary-controls .universe-source { grid-column: auto; }
+  body[data-active-page="alpha-research"] .backtests-section-heading { flex-direction: column; }
 }
 
 body[data-active-page="alpha-research"] .alpha-overview-grid {
