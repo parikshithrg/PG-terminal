@@ -1725,21 +1725,20 @@
     }
   </style>
   <link rel="stylesheet" href="styles.css?v=alpha-trade-recommendations-v35-1">
+  <link rel="stylesheet" href="terminal-system.css?v=koyfin-matrix-v11">
+  <script>
+    if (window.location.protocol === 'file:') {
+      window.location.replace(`http://127.0.0.1:8510/${window.location.search}${window.location.hash}`);
+    }
+  </script>
 </head>
 <body data-active-page="dashboard">
   <a class="skip-link" href="#mainContent">Skip to main content</a>
   <header class="topbar">
-    <button class="menu-button" id="menuButton" aria-label="Open navigation" aria-expanded="false">☰</button>
     <div class="brand" aria-label="PG-terminal">
       <div class="brand-mark">PG</div>
       <div class="brand-name">PG-terminal</div>
       <div class="brand-note">private market workspace</div>
-    </div>
-    <div class="terminal-command" role="search">
-      <span aria-hidden="true">⌕</span>
-      <input id="terminalCommandInput" type="search" autocomplete="off" spellcheck="false" placeholder="Search pages, securities, functions…" aria-label="Search pages, securities and terminal functions" aria-expanded="false" aria-controls="terminalCommandResults" aria-autocomplete="list">
-      <kbd aria-hidden="true">CTRL K</kbd>
-      <div class="terminal-command-results" id="terminalCommandResults" role="listbox" aria-label="Terminal search results" hidden></div>
     </div>
     <div class="terminal-clock" aria-label="Local market terminal time">
       <span id="terminalClockDate">—</span>
@@ -1785,22 +1784,34 @@
     </div>
   </header>
 
+  <div class="terminal-ribbon" aria-label="Workspace status strip">
+    <div class="terminal-ribbon-cell terminal-ribbon-context"><span>INDIA EOD</span><strong id="terminalRibbonPage">EXECUTIVE OVERVIEW</strong></div>
+    <div class="terminal-ribbon-cell"><span>DATA CYCLE</span><strong id="terminalRibbonEod">CHECKING</strong></div>
+    <div class="terminal-ribbon-cell"><span>MARKET FEED</span><strong id="terminalRibbonFeed">LOCAL STORE</strong></div>
+    <div class="terminal-ribbon-cell"><span>RESEARCH MODE</span><strong>MANUAL REVIEW</strong></div>
+    <div class="terminal-ribbon-cell terminal-ribbon-clock"><span>SESSION</span><strong id="terminalRibbonSession">EOD</strong></div>
+  </div>
+
   <div class="shell">
     <aside class="sidebar" id="sidebar" aria-label="Primary navigation">
-      <div class="sidebar-label">Workspace</div>
       <nav>
         <ul class="nav-list">
+          <li class="nav-section-label">Market intelligence</li>
           <li><button class="nav-button active" data-page="Dashboard" aria-current="page" style="--item-color:#3273dc"><span class="nav-icon"></span><span>Dashboard</span></button></li>
           <li><button class="nav-button" data-page="Market Sentiment" style="--item-color:#c92f34"><span class="nav-icon"></span><span>Market Sentiment</span></button></li>
           <li><button class="nav-button" data-page="F&amp;O" style="--item-color:#5368d9"><span class="nav-icon"></span><span>F&amp;O</span></button></li>
           <li><button class="nav-button" data-page="Screener" style="--item-color:#24934d"><span class="nav-icon"></span><span>Screener</span></button></li>
           <li><button class="nav-button" data-page="Seasonality Analysis" style="--item-color:#60a625"><span class="nav-icon"></span><span>Seasonality Analysis</span></button></li>
           <li><button class="nav-button" data-page="Earnings Analysis" style="--item-color:#c52d78"><span class="nav-icon"></span><span>Earnings Analysis</span></button></li>
-          <li><button class="nav-button" data-page="Portfolio Analysis" style="--item-color:#8f3bd1"><span class="nav-icon"></span><span>Portfolio Analysis</span></button></li>
           <li><button class="nav-button" data-page="Events Calendar" style="--item-color:#e6980b"><span class="nav-icon"></span><span>Events Calendar</span></button></li>
           <li><button class="nav-button" data-page="Stock Data YTD" style="--item-color:#0c94b7"><span class="nav-icon"></span><span>Stock Data YTD</span></button></li>
           <li><button class="nav-button" data-page="Historical Regimes" style="--item-color:#8b6f47"><span class="nav-icon"></span><span>Historical regimes</span></button></li>
+          <li class="nav-section-label">Trade research</li>
           <li><button class="nav-button" data-page="Alpha Research" style="--item-color:#0f766e"><span class="nav-icon"></span><span>Alpha Research</span></button></li>
+          <li class="nav-section-label">Long-term capital</li>
+          <li><button class="nav-button" data-page="Portfolio Analysis" style="--item-color:#8f3bd1"><span class="nav-icon"></span><span>Portfolio Analysis</span></button></li>
+          <li class="nav-section-label">Personal tools</li>
+          <li><button class="nav-button" data-page="Home Loan Tracker" style="--item-color:#2b7a78"><span class="nav-icon"></span><span>Home Loan Tracker</span></button></li>
           <li><button class="nav-button" data-page="Expense Tracker" style="--item-color:#6d5bd0"><span class="nav-icon"></span><span>Expense Tracker</span></button></li>
         </ul>
       </nav>
@@ -1820,9 +1831,37 @@
           </div>
 
           <div class="heading-row">
-            <h1>CEO EOD Market Note</h1>
+            <div>
+              <span class="dashboard-koyfin-eyebrow">MARKET OVERVIEW</span>
+              <h1>India EOD Workspace</h1>
+            </div>
             <div class="as-of" id="dashboardAsOf">Connect Kite for current index data</div>
           </div>
+
+          <section class="dashboard-koyfin-pulse" aria-label="Market pulse overview">
+            <div class="dashboard-pulse-head">
+              <div><span>MARKET PULSE</span><strong>At-a-glance evidence</strong></div>
+              <small>Completed-session data · descriptive signals</small>
+            </div>
+            <div class="dashboard-pulse-grid">
+              <article class="dashboard-pulse-card regime">
+                <div class="dashboard-pulse-ring" id="dashboardPulseRing"><strong id="dashboardPulseScore">—</strong></div>
+                <div><span>REGIME</span><strong id="dashboardPulseRegime">Loading</strong><small>Validated market state</small></div>
+              </article>
+              <article class="dashboard-pulse-card breadth">
+                <div class="dashboard-pulse-icon"><i></i><i></i><i></i><i></i></div>
+                <div><span>BREADTH LEADER</span><strong id="dashboardPulseBreadth">Awaiting breadth</strong><small id="dashboardPulseBreadthMeta">20DMA participation —</small></div>
+              </article>
+              <article class="dashboard-pulse-card derivatives">
+                <div class="dashboard-pulse-balance"><i id="dashboardPulseBullBar"></i><i id="dashboardPulseBearBar"></i></div>
+                <div><span>F&amp;O BALANCE</span><strong id="dashboardPulseFutures">— / —</strong><small>Bullish / bearish quadrants</small></div>
+              </article>
+              <article class="dashboard-pulse-card catalyst">
+                <div class="dashboard-pulse-date"><strong id="dashboardPulseEventDate">—</strong><span>NEXT</span></div>
+                <div><span>CATALYST WINDOW</span><strong id="dashboardPulseEvents">Loading calendar</strong><small>Reviewed macro events</small></div>
+              </article>
+            </div>
+          </section>
 
         <section class="market-story tone-mixed" id="dashboardMarketStory" aria-labelledby="dashboardMarketStoryTitle" aria-live="polite">
           <div class="market-story-hero">
@@ -3267,7 +3306,6 @@
         <section id="portfolioView" hidden aria-labelledby="portfolioTitle">
           <div class="page-tabs" role="tablist" aria-label="Portfolio Analysis views">
             <button class="page-tab active" id="portfolioHoldingsTab" type="button" role="tab" aria-selected="true" aria-controls="portfolioHoldingsPanel">Holdings analysis</button>
-            <button class="page-tab" id="portfolioLoanTab" type="button" role="tab" aria-selected="false" aria-controls="portfolioLoanPanel">Home loan tracker</button>
             <button class="page-tab" id="portfolioMutualFundsTab" type="button" role="tab" aria-selected="false" aria-controls="portfolioMutualFundsPanel">Mutual funds comparer</button>
           </div>
 
@@ -3480,7 +3518,7 @@
             </section>
           </div>
 
-          <div id="portfolioLoanPanel" role="tabpanel" aria-labelledby="portfolioLoanTab" hidden>
+          <div id="portfolioLoanPanel" hidden>
             <div class="analysis-status" id="homeLoanStatus">Upload an XLSX workbook containing a loan sheet</div>
 
             <section class="summary-grid loan-summary-grid" aria-label="Home loan summary">
@@ -4575,6 +4613,26 @@
           </section>
         </section>
 
+        <section id="homeLoanView" hidden aria-labelledby="homeLoanTitle">
+          <div class="page-tabs" aria-label="Home Loan Tracker views">
+            <div class="page-tab active">Loan overview</div>
+          </div>
+          <div class="analysis-intro mutual-fund-hero">
+            <div>
+              <span class="mutual-fund-eyebrow">PERSONAL TOOLS</span>
+              <h1 id="homeLoanTitle">Home Loan Tracker</h1>
+              <p class="analysis-caption">Review repayment history and compare editable early-payment scenarios independently from investments.</p>
+            </div>
+            <div class="portfolio-hero-actions">
+              <label class="panel-button" for="homeLoanFileInput">Upload XLSX</label>
+              <input id="homeLoanFileInput" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+              <button class="panel-button" id="clearHomeLoanButton" type="button">Clear</button>
+            </div>
+          </div>
+          <div class="analysis-note" id="homeLoanUploadStatus">Choose an XLSX workbook containing a home-loan worksheet. The workbook is processed in memory only.</div>
+          <div id="homeLoanPageContent"></div>
+        </section>
+
         <section id="expenseTrackerView" hidden aria-label="Expense Tracker">
           <div class="expense-draft-source" hidden>
           <div class="page-tabs" aria-label="Expense Tracker views">
@@ -4681,6 +4739,7 @@
   <script src="js/pg-api.js"></script>
   <script src="js/pg-charts.js"></script>
   <script src="js/pg-dashboard.js"></script>
+  <script src="js/pg-terminal-ui.js?v=koyfin-matrix-v11"></script>
   <script>
     const body = document.body;
     const themeToggle = document.getElementById('themeToggle');
@@ -4771,7 +4830,6 @@
     const portfolioIssuesBody = document.getElementById('portfolioIssuesBody');
     const portfolioPrimaryControls = document.getElementById('portfolioPrimaryControls');
     const portfolioHoldingsTab = document.getElementById('portfolioHoldingsTab');
-    const portfolioLoanTab = document.getElementById('portfolioLoanTab');
     const portfolioMutualFundsTab = document.getElementById('portfolioMutualFundsTab');
     const portfolioHoldingsPanel = document.getElementById('portfolioHoldingsPanel');
     const portfolioLoanPanel = document.getElementById('portfolioLoanPanel');
@@ -4826,6 +4884,13 @@
       document.querySelector('#backtestsView .backtests-stock-section'),
     ].filter(Boolean).forEach((section) => alphaBacktestWorkspaceMount.appendChild(section));
     alphaBacktestStatusMount.appendChild(backtestsStatus);
+    const homeLoanView = document.getElementById('homeLoanView');
+    const homeLoanFileInput = document.getElementById('homeLoanFileInput');
+    const clearHomeLoanButton = document.getElementById('clearHomeLoanButton');
+    const homeLoanUploadStatus = document.getElementById('homeLoanUploadStatus');
+    const homeLoanPageContent = document.getElementById('homeLoanPageContent');
+    homeLoanPageContent.appendChild(portfolioLoanPanel);
+    portfolioLoanPanel.hidden = false;
     const expenseTrackerView = document.getElementById('expenseTrackerView');
     const expenseMonthSelect = document.getElementById('expenseMonthSelect');
     const expenseEntryForm = document.getElementById('expenseEntryForm');
@@ -4983,6 +5048,7 @@
       { label: 'Stock Data YTD', detail: 'Calendar-year stock performance', page: 'Stock Data YTD', terms: 'stock performance returns year to date ytd' },
       { label: 'Historical Regimes', detail: 'Market episodes and policy cycles', page: 'Historical Regimes', terms: 'history regimes bull bear correction recession rbi' },
       { label: 'Alpha Research', detail: 'Backtests, stock candidates and evidence gates', page: 'Alpha Research', terms: 'backtest validation holdout alpha factors stocks candidates ranking research' },
+      { label: 'Home Loan Tracker', detail: 'Repayment history and early-payment scenarios', page: 'Home Loan Tracker', terms: 'home loan mortgage emi repayment prepayment personal' },
       { label: 'Expense Tracker', detail: 'Private browser-local monthly expense ledger', page: 'Expense Tracker', terms: 'expenses spending budget monthly ledger personal' },
       { label: 'Run EOD update', detail: 'Refresh supported completed-session data', action: 'eod', terms: 'refresh update data sync' },
       { label: 'Kite connection', detail: 'Open broker connection controls', action: 'kite', terms: 'login connect zerodha broker' },
@@ -4992,6 +5058,7 @@
     ];
 
     function closeTerminalCommand() {
+      if (!terminalCommandResults || !terminalCommandInput) return;
       terminalCommandResults.hidden = true;
       terminalCommandInput.setAttribute('aria-expanded', 'false');
       terminalCommandInput.removeAttribute('aria-activedescendant');
@@ -5444,8 +5511,10 @@
     updateHistoricalUniverseVisibility();
     function setNavigation(open) {
       body.classList.toggle('nav-open', open);
-      menuButton.setAttribute('aria-expanded', String(open));
-      menuButton.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+      if (menuButton) {
+        menuButton.setAttribute('aria-expanded', String(open));
+        menuButton.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+      }
     }
 
     function showNotice(message) {
@@ -8126,18 +8195,14 @@
     }
 
     function setPortfolioTab(tabName) {
-      const showLoan = tabName === 'loan';
       const showMutualFunds = tabName === 'mutual-funds';
-      const showHoldings = !showLoan && !showMutualFunds;
+      const showHoldings = !showMutualFunds;
       portfolioPrimaryControls.hidden = showMutualFunds;
       portfolioHoldingsPanel.hidden = !showHoldings;
-      portfolioLoanPanel.hidden = !showLoan;
       portfolioMutualFundsPanel.hidden = !showMutualFunds;
       portfolioHoldingsTab.classList.toggle('active', showHoldings);
-      portfolioLoanTab.classList.toggle('active', showLoan);
       portfolioMutualFundsTab.classList.toggle('active', showMutualFunds);
       portfolioHoldingsTab.setAttribute('aria-selected', String(showHoldings));
-      portfolioLoanTab.setAttribute('aria-selected', String(showLoan));
       portfolioMutualFundsTab.setAttribute('aria-selected', String(showMutualFunds));
     }
 
@@ -8288,6 +8353,56 @@
         ? `Monthly payment starts at ${portfolioNumber(homeLoanTracker.suggested_monthly_payment, true)}, estimated from ${homeLoanTracker.suggested_payment_basis}. Edit it if this includes irregular early payments.`
         : 'Enter the contractual monthly payment and optional early-payment amounts.';
       calculateLoanRepayment();
+    }
+
+    async function importHomeLoanFile() {
+      const file = homeLoanFileInput.files && homeLoanFileInput.files[0];
+      if (!file) return false;
+      if (!/\.xlsx$/i.test(file.name)) {
+        homeLoanUploadStatus.textContent = 'Upload rejected. Choose an XLSX workbook.';
+        homeLoanFileInput.value = '';
+        showNotice('The Home Loan Tracker accepts XLSX workbooks only.');
+        return false;
+      }
+      if (file.size > 8 * 1024 * 1024) {
+        homeLoanUploadStatus.textContent = 'Upload rejected. The workbook exceeds the 8 MB local processing limit.';
+        homeLoanFileInput.value = '';
+        showNotice('The home-loan workbook exceeds the 8 MB limit.');
+        return false;
+      }
+      homeLoanFileInput.disabled = true;
+      homeLoanUploadStatus.textContent = `Reading ${file.name} in local server memory…`;
+      try {
+        const response = await fetch('/api/home-loan/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_name: file.name, content_base64: await fileToBase64(file) }),
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true || !result.tracker) {
+          const reason = String(result.reason || 'home loan worksheet not found').replaceAll('_', ' ');
+          homeLoanUploadStatus.textContent = `Upload rejected: ${reason}.`;
+          showNotice(`Home-loan import rejected: ${reason}.`);
+          return false;
+        }
+        renderHomeLoanTracker(result.tracker);
+        homeLoanUploadStatus.textContent = `${file.name} loaded · ${Number(result.tracker.payment_rows?.length || 0).toLocaleString('en-IN')} fiscal-year records · browser memory only.`;
+        showNotice('Home-loan workbook loaded.');
+        return true;
+      } catch (_error) {
+        homeLoanUploadStatus.textContent = 'The local home-loan import service is unavailable.';
+        showNotice('The local home-loan import service is unavailable.');
+        return false;
+      } finally {
+        homeLoanFileInput.disabled = false;
+        homeLoanFileInput.value = '';
+      }
+    }
+
+    function clearHomeLoanTracker() {
+      renderHomeLoanTracker(null);
+      homeLoanUploadStatus.textContent = 'Choose an XLSX workbook containing a home-loan worksheet. The workbook is processed in memory only.';
+      showNotice('Home-loan data cleared from browser memory.');
     }
 
     function refreshPortfolioProgressDetail() {
@@ -9033,8 +9148,6 @@
         portfolioPreview = result.combined_preview || result.stock_preview || null;
         portfolioAnalysis = null;
         if (alphaResearchPayload && alphaResearchPayload.candidate_overlays) renderCandidateOverlays(alphaResearchPayload.candidate_overlays);
-        renderHomeLoanTracker(result.loan_tracker || (portfolioPreview && portfolioPreview.loan_tracker));
-
         let stockReady = false;
         if (portfolioPreview) {
           renderPortfolioPreview(portfolioPreview);
@@ -9477,7 +9590,6 @@
       portfolioPreview = null;
       portfolioAnalysis = null;
       if (alphaResearchPayload && alphaResearchPayload.candidate_overlays) renderCandidateOverlays(alphaResearchPayload.candidate_overlays);
-      homeLoanTracker = null;
       clearMutualFundAnalysis(false);
       portfolioFileInput.value = '';
       portfolioGoogleFinanceInput.checked = false;
@@ -9502,7 +9614,6 @@
       document.getElementById('portfolioContractNote').textContent = 'The portfolio-analysis contract has not been loaded.';
       renderDashboardPortfolioSummary(null);
       renderDashboardStoryPortfolio(null, dashboardMarketStory);
-      renderHomeLoanTracker(null);
       setPortfolioTab('holdings');
       showNotice('Portfolio data cleared from browser memory.');
     }
@@ -11525,7 +11636,7 @@
       }
     }
 
-    menuButton.addEventListener('click', () => setNavigation(!body.classList.contains('nav-open')));
+    menuButton?.addEventListener('click', () => setNavigation(!body.classList.contains('nav-open')));
     scrim.addEventListener('click', () => setNavigation(false));
     kiteLoginButton.addEventListener('click', () => setKitePanel(kiteCredentialPanel.hidden));
     kiteCancelButton.addEventListener('click', () => setKitePanel(false, true));
@@ -11715,8 +11826,9 @@
     });
     portfolioLedgerAnalyzeButton.addEventListener('click', () => analyzePortfolioLedger(true));
     portfolioHoldingsTab.addEventListener('click', () => setPortfolioTab('holdings'));
-    portfolioLoanTab.addEventListener('click', () => setPortfolioTab('loan'));
     portfolioMutualFundsTab.addEventListener('click', () => setPortfolioTab('mutual-funds'));
+    homeLoanFileInput.addEventListener('change', importHomeLoanFile);
+    clearHomeLoanButton.addEventListener('click', clearHomeLoanTracker);
     calculateLoanButton.addEventListener('click', calculateLoanRepayment);
     loadStockYtdButton.addEventListener('click', () => loadStockYtd(true));
     stockYtdYearSelect.addEventListener('change', () => loadStockYtd(false));
@@ -12090,6 +12202,7 @@
         const isAlphaResearch = button.dataset.page === 'Alpha Research';
         const isEarnings = button.dataset.page === 'Earnings Analysis';
         const isPortfolio = button.dataset.page === 'Portfolio Analysis';
+        const isHomeLoan = button.dataset.page === 'Home Loan Tracker';
         const isExpenseTracker = button.dataset.page === 'Expense Tracker';
         document.body.dataset.activePage = button.dataset.page.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
         dashboardView.hidden = !isDashboard;
@@ -12104,9 +12217,10 @@
         alphaResearchView.hidden = !isAlphaResearch;
         earningsView.hidden = !isEarnings;
         portfolioView.hidden = !isPortfolio;
+        homeLoanView.hidden = !isHomeLoan;
         expenseTrackerView.hidden = !isExpenseTracker;
-        emptyView.hidden = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isAlphaResearch || isEarnings || isPortfolio || isExpenseTracker;
-        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isAlphaResearch || isEarnings || isPortfolio || isExpenseTracker ? '' : button.dataset.page;
+        emptyView.hidden = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isAlphaResearch || isEarnings || isPortfolio || isHomeLoan || isExpenseTracker;
+        emptyPageTitle.textContent = isDashboard || isMarketSentiment || isFno || isScreener || isSeasonality || isNewsEvents || isStockYtd || isHistoricalRegimes || isBacktests || isAlphaResearch || isEarnings || isPortfolio || isHomeLoan || isExpenseTracker ? '' : button.dataset.page;
         if (isDashboard) {
           renderDashboardPortfolioSummary(portfolioAnalysis);
           renderDashboardStoryPortfolio(portfolioAnalysis, dashboardMarketStory);
@@ -12152,39 +12266,43 @@
       button.addEventListener('click', () => showNotice(button.dataset.notice));
     });
 
-    terminalCommandInput.addEventListener('focus', renderTerminalCommandResults);
-    terminalCommandInput.addEventListener('input', renderTerminalCommandResults);
-    terminalCommandInput.addEventListener('keydown', (event) => {
-      if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        updateTerminalCommandActive(terminalCommandActiveIndex + 1);
-      } else if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        updateTerminalCommandActive(terminalCommandActiveIndex - 1);
-      } else if (event.key === 'Enter' && terminalCommandActiveIndex >= 0) {
-        event.preventDefault();
-        executeTerminalCommand(terminalCommandActiveIndex);
-      } else if (event.key === 'Escape') {
-        event.stopPropagation();
-        closeTerminalCommand();
-        terminalCommandInput.blur();
-      }
-    });
-    terminalCommandResults.addEventListener('mousedown', (event) => event.preventDefault());
-    terminalCommandResults.addEventListener('click', (event) => {
-      const option = event.target.closest('[data-terminal-command-index]');
-      if (option) executeTerminalCommand(Number(option.dataset.terminalCommandIndex));
-    });
+    if (terminalCommandInput && terminalCommandResults) {
+      terminalCommandInput.addEventListener('focus', renderTerminalCommandResults);
+      terminalCommandInput.addEventListener('input', renderTerminalCommandResults);
+      terminalCommandInput.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          updateTerminalCommandActive(terminalCommandActiveIndex + 1);
+        } else if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          updateTerminalCommandActive(terminalCommandActiveIndex - 1);
+        } else if (event.key === 'Enter' && terminalCommandActiveIndex >= 0) {
+          event.preventDefault();
+          executeTerminalCommand(terminalCommandActiveIndex);
+        } else if (event.key === 'Escape') {
+          event.stopPropagation();
+          closeTerminalCommand();
+          terminalCommandInput.blur();
+        }
+      });
+      terminalCommandResults.addEventListener('mousedown', (event) => event.preventDefault());
+      terminalCommandResults.addEventListener('click', (event) => {
+        const option = event.target.closest('[data-terminal-command-index]');
+        if (option) executeTerminalCommand(Number(option.dataset.terminalCommandIndex));
+      });
+    }
     document.addEventListener('pointerdown', (event) => {
       if (!event.target.closest('.terminal-command')) closeTerminalCommand();
     });
 
     document.addEventListener('keydown', (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        terminalCommandInput.focus();
-        terminalCommandInput.select();
-        renderTerminalCommandResults();
+        if (terminalCommandInput) {
+          event.preventDefault();
+          terminalCommandInput.focus();
+          terminalCommandInput.select();
+          renderTerminalCommandResults();
+        }
         return;
       }
       if (event.key === 'Escape') {

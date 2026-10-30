@@ -23983,6 +23983,12 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
                 self._send_universal_portfolio_import(payload)
             return
 
+        if self.path == "/api/home-loan/import":
+            payload = self._read_json_payload(MAX_PORTFOLIO_IMPORT_BYTES)
+            if payload is not None:
+                self._send_home_loan_import(payload)
+            return
+
         if self.path == "/api/portfolio/analyze":
             payload = self._read_json_payload(MAX_PORTFOLIO_IMPORT_BYTES)
             if payload is not None:
@@ -24478,6 +24484,37 @@ class PGTerminalHandler(SimpleHTTPRequestHandler):
             self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": reason})
             return
         self._send_json(HTTPStatus.OK, result)
+
+    def _send_home_loan_import(self, payload: dict[str, object]) -> None:
+        file_name = payload.get("file_name")
+        encoded = payload.get("content_base64")
+        if (
+            not isinstance(file_name, str)
+            or not re.fullmatch(r"[A-Za-z0-9._ ()&-]{1,128}\.xlsx", file_name, re.IGNORECASE)
+            or not isinstance(encoded, str)
+        ):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": "invalid_home_loan_file"})
+            return
+        try:
+            raw = base64.b64decode(encoded, validate=True)
+            if not raw or len(raw) > MAX_PORTFOLIO_FILE_BYTES:
+                raise ValueError("invalid_home_loan_file_size")
+            tracker = parse_home_loan_tracker_xlsx(raw)
+            if tracker is None:
+                raise ValueError("home_loan_sheet_not_found")
+        except (ValueError, binascii.Error) as error:
+            reason = str(error) if isinstance(error, ValueError) else "invalid_home_loan_file"
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "reason": reason})
+            return
+        self._send_json(
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                "file_name": file_name,
+                "tracker": tracker,
+                "persistence": "browser_memory_only",
+            },
+        )
 
     def _send_mutual_fund_analysis(self, payload: dict[str, object]) -> None:
         file_name = payload.get("file_name")
